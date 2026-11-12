@@ -1,0 +1,29 @@
+meta {
+  name: 04 - Completar s2 - Asignar gestor y postor
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/tareas/{{taskId}}/completar
+  body: json
+  auth: none
+}
+
+headers {
+  x-usuario-id: {{adminId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resultado": {
+      "gestor_id": {{managerId}},
+      "postor_id": {{bidderId}}
+    }
+  }
+}
+
+docs {
+  Antes de enviar, asigna a `taskId` el ID de la tarea con código `s2`.
+}

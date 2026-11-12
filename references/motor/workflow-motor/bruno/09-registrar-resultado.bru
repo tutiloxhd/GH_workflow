@@ -1,0 +1,29 @@
+meta {
+  name: 09 - Completar s16 - Elegir rama
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/tareas/{{taskId}}/completar
+  body: json
+  auth: none
+}
+
+headers {
+  x-usuario-id: {{bidderId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "resultado": {
+      "rama": "{{branch}}"
+    }
+  }
+}
+
+docs {
+  Antes de enviar, asigna a `taskId` el ID de `s16`.
+  `branch` admite ADJUDICADO, NO_ADJUDICADO o REPROGRAMADO.
+}

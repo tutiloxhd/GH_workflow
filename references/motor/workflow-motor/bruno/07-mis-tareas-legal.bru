@@ -1,0 +1,19 @@
+meta {
+  name: 07 - Mis tareas - Legal
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/mis-tareas
+  body: none
+  auth: none
+}
+
+headers {
+  x-usuario-id: {{legalId}}
+}
+
+docs {
+  Bandeja de Felipe Morales (legal, usuario 5).
+}

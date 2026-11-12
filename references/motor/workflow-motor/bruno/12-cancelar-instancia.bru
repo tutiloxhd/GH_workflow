@@ -1,0 +1,27 @@
+meta {
+  name: 12 - Cancelar instancia
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/instancias/{{instanceId}}/cancelar
+  body: json
+  auth: none
+}
+
+headers {
+  x-usuario-id: {{adminId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "motivo": "Cancelación de prueba desde Bruno"
+  }
+}
+
+docs {
+  Esta acción es irreversible dentro del demo. Úsala con una instancia
+  destinada específicamente a probar cancelación.
+}

@@ -1,0 +1,19 @@
+meta {
+  name: 03 - Mis tareas - Admin
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/mis-tareas
+  body: none
+  auth: none
+}
+
+headers {
+  x-usuario-id: {{adminId}}
+}
+
+docs {
+  Bandeja de María González (admin, usuario 1).
+}

@@ -1,0 +1,22 @@
+meta {
+  name: 02 - Ver instancia y tareas
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/instancias/{{instanceId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("Devuelve la instancia", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
+
+docs {
+  Devuelve el flujo completo. Copia el `id` de una tarea pendiente a la
+  variable de entorno `taskId` antes de ejecutar una acción sobre ella.
+}

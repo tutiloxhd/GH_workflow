@@ -1,5 +1,3 @@
-/references
-
 # Configuración y secretos locales
 .env
 .env.*

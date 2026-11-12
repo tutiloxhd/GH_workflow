@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Calendario · GrupoHouse</title>
+
+    <link rel="stylesheet" href="calendario.css">
+
+</head>
+
+
+<body data-page="semana">
+
+
+    <!-- =========================
+         CONTENIDO PRINCIPAL
+    ========================== -->
+
+    <main class="calendar-page">
+
+
+        <!-- HEADER -->
+
+        <header class="calendar-header">
+
+
+            <div class="header-left">
+
+                <a href="index.html" class="back-button">
+                    ←
+                </a>
+
+                <div>
+
+                    <span class="eyebrow">
+                        CALENDARIO
+                    </span>
+
+                    <h1 id="weekTitle"></h1>
+
+                </div>
+
+            </div>
+
+
+            <div class="header-actions">
+
+                <button class="week-button" data-week="-1" aria-label="Semana anterior">‹</button>
+
+                <button class="week-button" data-week="1" aria-label="Semana siguiente">›</button>
+
+            </div>
+
+
+        </header>
+
+
+
+        <!-- =========================
+             CALENDARIO
+        ========================== -->
+
+        <section class="calendar" id="weekEvents"></section>
+
+
+    </main>
+
+
+    <div data-mobile-nav></div>
+    <script src="data.js"></script>
+    <script src="shell.js"></script>
+    <script src="calendario.js"></script>
+
+</body>
+
+</html>

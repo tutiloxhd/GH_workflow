@@ -1,0 +1,30 @@
+meta {
+  name: 01 - Iniciar flujo
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/propiedades/{{propertyId}}/iniciar
+  body: none
+  auth: none
+}
+
+script:post-response {
+  const responseBody = res.getBody();
+
+  if (responseBody.instanciaId) {
+    bru.setEnvVar("instanceId", responseBody.instanciaId);
+  }
+}
+
+tests {
+  test("El flujo se inicia o ya existía", function () {
+    expect(res.getStatus()).to.be.oneOf([200, 201]);
+  });
+}
+
+docs {
+  Inicia el workflow de la propiedad indicada por `propertyId`.
+  Guarda automáticamente `instanciaId` en el entorno seleccionado.
+}

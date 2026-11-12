@@ -1,0 +1,16 @@
+{
+  "name": "workflow-motor",
+  "version": "0.1.0",
+  "description": "Motor del workflow de remates (Node + Express + MySQL)",
+  "main": "src/server.js",
+  "scripts": {
+    "seed": "node db/seed.js",
+    "start": "node src/server.js",
+    "demo": "node test/demo.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "mysql2": "^3.11.0"
+  }
+}

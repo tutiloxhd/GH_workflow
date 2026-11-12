@@ -1,0 +1,20 @@
+meta {
+  name: 11 - Reanudar instancia
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/instancias/{{instanceId}}/reanudar
+  body: json
+  auth: none
+}
+
+headers {
+  x-usuario-id: {{legalId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {}
+}

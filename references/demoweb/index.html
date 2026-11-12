@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Inicio · GrupoHouse</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="workflow.css">
+</head>
+
+<body data-page="inicio">
+    <div class="app">
+        <div data-side></div>
+        <main class="main">
+            <header class="top">
+                <div class="week"><button class="sq" data-week="-1">‹</button><span id="weekLabel">Semana del 13 al 17
+                        oct 2025</span><button class="sq" data-week="1">›</button></div>
+                <div class="actions"><label class="search"><svg class="icon">
+                            <use href="#icon-search" />
+                        </svg><input id="search" placeholder="Buscar remate, dirección o responsable…"></label><span
+                        class="bell"><svg class="icon">
+                            <use href="#bell" />
+                        </svg><i class="badge">2</i></span>
+                    <div class="user"><img class="avatar" src="https://i.pravatar.cc/100?img=47">
+                        <div><strong>María González</strong>Gerente General</div>⌄
+                    </div>
+                </div>
+            </header>
+            <section class="content">
+                <div class="metrics">
+                    <button class="metric blue" type="button" data-filter="">
+                        <div><b id="metricTotal">0</b><span>Remates</span></div><svg class="icon">
+                            <use href="#home" />
+                        </svg>
+                    </button>
+                    <button class="metric amber" type="button" data-filter="ALERTA">
+                        <div><b id="metricAlert">0</b><span>En alerta</span></div><svg class="icon">
+                            <use href="#alert" />
+                        </svg>
+                    </button>
+                    <button class="metric red" type="button" data-filter="ATRASADO">
+                        <div><b id="metricLate">0</b><span>Atrasado</span></div><svg class="icon">
+                            <use href="#clock" />
+                        </svg>
+                    </button>
+                    <button class="metric green" type="button" data-filter="BIEN">
+                        <div><b id="metricGood">0</b><span>Bien</span></div><svg class="icon">
+                            <use href="#check" />
+                        </svg>
+                    </button>
+                    <button class="metric slate" type="button" data-filter="DETENIDO">
+                        <div><b id="metricStopped">0</b><span>Detenidos</span></div><svg class="icon">
+                            <use href="#pause" />
+                        </svg>
+                    </button>
+                </div>
+                <section class="card">
+                    <div class="card-head">
+                        <h2>Remates de la semana <small id="listCount"></small></h2><button class="week-pick" id="showAll"><svg class="icon"
+                                style="width:16px;vertical-align:middle">
+                                <use href="#calendar" />
+                            </svg> <span>Semana del 13 al 17 oct 2025</span>⌄</button>
+                    </div>
+                    <div class="table-head"><span>Propiedad</span><span>Comuna</span><span>Fecha y
+                            hora</span><span>Etapa actual</span><span>Responsable</span><span>Estado</span></div>
+                    <div id="list"></div>
+                </section>
+                <section class="card attention-card">
+                    <div class="card-head">
+                        <h2 class="attention-head"><svg class="icon">
+                                <use href="#alert" />
+                            </svg>Requiere atención</h2>
+                    </div>
+                    <div id="attention"></div>
+                </section>
+            </section>
+        </main>
+        <aside class="detail">
+            <div class="detail-card" id="detail"></div>
+        </aside>
+    </div>
+    <div class="flow-modal" id="flowModal" aria-hidden="true">
+        <section class="flow-dialog" role="dialog" aria-modal="true" aria-labelledby="flowTitle">
+            <button class="flow-view-toggle" id="flowViewToggle" type="button" aria-label="Ver diagrama del proceso"
+                title="Ver diagrama del proceso">↗</button>
+            <button class="flow-close" id="flowClose" type="button" aria-label="Cerrar flujo">×</button>
+            <div id="flowContent"></div>
+        </section>
+    </div>
+    <div class="node-modal" id="nodeModal" aria-hidden="true">
+        <section class="node-dialog" role="dialog" aria-modal="true" aria-labelledby="nodeTitle">
+            <button class="flow-close" id="nodeClose" type="button" aria-label="Cerrar paso">×</button>
+            <div id="nodeContent"></div>
+        </section>
+    </div>
+    <div data-mobile-nav></div>
+    <div class="toast" id="toast"></div>
+    <script src="data.js"></script>
+    <script src="shell.js"></script>
+    <script src="app.js"></script>
+    <script src="workflow.js"></script>
+</body>
+
+</html>

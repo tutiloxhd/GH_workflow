@@ -1,0 +1,16 @@
+meta {
+  name: 14 - Reintentar tarea automática fallida
+  type: http
+  seq: 14
+}
+
+post {
+  url: {{baseUrl}}/tareas/{{taskId}}/reintentar
+  body: none
+  auth: none
+}
+
+docs {
+  Solo es válido para una tarea automática en estado `fallida`.
+  Las automatizaciones simuladas normalmente terminan correctamente.
+}

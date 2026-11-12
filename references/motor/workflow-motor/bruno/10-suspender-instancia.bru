@@ -1,0 +1,22 @@
+meta {
+  name: 10 - Suspender instancia
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/instancias/{{instanceId}}/suspender
+  body: json
+  auth: none
+}
+
+headers {
+  x-usuario-id: {{legalId}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "motivo": "Revisión legal de prueba desde Bruno"
+  }
+}
