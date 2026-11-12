@@ -1,0 +1,11 @@
+/references
+
+# Configuración y secretos locales
+.env
+.env.*
+!.env.example
+
+# Dependencias y salidas de Node/Angular
+node_modules/
+dist/
+coverage/
