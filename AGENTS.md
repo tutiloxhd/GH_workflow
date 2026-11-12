@@ -68,7 +68,6 @@ No se introducen microservicios, CQRS, event sourcing, BPMN externo o infraestru
 - references/demoweb/: referencia visual y de interacción; no es arquitectura productiva.
 - references/motor/: prueba conceptual; no es automáticamente código productivo.
 - references/docs/: antecedentes funcionales y técnicos; puede contener supuestos pendientes.
-- references/code/: exploraciones adicionales; no son automáticamente código productivo.
 
 Todo references/ es de solo lectura para los agentes, salvo solicitud explícita del usuario para modificarlo.
 
@@ -168,7 +167,7 @@ La estructura concreta de carpetas y sus nombres no está definida por este docu
 
 El siguiente árbol es únicamente un ejemplo ilustrativo de separación de responsabilidades. Sus nombres, niveles, módulos y ubicación no establecen el orden definitivo del proyecto:
 
-~~~text
+```text
 src/
   <composición-de-la-aplicación>/
   <módulos-de-negocio>/
@@ -180,7 +179,7 @@ src/
     <integraciones-externas>/
   <capacidades-compartidas>/
   <puntos-de-entrada>/
-~~~
+```
 
 Este ejemplo no obliga a usar carpetas llamadas modules, infrastructure, shared, app o entrypoints. Tampoco obliga a separar cada responsabilidad en una carpeta distinta. La estructura aprobada debe ser la más sencilla que mantenga límites claros, cohesión alta y dependencias comprensibles.
 
@@ -210,13 +209,13 @@ Este ejemplo no obliga a usar carpetas llamadas modules, infrastructure, shared,
 
 Ejemplos ilustrativos de operaciones que podrían modelarse como casos de uso, sin definir todavía sus nombres ni su distribución definitiva:
 
-~~~text
+```text
 StartWorkflow
 CompleteTask
 SuspendWorkflow
 SelectOutcome
 RecalculateDeadlines
-~~~
+```
 
 Estos nombres son ejemplos conceptuales. No se deben copiar como convención obligatoria ni utilizar para inferir que el catálogo completo de casos de uso ya fue aprobado.
 
@@ -249,7 +248,7 @@ La configuración variable por ambiente se obtiene desde variables de entorno.
 
 Variables esperables:
 
-~~~dotenv
+```dotenv
 NODE_ENV=
 PORT=
 DB_HOST=
@@ -258,7 +257,7 @@ DB_NAME=
 DB_USER=
 DB_PASSWORD=
 ADMIN_NEW_DB_NAME=
-~~~
+```
 
 Si hay conexiones diferentes, deben tener prefijos claros y separados.
 
@@ -286,13 +285,13 @@ Prohibido sin aprobación:
 
 Cuando una tarea necesite cambios de esquema o datos, el agente debe preparar SQL revisable en sql/, pero no ejecutarlo.
 
-~~~text
+```text
 sql/
   migrations/
   seeds/
   queries/
   diagnostics/
-~~~
+```
 
 Los scripts deben indicar propósito y ambiente, evitar credenciales, ser idempotentes cuando sea posible, señalar efectos destructivos e incluir verificaciones cuando corresponda.
 
@@ -612,4 +611,3 @@ Un cambio está terminado cuando:
 - Informa supuestos, riesgos, SQL pendiente y elementos no verificados.
 
 Si faltan herramientas, credenciales, decisiones o ambientes, el agente informa la limitación en vez de simular que terminó.
-
