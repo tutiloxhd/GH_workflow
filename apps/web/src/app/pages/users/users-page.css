@@ -1,0 +1,170 @@
+.users-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 26px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.users-topbar h1 {
+  margin-bottom: 4px;
+  font-size: 1.45rem;
+}
+
+.users-topbar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.users-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 26px 0;
+}
+
+.users-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  max-width: 450px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.users-search input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--navy);
+  outline: 0;
+}
+
+.users-count,
+.users-empty {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.users-notice {
+  margin: 14px 26px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.users-panel {
+  padding: 20px 26px 30px;
+}
+
+.users-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.users-table th {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  text-align: left;
+}
+
+.users-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.users-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.user-name {
+  font-weight: 650;
+}
+
+.user-name small,
+.user-email {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.user-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .users-topbar,
+  .users-toolbar {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .users-topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .users-panel {
+    padding: 16px;
+  }
+
+  .users-notice {
+    margin: 14px 16px 0;
+  }
+
+  /* La tabla pasa a tarjetas, como en la maqueta. */
+  .users-table thead {
+    display: none;
+  }
+
+  .users-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .users-table td {
+    padding: 0;
+    border: 0;
+  }
+
+  .user-status {
+    grid-area: 1 / 2;
+    justify-self: end;
+  }
+
+  .user-email,
+  .user-roles,
+  .user-actions {
+    grid-column: 1 / -1;
+  }
+
+  .user-actions {
+    text-align: left;
+  }
+}

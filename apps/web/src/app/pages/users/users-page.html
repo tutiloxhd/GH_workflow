@@ -1,0 +1,111 @@
+<header class="users-topbar">
+  <div>
+    <h1>Gestor de usuarios</h1>
+    <p>Crea cuentas, asigna roles y controla quién puede ingresar.</p>
+  </div>
+  <button type="button" class="button primary" (click)="isCreating.set(true)">
+    + Nuevo usuario
+  </button>
+</header>
+
+<div class="users-toolbar">
+  <label class="users-search">
+    <app-icon name="search" />
+    <span class="visually-hidden">Buscar usuario</span>
+    <input
+      type="search"
+      placeholder="Buscar por nombre o email"
+      [value]="search()"
+      (input)="onSearchInput($any($event.target).value)"
+    />
+  </label>
+  <span class="users-count" aria-live="polite">{{ total() }} usuarios</span>
+</div>
+
+@if (notice(); as message) {
+  <p class="users-notice" role="status">{{ message }}</p>
+}
+
+<section class="users-panel">
+  @if (loadError(); as message) {
+    <p class="form-error" role="alert">
+      {{ message }}
+      <button type="button" class="button link" (click)="load()">Reintentar</button>
+    </p>
+  } @else if (isLoading() && users().length === 0) {
+    <p class="users-empty">Cargando usuarios…</p>
+  } @else if (users().length === 0) {
+    <p class="users-empty">No hay usuarios que coincidan con la búsqueda.</p>
+  } @else {
+    <div class="users-table-wrap">
+      <table class="users-table">
+        <caption class="visually-hidden">
+          Usuarios del sistema
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Nombre</th>
+            <th scope="col">Email</th>
+            <th scope="col">Roles</th>
+            <th scope="col">Estado</th>
+            <th scope="col"><span class="visually-hidden">Acciones</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (user of users(); track user.id) {
+            <tr>
+              <td class="user-name">
+                {{ user.name }}
+                @if (isSelf(user)) {
+                  <small>(tú)</small>
+                }
+              </td>
+              <td class="user-email">{{ user.email }}</td>
+              <td class="user-roles">{{ roleNames(user) }}</td>
+              <td class="user-status">
+                <span class="status-pill" [class]="user.status.toLowerCase()">
+                  {{ statusLabels[user.status] }}
+                </span>
+              </td>
+              <td class="user-actions">
+                <button type="button" class="button link" (click)="userEditingRoles.set(user)">
+                  Roles
+                </button>
+                @if (!isSelf(user)) {
+                  <button type="button" class="button link" (click)="userChangingStatus.set(user)">
+                    {{ user.status === 'ACTIVE' ? 'Desactivar' : 'Activar' }}
+                  </button>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>
+
+@if (isCreating()) {
+  <app-create-user-dialog
+    (created)="onUserSaved($event, 'Usuario creado.')"
+    (closed)="isCreating.set(false)"
+  />
+}
+
+@if (userEditingRoles(); as user) {
+  <app-edit-roles-dialog
+    [user]="user"
+    (saved)="onUserSaved($event, 'Roles actualizados.')"
+    (closed)="userEditingRoles.set(null)"
+  />
+}
+
+@if (userChangingStatus(); as user) {
+  <app-confirm-status-dialog
+    [user]="user"
+    (saved)="
+      onUserSaved($event, $event.status === 'ACTIVE' ? 'Usuario activado.' : 'Usuario desactivado.')
+    "
+    (closed)="userChangingStatus.set(null)"
+  />
+}

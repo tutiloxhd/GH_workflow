@@ -1,0 +1,156 @@
+@if (workflow(); as current) {
+  <header class="page-header">
+    <div>
+      <a class="muted" routerLink="/">← Remates</a>
+      <h1>{{ current.property?.title ?? 'Propiedad ' + current.propertyId }}</h1>
+      <p>
+        {{ current.property?.commune ?? '' }}
+        · Remate: {{ formatDateTime(current.auctionAt) }}
+        @if (current.property?.caseReference) {
+          · Rol {{ current.property.caseReference }}
+        }
+      </p>
+    </div>
+    <div class="page-actions">
+      <span class="status-pill" [class]="workflowStatusTones[current.status]">
+        {{ workflowStatusLabels[current.status] }}
+      </span>
+      @if (isAdmin && (current.status === 'ACTIVE' || current.status === 'SUSPENDED')) {
+        <button type="button" class="button" (click)="isEditingParticipants.set(true)">
+          Asignar participantes
+        </button>
+      }
+      @if (canChangeLifecycle && current.status === 'ACTIVE') {
+        <button type="button" class="button" (click)="lifecycleAction.set('SUSPEND')">
+          Suspender
+        </button>
+      }
+      @if (canChangeLifecycle && current.status === 'SUSPENDED') {
+        <button type="button" class="button primary" (click)="lifecycleAction.set('RESUME')">
+          Reanudar
+        </button>
+      }
+      @if (canChangeLifecycle && (current.status === 'ACTIVE' || current.status === 'SUSPENDED')) {
+        <button type="button" class="button" (click)="lifecycleAction.set('CANCEL')">
+          Cancelar
+        </button>
+      }
+    </div>
+  </header>
+
+  <div class="page-body workflow-layout">
+    <section class="card tasks-card" aria-labelledby="tasks-title">
+      <div class="card-header">
+        <h2 id="tasks-title">Tareas</h2>
+        <span class="muted">{{ completedCount() }} de {{ current.tasks.length }} completadas</span>
+      </div>
+      <ol class="workflow-tasks">
+        @for (task of current.tasks; track task.id) {
+          <li [class.is-open]="task.status === 'READY' || task.status === 'IN_PROGRESS'">
+            <button type="button" class="workflow-task" (click)="openTaskId.set(task.id)">
+              <span class="task-step">{{ task.displayOrder }}</span>
+              <span class="task-text">
+                <strong>{{ task.name }}</strong>
+                <small>
+                  {{ task.assignee?.name ?? roleLabels[task.responsibleRole] }}
+                  @if (task.dueAt) {
+                    · vence {{ formatDateTime(task.dueAt) }}
+                  }
+                  @if (task.requiresEvidence) {
+                    · {{ task.evidence ? 'evidencia guardada' : 'requiere evidencia' }}
+                  }
+                </small>
+              </span>
+              <span
+                class="status-pill"
+                [class]="task.isOverdue ? 'late' : taskStatusTones[task.status]"
+              >
+                {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
+              </span>
+            </button>
+            @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
+              <button
+                type="button"
+                class="button link"
+                [attr.aria-label]="'Cambiar plazo de ' + task.name"
+                (click)="taskEditingDeadline.set(task)"
+              >
+                Plazo
+              </button>
+            }
+          </li>
+        }
+      </ol>
+    </section>
+
+    <div class="side-column">
+      <section class="card" aria-labelledby="participants-title">
+        <div class="card-header"><h2 id="participants-title">Participantes</h2></div>
+        <dl class="facts card-body">
+          @for (row of participantRows(); track row.label) {
+            <dt>{{ row.label }}</dt>
+            <dd>
+              {{ row.primary ?? 'Sin asignar' }}
+              @if (row.backup) {
+                <small class="muted">(suplente: {{ row.backup }})</small>
+              }
+            </dd>
+          }
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="history-title">
+        <div class="card-header"><h2 id="history-title">Historial</h2></div>
+        <ol class="history">
+          @for (event of events(); track event.id) {
+            <li>
+              <strong>{{ eventLabels[event.eventType] ?? event.eventType }}</strong>
+              @if (taskName(event.taskId); as name) {
+                <span>{{ name }}</span>
+              }
+              <small class="muted">{{ formatDateTime(event.occurredAt) }}</small>
+            </li>
+          }
+        </ol>
+      </section>
+    </div>
+  </div>
+
+  @if (openTaskId(); as taskId) {
+    <app-task-dialog
+      [workflowId]="current.id"
+      [taskId]="taskId"
+      (changed)="onChanged($event)"
+      (closed)="openTaskId.set(null)"
+    />
+  }
+  @if (isEditingParticipants()) {
+    <app-participants-dialog
+      [workflow]="current"
+      (saved)="onChanged($event)"
+      (closed)="isEditingParticipants.set(false)"
+    />
+  }
+  @if (lifecycleAction(); as action) {
+    <app-lifecycle-dialog
+      [workflow]="current"
+      [action]="action"
+      (saved)="onChanged($event)"
+      (closed)="lifecycleAction.set(null)"
+    />
+  }
+  @if (taskEditingDeadline(); as task) {
+    <app-deadline-dialog
+      [task]="task"
+      (saved)="onChanged($event)"
+      (closed)="taskEditingDeadline.set(null)"
+    />
+  }
+} @else if (errorMessage(); as message) {
+  <div class="page-body">
+    <p class="form-error" role="alert">{{ message }}</p>
+    <a class="button" routerLink="/">Volver a remates</a>
+  </div>
+} @else {
+  <p class="empty-state">Cargando remate…</p>
+}

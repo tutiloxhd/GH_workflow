@@ -1,0 +1,87 @@
+.workflow-layout {
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+}
+
+.side-column {
+  display: grid;
+  gap: 20px;
+}
+
+.workflow-tasks,
+.history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-tasks li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.workflow-tasks li.is-open {
+  background: var(--amber-soft);
+}
+
+.workflow-task {
+  display: grid;
+  flex: 1;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 11px 16px;
+  border: 0;
+  background: none;
+  font-size: 0.8125rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.workflow-task:hover {
+  background: var(--hover);
+}
+
+.task-step {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--slate-soft);
+  font-size: 0.6875rem;
+  font-weight: 800;
+}
+
+.task-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.task-text small {
+  color: var(--muted);
+}
+
+.history {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.history li {
+  display: grid;
+  gap: 2px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 1100px) {
+  .workflow-layout {
+    grid-template-columns: 1fr;
+  }
+}

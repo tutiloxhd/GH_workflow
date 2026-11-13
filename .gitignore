@@ -3,6 +3,12 @@
 .env.*
 !.env.example
 
+# Volcados de admin_new: contienen datos reales y nunca se versionan
+
+
+# Bitácoras de sesiones de trabajo: notas locales, no se versionan
+
+
 # Dependencias y salidas de Node/Angular
 node_modules/
 dist/

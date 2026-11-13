@@ -1,0 +1,223 @@
+<header class="page-header">
+  <div>
+    <h1>Sincronización con admin_new</h1>
+    <p>
+      Las propiedades aceptadas en admin_new se copian y reciben su workflow automáticamente. El
+      sincronizador corre en un proceso aparte; esta vista muestra su estado.
+    </p>
+  </div>
+  <div class="page-actions">
+    <button type="button" class="button" (click)="load()" [disabled]="isLoading()">
+      Actualizar
+    </button>
+  </div>
+</header>
+
+<div class="page-body">
+  @if (errorMessage(); as message) {
+    <p class="form-error" role="alert">{{ message }}</p>
+  }
+
+  <section class="card" aria-labelledby="sync-state-title">
+    <div class="card-header">
+      <h2 id="sync-state-title">Estado</h2>
+      @if (status()?.cursor; as cursor) {
+        <span class="status-pill" [class]="statusTones[cursor.lastStatus]">
+          {{ statusLabels[cursor.lastStatus] }}
+        </span>
+      }
+    </div>
+    <div class="card-body">
+      @if (status()?.cursor; as cursor) {
+        <dl class="facts">
+          <dt>Última ejecución</dt>
+          <dd>{{ formatDateTime(cursor.lastStartedAt) }}</dd>
+          <dt>Terminó</dt>
+          <dd>{{ formatDateTime(cursor.lastCompletedAt) }}</dd>
+          <dt>Último error</dt>
+          <dd>{{ cursor.lastError ?? 'Ninguno' }}</dd>
+        </dl>
+      } @else {
+        <p class="empty-state">
+          {{
+            isLoading()
+              ? 'Cargando…'
+              : 'El sincronizador todavía no se ha ejecutado. Inícialo con «npm run sync» en apps/api.'
+          }}
+        </p>
+      }
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="sync-changes-title">
+    <div class="card-header">
+      <h2 id="sync-changes-title">Cambios de origen</h2>
+      <label class="field">
+        <span class="visually-hidden">Mostrar</span>
+        <select
+          [value]="changeFilter()"
+          (change)="setChangeFilter($any($event.target).value)"
+          aria-label="Filtrar cambios"
+        >
+          <option value="PENDING">Pendientes</option>
+          <option value="ALL">Últimos 50</option>
+        </select>
+      </label>
+    </div>
+    @if (changes().length === 0) {
+      <p class="empty-state">
+        {{
+          changeFilter() === 'PENDING'
+            ? 'No hay cambios pendientes de revisión.'
+            : 'No hay cambios registrados.'
+        }}
+      </p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Propiedad</th>
+              <th scope="col">Cambio</th>
+              <th scope="col">Detalle</th>
+              <th scope="col">Detectado</th>
+              <th scope="col">Estado</th>
+              <th scope="col"><span class="visually-hidden">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (change of changes(); track change.id) {
+              <tr>
+                <td>
+                  @if (change.workflowId) {
+                    <a [routerLink]="['/workflows', change.workflowId]">
+                      {{ change.propertyTitle ?? 'Propiedad ' + change.adminNewId }}
+                    </a>
+                  } @else {
+                    {{ change.propertyTitle ?? 'Propiedad ' + change.adminNewId }}
+                  }
+                  <small class="muted"> · admin_new {{ change.adminNewId }}</small>
+                </td>
+                <td data-label="Cambio">{{ changeTypeLabels[change.changeType] }}</td>
+                <td data-label="Detalle">
+                  @for (line of describeChange(change); track $index) {
+                    <div>{{ line }}</div>
+                  }
+                </td>
+                <td data-label="Detectado">{{ formatDateTime(change.detectedAt) }}</td>
+                <td data-label="Estado">{{ changeStatusLabels[change.status] }}</td>
+                <td>
+                  @if (isReviewable(change)) {
+                    <button
+                      type="button"
+                      class="button"
+                      [disabled]="reviewingChangeId() !== null"
+                      (click)="review(change)"
+                    >
+                      {{ reviewingChangeId() === change.id ? 'Guardando…' : 'Marcar revisado' }}
+                    </button>
+                  } @else if (
+                    change.changeType === 'AUCTION_DATE_CHANGED' && change.status === 'PENDING'
+                  ) {
+                    <small class="muted">Se aplicará al reprogramar</small>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="card" aria-labelledby="sync-executions-title">
+    <div class="card-header">
+      <h2 id="sync-executions-title">Ejecuciones recientes</h2>
+      <span class="muted">{{ status()?.executions?.length ?? 0 }}</span>
+    </div>
+    @if ((status()?.executions?.length ?? 0) === 0) {
+      <p class="empty-state">{{ isLoading() ? 'Cargando…' : 'Sin ejecuciones.' }}</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Inicio</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Leídas</th>
+              <th scope="col">Nuevas</th>
+              <th scope="col">Actualizadas</th>
+              <th scope="col">Workflows</th>
+              <th scope="col">Avisos</th>
+              <th scope="col"><span class="visually-hidden">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (execution of status()?.executions ?? []; track execution.id) {
+              <tr>
+                <td>{{ formatDateTime(execution.startedAt) }}</td>
+                <td data-label="Estado">
+                  <span class="status-pill" [class]="statusTones[execution.status]">
+                    {{ statusLabels[execution.status] }}
+                  </span>
+                </td>
+                <td data-label="Leídas">{{ execution.recordsRead }}</td>
+                <td data-label="Nuevas">{{ execution.recordsCreated }}</td>
+                <td data-label="Actualizadas">{{ execution.recordsUpdated }}</td>
+                <td data-label="Workflows">{{ execution.workflowsStarted }}</td>
+                <td data-label="Avisos" [class.field-error]="execution.errorCount > 0">
+                  {{ execution.warningCount + execution.errorCount }}
+                </td>
+                <td>
+                  @if (execution.warningCount + execution.errorCount > 0) {
+                    <button
+                      type="button"
+                      class="button"
+                      [attr.aria-expanded]="selectedExecution()?.id === execution.id"
+                      (click)="showIssues(execution)"
+                    >
+                      {{ selectedExecution()?.id === execution.id ? 'Ocultar' : 'Ver avisos' }}
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  @if (selectedExecution(); as execution) {
+    <section class="card" aria-labelledby="sync-issues-title">
+      <div class="card-header">
+        <h2 id="sync-issues-title">
+          Avisos de la ejecución del {{ formatDateTime(execution.startedAt) }}
+        </h2>
+        <span class="muted">{{ issues().length }}</span>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Propiedad (admin_new)</th>
+              <th scope="col">Tipo</th>
+              <th scope="col">Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (issue of issues(); track issue.id) {
+              <tr>
+                <td>{{ issue.adminNewId ?? '—' }}</td>
+                <td data-label="Tipo" [class.field-error]="issue.severity === 'ERROR'">
+                  {{ severityLabels[issue.severity] }}
+                </td>
+                <td data-label="Detalle">{{ issue.message }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+</div>

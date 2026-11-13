@@ -1,0 +1,1088 @@
+openapi: 3.1.0
+info:
+  title: API Workflow de Remates
+  version: 0.5.0
+  description: >
+    Contrato de la API del workflow de remates judiciales. Se amplía en cada sprint,
+    antes o junto con la implementación de cada endpoint.
+
+    Autenticación: cookie de sesión `gh_session` (HttpOnly, SameSite=Lax, Path=/api) emitida por
+    `POST /api/auth/login`. Toda operación que no sea GET exige el encabezado `Origin` igual al
+    origen del frontend; si no, responde 403 `ORIGIN_NOT_ALLOWED`.
+servers:
+  - url: http://localhost:3000
+    description: Desarrollo local
+tags:
+  - name: health
+  - name: auth
+  - name: users
+    description: Administración de usuarios; exige rol ADMIN
+  - name: workflows
+  - name: tasks
+  - name: sync
+    description: Estado de la sincronización con admin_new; exige rol ADMIN
+paths:
+  /api/health:
+    get:
+      operationId: getHealth
+      summary: Estado de la API y de su conexión a la base de datos
+      tags: [health]
+      security: []
+      responses:
+        '200':
+          description: La API y la base de datos están disponibles
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          $ref: '#/components/responses/Problem'
+
+  /api/auth/login:
+    post:
+      operationId: logIn
+      summary: Inicia sesión y emite la cookie de sesión
+      tags: [auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: { type: string, maxLength: 190 }
+                password: { type: string, maxLength: 200 }
+      responses:
+        '200':
+          description: Sesión iniciada
+          headers:
+            Set-Cookie:
+              description: gh_session=<token>; HttpOnly; SameSite=Lax; Path=/api; Expires=...
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          description: >
+            `INVALID_CREDENTIALS`. Se usa el mismo código para contraseña errónea, email
+            inexistente y cuenta inactiva o bloqueada.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429':
+          description: '`LOGIN_TEMPORARILY_LOCKED`: 5 fallos en 15 minutos para el email'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/auth/logout:
+    post:
+      operationId: logOut
+      summary: Revoca la sesión actual y borra la cookie
+      tags: [auth]
+      responses:
+        '204':
+          description: Sesión cerrada
+        '401':
+          $ref: '#/components/responses/Problem'
+
+  /api/auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Usuario de la sesión actual
+      tags: [auth]
+      responses:
+        '200':
+          description: Usuario autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '401':
+          $ref: '#/components/responses/Problem'
+
+  /api/users:
+    get:
+      operationId: listUsers
+      summary: Lista paginada de usuarios
+      tags: [users]
+      parameters:
+        - name: search
+          in: query
+          description: Texto buscado en nombre o email
+          schema: { type: string, maxLength: 100 }
+        - name: role
+          in: query
+          description: Solo usuarios con este rol
+          schema: { $ref: '#/components/schemas/RoleCode' }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Página de usuarios
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users, total, limit, offset]
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/User' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createUser
+      summary: Crea un usuario con sus roles
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, email, password, roles]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 150 }
+                email: { type: string, format: email, maxLength: 190 }
+                password:
+                  type: string
+                  description: >
+                    Mínimo 8 caracteres, al menos una mayúscula y un número; máximo 72 bytes.
+                roles:
+                  type: array
+                  items: { $ref: '#/components/schemas/RoleCode' }
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400':
+          description: >
+            `VALIDATION_FAILED` o `PASSWORD_POLICY_VIOLATION` (con `violations`: TOO_SHORT,
+            TOO_LONG, MISSING_UPPERCASE, MISSING_DIGIT).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '401':
+          $ref: '#/components/responses/Problem'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: '`EMAIL_ALREADY_REGISTERED`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/users/{userId}/roles:
+    put:
+      operationId: replaceUserRoles
+      summary: Reemplaza el conjunto de roles de un usuario
+      tags: [users]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [roles]
+              properties:
+                roles:
+                  type: array
+                  items: { $ref: '#/components/schemas/RoleCode' }
+      responses:
+        '200':
+          $ref: '#/components/responses/UserChanged'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/UserChangeConflict'
+
+  /api/users/{userId}/deactivate:
+    post:
+      operationId: deactivateUser
+      summary: Desactiva la cuenta y revoca sus sesiones
+      tags: [users]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/UserChanged'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/UserChangeConflict'
+
+  /api/users/{userId}/activate:
+    post:
+      operationId: activateUser
+      summary: Reactiva la cuenta
+      tags: [users]
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          $ref: '#/components/responses/UserChanged'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /api/properties/{propertyId}/workflow:
+    post:
+      operationId: startWorkflow
+      summary: Inicia el workflow de una propiedad (idempotente)
+      description: Exige rol ADMIN. Si la propiedad ya tiene workflow, lo devuelve con 200.
+      tags: [workflows]
+      parameters:
+        - name: propertyId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '201': { $ref: '#/components/responses/WorkflowChanged' }
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404':
+          description: '`PROPERTY_NOT_FOUND`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/workflows:
+    get:
+      operationId: listWorkflows
+      summary: Tablero de workflows
+      description: ADMIN ve todos; los demás, aquellos en que participan o tienen tareas.
+      tags: [workflows]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Página de workflows, ordenada por fecha de remate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workflows, total, limit, offset]
+                properties:
+                  workflows:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowSummary' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+
+  /api/properties:
+    get:
+      operationId: listProperties
+      summary: Propiedades con su workflow, si existe (ADMIN)
+      tags: [workflows]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+        - name: withoutWorkflow
+          in: query
+          description: '`true` para listar solo las propiedades que aún no tienen workflow'
+          schema: { type: string, enum: ['true', 'false'] }
+      responses:
+        '200':
+          description: Página de propiedades
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [properties, total, limit, offset]
+                properties:
+                  properties:
+                    type: array
+                    items: { $ref: '#/components/schemas/PropertyRow' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /api/workflows/{workflowId}:
+    get:
+      operationId: getWorkflow
+      summary: Detalle del workflow con tareas y participantes
+      description: Visible para ADMIN y para quien participa o tiene tareas en el workflow.
+      tags: [workflows]
+      parameters: [{ $ref: '#/components/parameters/WorkflowId' }]
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /api/workflows/{workflowId}/events:
+    get:
+      operationId: getWorkflowEvents
+      summary: Historial del workflow, en orden de ocurrencia
+      tags: [workflows]
+      parameters: [{ $ref: '#/components/parameters/WorkflowId' }]
+      responses:
+        '200':
+          description: Eventos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events]
+                properties:
+                  events:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowEvent' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /api/workflows/{workflowId}/participants:
+    put:
+      operationId: assignParticipants
+      summary: Asigna titular y suplente por rol (ADMIN)
+      description: >
+        Cierra la asignación vigente de cada rol indicado y abre la nueva. Las tareas abiertas
+        del rol pasan a los nuevos participantes.
+      tags: [workflows]
+      parameters: [{ $ref: '#/components/parameters/WorkflowId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [assignments]
+              properties:
+                assignments:
+                  type: array
+                  minItems: 1
+                  maxItems: 3
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [participantType, primaryUserId]
+                    properties:
+                      participantType: { $ref: '#/components/schemas/ParticipantType' }
+                      primaryUserId: { type: integer, minimum: 1 }
+                      backupUserId: { type: [integer, 'null'], minimum: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '400':
+          description: '`VALIDATION_FAILED` o `INVALID_PARTICIPANT` (usuario inactivo o sin el rol)'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /api/workflows/{workflowId}/suspend:
+    post:
+      operationId: suspendWorkflow
+      summary: Suspende el workflow (ADMIN o LEGAL_REVIEWER)
+      description: >
+        Con `newAuctionAt` el workflow sigue ACTIVE, se reprograma y se recalculan los
+        vencimientos abiertos. Sin fecha, el workflow y sus tareas abiertas pasan a SUSPENDED.
+      tags: [workflows]
+      parameters: [{ $ref: '#/components/parameters/WorkflowId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+                newAuctionAt: { $ref: '#/components/schemas/Instant' }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: '`WORKFLOW_NOT_ACTIVE`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/workflows/{workflowId}/resume:
+    post:
+      operationId: resumeWorkflow
+      summary: Reanuda un workflow suspendido; exige la nueva fecha de remate
+      tags: [workflows]
+      parameters: [{ $ref: '#/components/parameters/WorkflowId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                newAuctionAt: { $ref: '#/components/schemas/Instant' }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '400':
+          description: '`NEW_AUCTION_DATE_REQUIRED`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: '`WORKFLOW_NOT_SUSPENDED`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/workflows/{workflowId}/cancel:
+    post:
+      operationId: cancelWorkflow
+      summary: Cancela el workflow (ADMIN o LEGAL_REVIEWER); no se puede reanudar
+      tags: [workflows]
+      parameters: [{ $ref: '#/components/parameters/WorkflowId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: '`WORKFLOW_CLOSED`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/tasks/mine:
+    get:
+      operationId: listMyTasks
+      summary: Tareas abiertas donde el usuario es titular o suplente
+      tags: [tasks]
+      responses:
+        '200':
+          description: Bandeja, ordenada por vencimiento (sin vencimiento al final)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tasks]
+                properties:
+                  tasks:
+                    type: array
+                    items: { $ref: '#/components/schemas/MyTask' }
+
+  /api/tasks/{taskId}/start:
+    post:
+      operationId: startTask
+      summary: Marca la tarea en curso
+      description: >
+        Titular, suplente o ADMIN. Si actúa el suplente, pasa a ser el titular del rol en todo
+        el workflow.
+      tags: [tasks]
+      parameters: [{ $ref: '#/components/parameters/TaskId' }]
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/TaskConflict' }
+
+  /api/tasks/{taskId}/evidence:
+    put:
+      operationId: submitTaskEvidence
+      summary: Guarda o reemplaza la evidencia de la tarea
+      description: >
+        `formData` se valida contra `evidenceForm` de la tarea (ver el detalle del workflow).
+        Misma autorización que trabajar la tarea; si la envía el suplente, pasa a ser titular.
+      tags: [tasks]
+      parameters: [{ $ref: '#/components/parameters/TaskId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [formData]
+              properties:
+                formData:
+                  type: object
+                  additionalProperties: true
+                  description: Un valor por campo del formulario; montos como entero en pesos
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '400':
+          description: '`INVALID_EVIDENCE` con `invalidFields`, o `VALIDATION_FAILED`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: '`EVIDENCE_NOT_APPLICABLE` (la tarea no tiene formulario) o conflicto de estado'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/tasks/{taskId}/complete:
+    post:
+      operationId: completeTask
+      summary: Completa la tarea y activa las que dependían de ella
+      tags: [tasks]
+      parameters: [{ $ref: '#/components/parameters/TaskId' }]
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409':
+          description: >
+            `WORKFLOW_NOT_ACTIVE`, `TASK_NOT_OPEN`, `PARTICIPANTS_REQUIRED` (asignar gestor y
+            postor) o `EVIDENCE_REQUIRED`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/tasks/{taskId}/deadline:
+    put:
+      operationId: changeTaskDeadline
+      summary: Cambia el plazo de esta tarea en este workflow (ADMIN)
+      description: La plantilla no cambia. Si la tarea está abierta se recalcula su vencimiento.
+      tags: [tasks]
+      parameters: [{ $ref: '#/components/parameters/TaskId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeadlineRule' }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/TaskConflict' }
+
+  /api/sync/status:
+    get:
+      operationId: getSyncStatus
+      summary: Estado del sincronizador con admin_new y sus últimas 20 ejecuciones (ADMIN)
+      description: >
+        La sincronización corre en un proceso separado (`npm run sync`); la API solo informa su
+        estado y no la dispara.
+      tags: [sync]
+      responses:
+        '200':
+          description: Estado actual
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cursor, executions]
+                properties:
+                  cursor:
+                    oneOf:
+                      - { $ref: '#/components/schemas/SyncCursor' }
+                      - { type: 'null' }
+                  executions:
+                    type: array
+                    items: { $ref: '#/components/schemas/SyncExecution' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /api/sync/executions/{executionId}/issues:
+    get:
+      operationId: listSyncIssues
+      summary: Advertencias y errores registrados en una ejecución (ADMIN)
+      tags: [sync]
+      parameters:
+        - name: executionId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Incidencias de la ejecución
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [issues]
+                properties:
+                  issues:
+                    type: array
+                    items: { $ref: '#/components/schemas/SyncIssue' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404':
+          description: '`SYNC_EXECUTION_NOT_FOUND`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /api/sync/changes:
+    get:
+      operationId: listSourceChanges
+      summary: Cambios detectados en admin_new, del más reciente al más antiguo (ADMIN)
+      tags: [sync]
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/SourceChangeStatus' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200':
+          description: Cambios de origen
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [changes]
+                properties:
+                  changes:
+                    type: array
+                    items: { $ref: '#/components/schemas/SourceChange' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /api/sync/changes/{changeId}/review:
+    post:
+      operationId: reviewSourceChange
+      summary: Marca como revisado un aviso pendiente de propiedad no aceptada (ADMIN)
+      description: >
+        Solo aplica a `NO_LONGER_ACCEPTED` en estado `PENDING`. Los cambios de fecha pendientes
+        los procesa la reprogramación.
+      tags: [sync]
+      parameters:
+        - name: changeId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Cambio revisado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [changeId]
+                properties:
+                  changeId: { type: integer }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404':
+          description: '`SOURCE_CHANGE_NOT_FOUND`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: '`SOURCE_CHANGE_NOT_REVIEWABLE`'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+security:
+  - sessionCookie: []
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: gh_session
+  headers:
+    RequestId:
+      description: Identificador para correlacionar la solicitud con los logs
+      schema:
+        type: string
+        format: uuid
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    WorkflowId:
+      name: workflowId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+  responses:
+    Problem:
+      description: Error en formato Problem Details
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    WorkflowChanged:
+      description: Detalle del workflow después de la operación
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [workflow]
+            properties:
+              workflow: { $ref: '#/components/schemas/Workflow' }
+    TaskConflict:
+      description: '`WORKFLOW_NOT_ACTIVE`, `WORKFLOW_CLOSED` o `TASK_NOT_OPEN`'
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UserChanged:
+      description: Usuario actualizado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/UserEnvelope' }
+    UserChangeConflict:
+      description: >
+        `CANNOT_CHANGE_OWN_ADMIN_ACCESS` (un admin no puede quitarse ADMIN ni desactivarse) o
+        `LAST_ADMIN_REQUIRED` (debe quedar al menos un admin activo).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    SyncCursor:
+      type: object
+      required: [lastStatus, lastStartedAt, lastCompletedAt, lastSourceId, lastError]
+      properties:
+        lastStatus: { type: string, enum: [NEVER_RUN, RUNNING, SUCCEEDED, FAILED] }
+        lastStartedAt: { oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }] }
+        lastCompletedAt: { oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }] }
+        lastSourceId: { type: [integer, 'null'], description: Mayor id de admin_new leído }
+        lastError: { type: [string, 'null'] }
+    SyncExecution:
+      type: object
+      required:
+        - id
+        - status
+        - startedAt
+        - completedAt
+        - recordsRead
+        - recordsCreated
+        - recordsUpdated
+        - workflowsStarted
+        - warningCount
+        - errorCount
+        - errorMessage
+      properties:
+        id: { type: integer }
+        status: { type: string, enum: [RUNNING, SUCCEEDED, PARTIAL, FAILED] }
+        startedAt: { $ref: '#/components/schemas/Instant' }
+        completedAt: { oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }] }
+        recordsRead: { type: integer, description: Propiedades aceptadas leídas }
+        recordsCreated: { type: integer, description: Propiedades copiadas por primera vez }
+        recordsUpdated: { type: integer, description: Propiedades con valores de origen nuevos }
+        workflowsStarted: { type: integer }
+        warningCount: { type: integer }
+        errorCount: { type: integer }
+        errorMessage: { type: [string, 'null'] }
+    SyncIssue:
+      type: object
+      required: [id, adminNewId, severity, code, message]
+      properties:
+        id: { type: integer }
+        adminNewId: { type: [integer, 'null'] }
+        severity: { type: string, enum: [WARNING, ERROR] }
+        code:
+          type: string
+          description: >
+            MISSING_DETAIL_ROW, DUPLICATE_DETAIL_ROWS, DUPLICATE_AUCTION_ROWS,
+            MISSING_AUCTION_DATE, MISSING_AUCTION_TIME, INVALID_DATE, INVALID_TIME, INVALID_AMOUNT,
+            VALUE_TRUNCATED, PROPERTY_FAILED o SYNC_FAILED.
+        message: { type: string }
+    SourceChangeStatus:
+      type: string
+      enum: [PENDING, PROCESSING, PROCESSED, FAILED, IGNORED]
+    SourceChange:
+      type: object
+      required:
+        - id
+        - propertyId
+        - adminNewId
+        - propertyTitle
+        - workflowId
+        - changeType
+        - status
+        - previousValues
+        - currentValues
+        - errorMessage
+        - detectedAt
+        - processedAt
+        - processedBy
+      properties:
+        id: { type: integer }
+        propertyId: { type: integer }
+        adminNewId: { type: integer }
+        propertyTitle: { type: [string, 'null'] }
+        workflowId: { type: [integer, 'null'] }
+        changeType:
+          type: string
+          enum: [PROPERTY_ACCEPTED, AUCTION_DATE_CHANGED, PROPERTY_DATA_CHANGED, NO_LONGER_ACCEPTED]
+          description: >
+            AUCTION_DATE_CHANGED cubre las cuatro fechas de referencia (remate, pago y devolución
+            de la garantía, pago del saldo).
+        status: { $ref: '#/components/schemas/SourceChangeStatus' }
+        previousValues: { type: [object, 'null'], additionalProperties: true }
+        currentValues: { type: [object, 'null'], additionalProperties: true }
+        errorMessage:
+          type: [string, 'null']
+          description: Motivo cuando no se inició el workflow (estado IGNORED)
+        detectedAt: { $ref: '#/components/schemas/Instant' }
+        processedAt: { oneOf: [{ $ref: '#/components/schemas/Instant' }, { type: 'null' }] }
+        processedBy: { type: [integer, 'null'], description: ADMIN que revisó el aviso }
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, database]
+      properties:
+        status: { type: string, enum: [ok] }
+        database: { type: string, enum: [up] }
+    RoleCode:
+      type: string
+      enum: [ADMIN, MANAGER, BIDDER, LEGAL_REVIEWER]
+    ParticipantType:
+      type: string
+      enum: [MANAGER, BIDDER, LEGAL_REVIEWER]
+    Instant:
+      type: string
+      format: date-time
+      description: Instante con zona explícita, p. ej. 2026-12-07T10:00:00-03:00
+    PersonRef:
+      type: [object, 'null']
+      required: [id, name]
+      properties:
+        id: { type: integer }
+        name: { type: [string, 'null'] }
+    DeadlineRule:
+      type: object
+      additionalProperties: false
+      required: [dueReference, dueOffsetDays]
+      properties:
+        dueReference:
+          type: string
+          enum:
+            [
+              TASK_ACTIVATED_AT,
+              AUCTION_AT,
+              GUARANTEE_PAYMENT_AT,
+              GUARANTEE_RETURN_AT,
+              BALANCE_PAYMENT_AT,
+            ]
+        dueOffsetDays:
+          type: integer
+          minimum: -365
+          maximum: 365
+          description: Días de calendario en America/Santiago, conservando la hora local
+        dueOffsetMinutes: { type: integer, default: 0 }
+    WorkflowTask:
+      type: object
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        responsibleRole: { $ref: '#/components/schemas/RoleCode' }
+        displayOrder: { type: integer }
+        status:
+          type: string
+          enum: [BLOCKED, READY, IN_PROGRESS, SUSPENDED, COMPLETED, CANCELLED]
+        assignee: { $ref: '#/components/schemas/PersonRef' }
+        backup: { $ref: '#/components/schemas/PersonRef' }
+        dependsOn:
+          type: array
+          items: { type: string }
+        deadline: { $ref: '#/components/schemas/DeadlineRule' }
+        dueAt: { type: [string, 'null'], format: date-time }
+        isOverdue: { type: boolean }
+        activatedAt: { type: [string, 'null'], format: date-time }
+        completedAt: { type: [string, 'null'], format: date-time }
+        requiresEvidence: { type: boolean }
+        evidenceForm:
+          oneOf:
+            - { $ref: '#/components/schemas/EvidenceForm' }
+            - { type: 'null' }
+        evidence:
+          type: [object, 'null']
+          properties:
+            formData: { type: object, additionalProperties: true }
+            submittedBy: { type: integer }
+            updatedAt: { type: string, format: date-time }
+    EvidenceForm:
+      type: object
+      description: Formulario básico de prueba; su estructura definitiva la define negocio
+      properties:
+        fields:
+          type: array
+          items:
+            type: object
+            required: [name, label, type, isRequired]
+            properties:
+              name: { type: string }
+              label: { type: string }
+              type: { type: string, enum: [TEXT, LONG_TEXT, DATE, AMOUNT_CLP, CHOICE] }
+              isRequired: { type: boolean }
+              options:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    value: { type: string }
+                    label: { type: string }
+    WorkflowSummary:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, CANCELLED, COMPLETED] }
+        startedAt: { type: string, format: date-time }
+        property:
+          type: object
+          properties:
+            id: { type: integer }
+            title: { type: [string, 'null'] }
+            commune: { type: [string, 'null'] }
+        auctionAt: { type: [string, 'null'], format: date-time }
+        openTaskCount: { type: integer }
+        overdueTaskCount: { type: integer }
+    PropertyRow:
+      type: object
+      properties:
+        id: { type: integer }
+        adminNewId: { type: integer }
+        title: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        commune: { type: [string, 'null'] }
+        auctionAt: { type: [string, 'null'], format: date-time }
+        workflow:
+          type: [object, 'null']
+          properties:
+            id: { type: integer }
+            status: { type: string, enum: [ACTIVE, SUSPENDED, CANCELLED, COMPLETED] }
+    Workflow:
+      type: object
+      properties:
+        id: { type: integer }
+        status: { type: string, enum: [ACTIVE, SUSPENDED, CANCELLED, COMPLETED] }
+        propertyId: { type: integer }
+        property:
+          type: [object, 'null']
+          properties:
+            id: { type: integer }
+            title: { type: [string, 'null'] }
+            address: { type: [string, 'null'] }
+            commune: { type: [string, 'null'] }
+            caseReference: { type: [string, 'null'] }
+            tribunal: { type: [string, 'null'] }
+        auctionAt: { type: [string, 'null'], format: date-time }
+        participants:
+          type: array
+          items:
+            type: object
+            properties:
+              participantType: { $ref: '#/components/schemas/ParticipantType' }
+              assignmentType: { type: string, enum: [PRIMARY, BACKUP] }
+              user: { $ref: '#/components/schemas/PersonRef' }
+        tasks:
+          type: array
+          items: { $ref: '#/components/schemas/WorkflowTask' }
+    WorkflowEvent:
+      type: object
+      properties:
+        id: { type: integer }
+        taskId: { type: [integer, 'null'] }
+        actorUserId: { type: [integer, 'null'] }
+        eventType: { type: string }
+        eventSource: { type: string, enum: [USER, SYSTEM, SYNC] }
+        details: { type: [object, 'null'] }
+        occurredAt: { type: string, format: date-time }
+    MyTask:
+      type: object
+      properties:
+        id: { type: integer }
+        workflowId: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        status: { type: string, enum: [READY, IN_PROGRESS] }
+        dueAt: { type: [string, 'null'], format: date-time }
+        isOverdue: { type: boolean }
+        role:
+          type: string
+          enum: [ASSIGNEE, BACKUP]
+          description: Si el usuario es titular o suplente de la tarea
+        property:
+          type: object
+          properties:
+            id: { type: integer }
+            title: { type: [string, 'null'] }
+            address: { type: [string, 'null'] }
+            commune: { type: [string, 'null'] }
+            auctionAt: { type: [string, 'null'], format: date-time }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, name, email, status, roles, createdAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        status: { type: string, enum: [ACTIVE, INACTIVE, BLOCKED] }
+        roles:
+          type: array
+          items: { $ref: '#/components/schemas/RoleCode' }
+        createdAt: { type: string, format: date-time }
+    UserEnvelope:
+      type: object
+      required: [user]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+    Problem:
+      description: Error en formato Problem Details (RFC 9457) con un código estable
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code:
+          type: string
+          description: Código estable para clientes
+        invalidFields:
+          type: array
+          description: Solo en VALIDATION_FAILED; rutas de los campos inválidos, sin sus valores
+          items: { type: string }
+        violations:
+          type: array
+          description: Solo en PASSWORD_POLICY_VIOLATION
+          items: { type: string }
+        requestId: { type: string, format: uuid }

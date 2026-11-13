@@ -113,6 +113,15 @@ erDiagram
         varchar status
         datetime started_at
         datetime completed_at
+        int workflows_started
+    }
+
+    SYNC_ISSUES {
+        bigint id PK
+        bigint sync_execution_id FK
+        bigint admin_new_id
+        varchar severity
+        varchar code
     }
 
     PROPERTY_SOURCE_CHANGES {
@@ -122,6 +131,7 @@ erDiagram
         json previous_values
         json current_values
         varchar status
+        bigint processed_by FK
     }
 
     WORKFLOW_TEMPLATES {
@@ -182,7 +192,6 @@ erDiagram
         bigint assigned_user_id FK
         bigint backup_user_id FK
         varchar status
-        int progress_percentage
         datetime due_at
     }
 
@@ -193,11 +202,13 @@ erDiagram
         json form_data
     }
 
-    TASK_EVENTS {
+    WORKFLOW_EVENTS {
         bigint id PK
+        bigint workflow_instance_id FK
         bigint task_instance_id FK
         bigint actor_user_id FK
         varchar event_type
+        varchar event_source
         json details
     }
 
@@ -206,6 +217,8 @@ erDiagram
     ROLES ||--o{ USER_ROLES : asigna
 
     PROPERTIES ||--o{ PROPERTY_SOURCE_CHANGES : registra
+    SYNC_EXECUTIONS ||--o{ SYNC_ISSUES : informa
+    USERS o|--o{ PROPERTY_SOURCE_CHANGES : revisa
     PROPERTIES ||--|| WORKFLOW_INSTANCES : origina
 
     WORKFLOW_TEMPLATES ||--o{ TASK_DEFINITIONS : define
@@ -227,13 +240,16 @@ erDiagram
     TASK_INSTANCES ||--o{ TASK_EVIDENCE_SUBMISSIONS : evidencia
     USERS ||--o{ TASK_EVIDENCE_SUBMISSIONS : registra
 
-    TASK_INSTANCES ||--o{ TASK_EVENTS : audita
-    USERS o|--o{ TASK_EVENTS : ejecuta
+    WORKFLOW_INSTANCES ||--o{ WORKFLOW_EVENTS : audita
+    TASK_INSTANCES o|--o{ WORKFLOW_EVENTS : detalla
+    USERS o|--o{ WORKFLOW_EVENTS : ejecuta
 ```
 
 ## 6. Tablas del MVP
 
-El modelo contiene 17 tablas agrupadas en cuatro áreas.
+El modelo contiene 19 tablas agrupadas en cuatro áreas. `login_attempts` se agregó en el sprint 1 (migración `0001_login_attempts`) y `sync_issues` en el sprint 4 (migración `0004_sync_issues`).
+
+La definición ejecutable es el esquema Drizzle de `apps/api/src/platform/database/schema/` y el SQL generado en [`sql/migrations/`](../sql/migrations/). Si este documento y el esquema difieren, se corrige el que esté equivocado en el mismo cambio.
 
 ### 6.1 Autenticación y roles
 
@@ -265,6 +281,15 @@ Campos principales:
 - `created_at`.
 
 El token real debe entregarse en una cookie segura y `HttpOnly` cuando se defina la estrategia de autenticación.
+
+#### `login_attempts`
+
+Intentos de inicio de sesión, exitosos y fallidos, por email normalizado. También se registran emails sin cuenta, para no revelar cuáles existen.
+
+- `email`, `succeeded`, `attempted_at`.
+- Índice `(email, attempted_at)`.
+
+Con 5 fallos en los últimos 15 minutos posteriores al último acceso exitoso, el login se rechaza con `LOGIN_TEMPORARILY_LOCKED`. Mientras dura el bloqueo los intentos no se registran.
 
 #### `roles`
 
@@ -328,20 +353,26 @@ Estados:
 - `PARTIAL`.
 - `FAILED`.
 
-Registra filas leídas, creadas, actualizadas, advertencias y errores.
+Registra filas leídas, creadas, actualizadas, workflows iniciados, advertencias y errores.
+
+El cursor también hace de candado: una ejecución solo empieza si toma el cursor de forma atómica, así que dos procesos no corren a la vez.
+
+#### `sync_issues`
+
+Advertencias y errores de una ejecución: valores de origen que no se pudieron interpretar, filas duplicadas, la falta de hora del remate y los fallos de una propiedad. Se registran cuando la propiedad se procesa, no en cada ejecución.
 
 #### `property_source_changes`
 
 Cambios relevantes detectados en el origen.
 
-Tipos iniciales:
+Tipos:
 
-- `PROPERTY_ACCEPTED`.
-- `AUCTION_DATE_CHANGED`.
-- `PROPERTY_DATA_CHANGED`.
-- `NO_LONGER_ACCEPTED`.
+- `PROPERTY_ACCEPTED`: `PROCESSED` si se inició el workflow; `IGNORED` si el remate ya ocurrió.
+- `AUCTION_DATE_CHANGED`: cubre las cuatro fechas de referencia. Queda `PENDING` si el workflow está abierto (lo aplica la reprogramación); si no, se aplica y queda `PROCESSED`.
+- `PROPERTY_DATA_CHANGED`: se aplica directamente.
+- `NO_LONGER_ACCEPTED`: `PENDING` si el workflow está abierto, hasta que un ADMIN lo marca como revisado (`processed_by`).
 
-Conserva valores anteriores y nuevos para trazabilidad.
+Conserva valores anteriores y nuevos para trazabilidad. Reglas completas: [ADR 0007](./adr/0007-sincronizacion-admin-new.md).
 
 ### 6.3 Definición y ejecución del workflow
 
@@ -368,8 +399,9 @@ Campos importantes:
 - Rol responsable.
 - Orden visual.
 - Si requiere evidencia.
-- Referencia temporal.
-- Desplazamiento del vencimiento en minutos.
+- Plazo base: referencia temporal (`due_reference`), días de calendario en Santiago (`due_offset_days`) y minutos (`due_offset_minutes`). Por defecto, 3 días desde la activación (migración `0002`).
+
+Cada workflow copia este plazo a sus `task_instances`, donde se puede editar sin tocar la plantilla. Ver [ADR 0006](./adr/0006-reglas-del-motor.md).
 
 Referencias temporales iniciales:
 
@@ -403,6 +435,10 @@ Estados iniciales:
 - `COMPLETED`.
 
 `lock_version` permite detectar actualizaciones concurrentes.
+
+`UNIQUE (property_id)` garantiza un solo workflow por propiedad. `suspended_at`, `cancelled_at` y `completed_at` registran cuándo ocurrió cada cambio de estado.
+
+En la fase 1 todas las tareas son manuales: `task_definitions` no distingue tareas automáticas.
 
 #### `workflow_participants`
 
@@ -452,13 +488,15 @@ Estados:
 - `BLOCKED`.
 - `READY`.
 - `IN_PROGRESS`.
+- `SUSPENDED` (workflow suspendido sin nueva fecha; `status_before_suspension` guarda el estado al que vuelve).
 - `COMPLETED`.
 - `CANCELLED`.
 
 Campos importantes:
 
 - Responsable y suplente.
-- Porcentaje de avance.
+- Estado previo a una suspensión.
+- Copia editable del plazo (`due_reference`, `due_offset_days`, `due_offset_minutes`).
 - Fecha de vencimiento.
 - Fecha de referencia usada para calcularla.
 - Inicio y término.
@@ -491,11 +529,24 @@ UNIQUE (task_instance_id)
 
 El backend debe validar `form_data` según el código de la definición de la tarea.
 
-#### `task_events`
+#### `workflow_events`
 
-Historial append-only de la tarea.
+Historial append-only de la instancia y de sus tareas (ver [ADR 0005](./adr/0005-historial-de-workflow.md)).
 
-Eventos iniciales:
+- `workflow_instance_id` es obligatorio.
+- `task_instance_id` es opcional: los eventos de instancia no llevan tarea.
+- `event_source`: `USER`, `SYSTEM` o `SYNC`.
+
+Eventos de instancia iniciales:
+
+- `WORKFLOW_CREATED`.
+- `WORKFLOW_SUSPENDED`.
+- `WORKFLOW_RESUMED`.
+- `WORKFLOW_CANCELLED`.
+- `WORKFLOW_COMPLETED`.
+- `WORKFLOW_REPROGRAMMED`.
+
+Eventos de tarea iniciales:
 
 - `TASK_CREATED`.
 - `TASK_ACTIVATED`.
@@ -533,7 +584,7 @@ Cuando el usuario marca una tarea como completada, el backend debe ejecutar en u
 6. Verificar evidencia obligatoria.
 7. Cambiar la tarea a `COMPLETED`.
 8. Registrar `completed_at` y `completed_by`.
-9. Insertar `TASK_COMPLETED` en `task_events`.
+9. Insertar `TASK_COMPLETED` en `workflow_events`.
 10. Buscar tareas bloqueadas cuyas dependencias estén completas.
 11. Cambiarlas a `READY`.
 12. Registrar `TASK_ACTIVATED` por cada una.
@@ -542,33 +593,27 @@ Cuando el usuario marca una tarea como completada, el backend debe ejecutar en u
 
 El frontend no debe modificar directamente estados, dependencias ni campos de finalización.
 
-## 9. Registrar avance y evidencia
+## 9. En curso y evidencia
 
-El porcentaje de avance debe estar entre 0 y 100.
+No hay porcentaje de avance: `progress_percentage` se eliminó en la migración `0003`. Una tarea `READY` puede marcarse `IN_PROGRESS` y luego completarse.
 
-Reglas sugeridas:
-
-- `BLOCKED`: no admite avance.
-- Primer avance mayor a cero: puede cambiar la tarea a `IN_PROGRESS`.
-- Avance menor que 100: no completa la tarea.
-- El check de completar ejecuta el caso de uso de finalización.
-- Si se conserva `progress_percentage`, completar una tarea debe dejarlo en 100.
-- Una tarea con evidencia obligatoria no puede completarse sin un formulario válido.
-
-Si el MVP finalmente solo necesita check/no check, debe evaluarse eliminar `progress_percentage` para mantener el modelo más simple.
+- Una tarea con evidencia obligatoria no puede completarse sin un formulario válido guardado.
+- Los formularios por código de tarea se definen en `apps/api/src/modules/workflow/domain/evidence-forms.ts`; son básicos y provisorios.
+- La plantilla v2 exige evidencia en «Retirar Vale Vista», «Registrar evidencia» y «Registrar resultado».
 
 ## 10. Sincronización
 
-El sincronizador se ejecuta periódicamente en un proceso separado del servidor HTTP.
+El sincronizador se ejecuta periódicamente (cada 60 s, provisorio) en un proceso separado del servidor HTTP (`npm run sync` en `apps/api`).
 
 Para una propiedad nueva aceptada:
 
-1. Consulta `admin_new` con credenciales de solo lectura.
-2. Inserta o actualiza `properties` de forma idempotente.
-3. Crea una sola instancia de workflow.
-4. Materializa las tareas del flujo principal.
-5. Activa las tareas sin dependencias pendientes.
-6. Registra el resultado de la sincronización.
+1. Consulta `admin_new` con credenciales de solo lectura y sesión `READ ONLY`.
+2. Interpreta fechas, horas y montos guardados como texto; registra los inválidos en `sync_issues`.
+3. Inserta `properties` con el hash de los valores de origen.
+4. Si el remate es hoy o después (o se desconoce), crea una sola instancia de workflow, materializa las tareas y activa las que no tienen dependencias pendientes.
+5. Registra el cambio y el resultado de la ejecución.
+
+Si el hash no cambió, la propiedad no se vuelve a procesar.
 
 La restricción única sobre `admin_new_id` y la unicidad correspondiente de la instancia deben impedir duplicados aunque el proceso se ejecute más de una vez.
 
@@ -600,7 +645,6 @@ SELECT
     task_definition.name,
     task_definition.description,
     task_instance.status,
-    task_instance.progress_percentage,
     task_instance.due_at,
     property.title AS property_title,
     property.address
@@ -627,18 +671,16 @@ El SQL definitivo depende de la librería de acceso a datos aprobada y no debe c
 
 ## 13. Decisiones todavía pendientes
 
+Ya resueltas: autenticación ([ADR 0003](./adr/0003-autenticacion.md)), validación ([ADR 0002](./adr/0002-validacion.md)), acceso a datos ([ADR 0001](./adr/0001-acceso-a-datos.md)) y reglas del motor: admin omnipotente, suplente, plazos y suspensión ([ADR 0006](./adr/0006-reglas-del-motor.md)).
+
 Este documento no resuelve:
 
-- Estrategia definitiva de autenticación y sesiones.
-- Librería de validación.
-- ORM, query builder o SQL directo.
-- Frecuencia del sincronizador.
-- Plazos exactos de cada tarea.
-- Efecto de la suspensión sobre vencimientos.
-- Si el administrador puede completar cualquier tarea.
-- Si un suplente puede actuar simultáneamente o solo ante ausencia.
+- Frecuencia definitiva del sincronizador (hoy, 60 s provisorios).
+- Si las revisiones legales bloquean el avance.
+- Plazos definitivos de cada tarea (hoy, 3 días provisorios).
 - Estructura exacta de cada formulario de evidencia.
-- Criterio definitivo para filas duplicadas en `admin_new`.
+- Criterio definitivo para filas duplicadas en `admin_new` (hoy, la de mayor id, con advertencia).
+- Si un remate ya ocurrido debe iniciar workflow, y qué hora usar cuando falta `hora_remate` (hoy: no se inicia; 00:00).
 
 Un agente no debe tomar estas decisiones silenciosamente. Debe presentar alternativas y solicitar aprobación antes de incorporarlas al código o al esquema definitivo.
 

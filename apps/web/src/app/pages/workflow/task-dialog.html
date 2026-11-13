@@ -1,0 +1,116 @@
+<dialog appModalDialog aria-labelledby="task-title" (closed)="closed.emit()">
+  <div class="modal-form">
+    @if (task(); as current) {
+      <div>
+        <span class="status-pill" [class]="statusTones[current.status]">
+          {{ statusLabels[current.status] }}
+        </span>
+        <h2 id="task-title">{{ current.name }}</h2>
+        @if (current.description) {
+          <p class="muted">{{ current.description }}</p>
+        }
+      </div>
+
+      <dl class="facts">
+        <dt>Remate</dt>
+        <dd>
+          <a [routerLink]="['/workflows', workflowId()]" (click)="modal().close()">
+            {{ workflow()?.property?.title ?? 'Propiedad ' + workflow()?.propertyId }}
+          </a>
+        </dd>
+        <dt>Responsable</dt>
+        <dd>
+          {{ current.assignee?.name ?? 'Sin asignar' }} · {{ roleLabels[current.responsibleRole] }}
+        </dd>
+        <dt>Suplente</dt>
+        <dd>{{ current.backup?.name ?? 'Sin suplente' }}</dd>
+        <dt>Vence</dt>
+        <dd [class.field-error]="current.isOverdue">
+          {{ formatDateTime(current.dueAt) }}{{ current.isOverdue ? ' (vencida)' : '' }}
+        </dd>
+        @if (current.completedAt) {
+          <dt>Completada</dt>
+          <dd>{{ formatDateTime(current.completedAt) }}</dd>
+        }
+      </dl>
+
+      @if (errorMessage(); as message) {
+        <p class="form-error" role="alert">{{ message }}</p>
+      }
+      @if (notice(); as message) {
+        <p class="notice" role="status">{{ message }}</p>
+      }
+
+      @if (canWork() && relation() === 'BACKUP') {
+        <p class="form-error">
+          Eres suplente. Si actúas en esta tarea pasarás a ser el titular del rol en todo el remate.
+        </p>
+      }
+
+      @if (current.evidenceForm; as form) {
+        <section aria-labelledby="evidence-title">
+          <h3 id="evidence-title">Evidencia</h3>
+          @if (canWork()) {
+            <app-evidence-form
+              [definition]="form"
+              [savedData]="current.evidence?.formData ?? null"
+              [isDisabled]="isBusy()"
+              [serverInvalidFields]="invalidEvidenceFields()"
+              (submitted)="saveEvidence($event)"
+            />
+          } @else if (current.evidence; as evidence) {
+            <dl class="facts">
+              @for (field of form.fields; track field.name) {
+                <dt>{{ field.label }}</dt>
+                <dd>{{ evidence.formData[field.name] ?? '—' }}</dd>
+              }
+            </dl>
+          } @else {
+            <p class="muted">Sin evidencia registrada.</p>
+          }
+        </section>
+      }
+
+      <div class="modal-actions">
+        <button type="button" class="button" (click)="modal().close()">Cerrar</button>
+        @if (canWork() && current.status === 'READY') {
+          <button type="button" class="button" [disabled]="isBusy()" (click)="startTask()">
+            Marcar en curso
+          </button>
+        }
+        @if (canWork()) {
+          @if (isConfirmingCompletion()) {
+            <button
+              type="button"
+              class="button primary"
+              [disabled]="isBusy()"
+              (click)="completeTask()"
+            >
+              Confirmar: completar
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="button primary"
+              [disabled]="isBusy() || isMissingEvidence()"
+              [title]="isMissingEvidence() ? 'Guarda la evidencia antes de completar' : ''"
+              (click)="isConfirmingCompletion.set(true)"
+            >
+              Completar
+            </button>
+          }
+        }
+      </div>
+      @if (canWork() && isMissingEvidence()) {
+        <p class="muted">Para completar esta tarea primero guarda su evidencia.</p>
+      }
+    } @else if (errorMessage(); as message) {
+      <p class="form-error" role="alert">{{ message }}</p>
+      <div class="modal-actions">
+        <button type="button" class="button" (click)="modal().close()">Cerrar</button>
+      </div>
+    } @else {
+      <p class="muted">Cargando tarea…</p>
+    }
+  </div>
+</dialog>

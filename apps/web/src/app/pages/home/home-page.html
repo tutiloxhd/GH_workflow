@@ -1,0 +1,111 @@
+<header class="page-header">
+  <div>
+    <h1>Remates</h1>
+    <p>Hola, {{ user()?.name }}. Estos son los remates en curso.</p>
+  </div>
+  <div class="page-actions">
+    <a class="button" routerLink="/mis-tareas">Ir a mis tareas</a>
+    <button type="button" class="button" (click)="load()" [disabled]="isLoading()">
+      Actualizar
+    </button>
+  </div>
+</header>
+
+<div class="page-body">
+  @if (errorMessage(); as message) {
+    <p class="form-error" role="alert">{{ message }}</p>
+  }
+
+  <section class="card" aria-labelledby="workflows-title">
+    <div class="card-header">
+      <h2 id="workflows-title">Workflows</h2>
+      <span class="muted">{{ workflows().length }}</span>
+    </div>
+    @if (workflows().length === 0) {
+      <p class="empty-state">
+        {{ isLoading() ? 'Cargando…' : 'No hay remates con workflow visibles para ti.' }}
+      </p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th scope="col">Propiedad</th>
+              <th scope="col">Comuna</th>
+              <th scope="col">Remate</th>
+              <th scope="col">Tareas abiertas</th>
+              <th scope="col">Vencidas</th>
+              <th scope="col">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (workflow of workflows(); track workflow.id) {
+              <tr>
+                <td>
+                  <a [routerLink]="['/workflows', workflow.id]">
+                    {{ workflow.property.title ?? 'Propiedad ' + workflow.property.id }}
+                  </a>
+                </td>
+                <td data-label="Comuna">{{ workflow.property.commune ?? '—' }}</td>
+                <td data-label="Remate">{{ formatDateTime(workflow.auctionAt) }}</td>
+                <td data-label="Tareas abiertas">{{ workflow.openTaskCount }}</td>
+                <td data-label="Vencidas" [class.field-error]="workflow.overdueTaskCount > 0">
+                  {{ workflow.overdueTaskCount }}
+                </td>
+                <td>
+                  <span class="status-pill" [class]="statusTones[workflow.status]">
+                    {{ statusLabels[workflow.status] }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  @if (isAdmin) {
+    <section class="card" aria-labelledby="properties-title">
+      <div class="card-header">
+        <h2 id="properties-title">Propiedades sin workflow</h2>
+        <span class="muted">{{ properties().length }}</span>
+      </div>
+      @if (properties().length === 0) {
+        <p class="empty-state">Todas las propiedades cargadas tienen workflow.</p>
+      } @else {
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th scope="col">Propiedad</th>
+                <th scope="col">Comuna</th>
+                <th scope="col">Remate</th>
+                <th scope="col"><span class="visually-hidden">Acciones</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (property of properties(); track property.id) {
+                <tr>
+                  <td>{{ property.title ?? 'Propiedad ' + property.id }}</td>
+                  <td data-label="Comuna">{{ property.commune ?? '—' }}</td>
+                  <td data-label="Remate">{{ formatDateTime(property.auctionAt) }}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="button primary"
+                      [disabled]="startingPropertyId() !== null"
+                      (click)="startWorkflow(property)"
+                    >
+                      {{ startingPropertyId() === property.id ? 'Iniciando…' : 'Iniciar workflow' }}
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  }
+</div>
