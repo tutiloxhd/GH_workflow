@@ -37,6 +37,7 @@ test/            pruebas de integración (HTTP y base de datos)
 - Configuración en `.env` (ver `.env.example`); `.env` nunca se versiona.
 - `DB_NAME` es la base de desarrollo y `DB_TEST_NAME` la de pruebas; deben ser distintas entre sí y de `ADMIN_NEW_DB_NAME`.
 - Las bases se crean con `CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`.
+- `sql/workflow_mvp.sql` es una foto de la base del MVP (estructura, migraciones 0000–0004 registradas, roles, plantillas y usuarios de desarrollo) para levantar una base nueva sin correr migraciones ni seeds; guía en [LEVANTAR-PROYECTO.md](../../LEVANTAR-PROYECTO.md). Borra y recrea las tablas: solo en una base vacía y solo en desarrollo. Tras un cambio de esquema se regenera con `mysqldump`; la fuente de verdad sigue siendo el esquema Drizzle y `sql/migrations/`. `sql/schema.sql` es el modelo completo futuro y no se aplica.
 - Cambios de esquema: editar el esquema Drizzle → `npm run db:generate -- --name <descripcion>` → revisar el SQL generado en `sql/migrations/` → `npm run db:migrate`. No se edita una migración ya aplicada en un ambiente compartido.
 - Los seeds son SQL idempotente en `sql/seeds/`, aplicados en orden: `0001_roles`, `0002_workflow_template_v1`, `0003_dev_synthetic_properties` (solo desarrollo) y `0004_workflow_template_v2` (plantilla activa). Las plantillas publicadas son inmutables.
 - Cuidado con `INSERT IGNORE`: convierte errores en advertencias (por ejemplo, un número negativo en una columna `UNSIGNED` se guarda como 0). Cada seed termina con una consulta de verificación; revisar su resultado.
