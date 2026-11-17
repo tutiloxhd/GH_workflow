@@ -6,6 +6,10 @@ import {
   type SyncOutcome,
 } from '../src/modules/admin-new-sync/application/run-sync.js';
 import type { AdminNewSource } from '../src/modules/admin-new-sync/persistence/admin-new-source.js';
+import {
+  insertPendingDateReprogramming,
+  insertSourceChange,
+} from '../src/modules/admin-new-sync/persistence/sync-repository.js';
 import { startSourceFixture, type SourceFixture } from './admin-new-source-fixture.js';
 import {
   callApi,
@@ -260,10 +264,17 @@ describe('sincronización con admin_new', () => {
   });
 
   describe('cambios en propiedades ya sincronizadas', () => {
-    it('un cambio de fecha con workflow abierto queda pendiente; los demás datos se aplican', async () => {
+    it('un cambio de fecha con workflow abierto reprograma plazos e historial', async () => {
       await fixture.givenAccepted({ id: 108, r1: FUTURE_AUCTION });
       await completedSync();
+      const [workflow] = await workflowsOf(108);
+      const [deadlineBefore] = await rows(
+        `SELECT due_at AS dueAt FROM task_instances
+          WHERE workflow_instance_id = ? AND status = 'READY' ORDER BY id LIMIT 1`,
+        [workflow?.id],
+      );
 
+      context.clock.advanceMinutes(60);
       await fixture.setAuctionDate(108, '2026-12-14');
       await fixture.setCommune(108, 'Providencia');
       const outcome = await completedSync();
@@ -271,14 +282,13 @@ describe('sincronización con admin_new', () => {
       expect(outcome.totals.recordsUpdated).toBe(1);
       const property = await propertyOf(108);
       expect(property?.commune).toBe('Providencia');
-      // La fecha no se sobrescribe: la aplica la reprogramación, que recalcula los plazos.
-      expect((property?.auction_at as Date).toISOString()).toBe('2026-12-07T13:30:00.000Z');
+      expect((property?.auction_at as Date).toISOString()).toBe('2026-12-14T13:30:00.000Z');
 
       const changes = await changesOf(108);
       expect(changes.slice(1)).toMatchObject([
         {
           changeType: 'AUCTION_DATE_CHANGED',
-          status: 'PENDING',
+          status: 'PROCESSED',
           previousValues: { auctionAt: '2026-12-07T13:30:00.000Z' },
           currentValues: { auctionAt: '2026-12-14T13:30:00.000Z' },
         },
@@ -290,9 +300,70 @@ describe('sincronización con admin_new', () => {
         },
       ]);
 
+      const [deadlineAfter] = await rows(
+        `SELECT due_at AS dueAt FROM task_instances
+          WHERE workflow_instance_id = ? AND status = 'READY' ORDER BY id LIMIT 1`,
+        [workflow?.id],
+      );
+      expect(
+        (deadlineAfter?.dueAt as Date).getTime() - (deadlineBefore?.dueAt as Date).getTime(),
+      ).toBe(60 * 60 * 1000);
+      const [reprogramming] = await rows(
+        `SELECT origin, status, source_change_id AS sourceChangeId
+           FROM workflow_reprogrammings WHERE workflow_instance_id = ?`,
+        [workflow?.id],
+      );
+      expect(reprogramming).toMatchObject({
+        origin: 'SYNC',
+        status: 'APPLIED',
+        sourceChangeId: Number(changes[1]?.id),
+      });
+      const events = await rows(
+        `SELECT event_type AS eventType, event_source AS eventSource
+           FROM workflow_events WHERE workflow_instance_id = ? ORDER BY id`,
+        [workflow?.id],
+      );
+      expect(events).toEqual(
+        expect.arrayContaining([
+          { eventType: 'TASK_DUE_DATE_RECALCULATED', eventSource: 'SYNC' },
+          { eventType: 'WORKFLOW_REPROGRAMMED', eventSource: 'SYNC' },
+        ]),
+      );
+
       // Sin nuevos cambios en el origen, no se repite el aviso.
       await completedSync();
       expect(await changesOf(108)).toHaveLength(3);
+    });
+
+    it('retoma una reprogramación pendiente aunque el origen no vuelva a cambiar', async () => {
+      await fixture.givenAccepted({ id: 114, r1: FUTURE_AUCTION });
+      await completedSync();
+      const property = await propertyOf(114);
+      const [workflow] = await workflowsOf(114);
+      const detectedAt = context.clock.now();
+      const sourceChangeId = await insertSourceChange(context.database.db, {
+        propertyId: Number(property?.id),
+        changeType: 'AUCTION_DATE_CHANGED',
+        status: 'PENDING',
+        previousValues: { auctionAt: '2026-12-07T13:30:00.000Z' },
+        currentValues: { auctionAt: '2026-12-15T13:30:00.000Z' },
+        detectedAt,
+      });
+      await insertPendingDateReprogramming(context.database.db, {
+        workflowId: Number(workflow?.id),
+        sourceChangeId,
+        previousAuctionAt: new Date('2026-12-07T13:30:00.000Z'),
+        newAuctionAt: new Date('2026-12-15T13:30:00.000Z'),
+        createdAt: detectedAt,
+      });
+
+      const outcome = await completedSync();
+
+      expect(outcome.totals.recordsUpdated).toBe(0);
+      expect(((await propertyOf(114))?.auction_at as Date).toISOString()).toBe(
+        '2026-12-15T13:30:00.000Z',
+      );
+      expect((await changesOf(114)).at(-1)).toMatchObject({ status: 'PROCESSED' });
     });
 
     it('una propiedad que deja de estar aceptada se avisa una vez y el workflow sigue', async () => {

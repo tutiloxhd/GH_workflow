@@ -20,6 +20,7 @@ import {
   finishExecution,
   findLatestAcceptanceChanges,
   findTrackedProperties,
+  insertPendingDateReprogramming,
   insertExecution,
   insertIssues,
   insertProperty,
@@ -33,6 +34,7 @@ import {
   type SyncExecutionStatus,
   type TrackedProperty,
 } from '../persistence/sync-repository.js';
+import { applyPendingReprogrammings } from './apply-pending-reprogrammings.js';
 
 export const ADMIN_NEW_SOURCE_CODE = 'ADMIN_NEW';
 // Una ejecución que lleva más que esto marcada como en curso se considera abandonada.
@@ -166,6 +168,10 @@ class SyncRun {
       }
     }
 
+    for (const failure of await applyPendingReprogrammings(this.dependencies)) {
+      this.reportError(failure.adminNewId, 'REPROGRAMMING_FAILED', failure.message);
+    }
+
     await this.detectNoLongerAccepted(new Set(accepted.map((source) => source.adminNewId)));
     return accepted.reduce<number | null>(
       (highest, source) => Math.max(highest ?? 0, source.adminNewId),
@@ -259,7 +265,7 @@ class SyncRun {
         syncedAt: now,
       });
       if (changedDates.length > 0) {
-        await insertSourceChange(transaction, {
+        const sourceChangeId = await insertSourceChange(transaction, {
           propertyId: existing.id,
           changeType: 'AUCTION_DATE_CHANGED',
           status: deferDates ? 'PENDING' : 'PROCESSED',
@@ -268,6 +274,15 @@ class SyncRun {
           detectedAt: now,
           processedAt: deferDates ? null : now,
         });
+        if (deferDates && existing.workflowId !== null) {
+          await insertPendingDateReprogramming(transaction, {
+            workflowId: existing.workflowId,
+            sourceChangeId,
+            previousAuctionAt: existing.auctionAt,
+            newAuctionAt: snapshot.auctionAt,
+            createdAt: now,
+          });
+        }
       }
       if (changedData.length > 0) {
         await insertSourceChange(transaction, {

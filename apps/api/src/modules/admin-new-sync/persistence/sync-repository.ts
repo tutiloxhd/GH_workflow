@@ -11,7 +11,10 @@ import {
   type SYNC_EXECUTION_STATUSES,
   type SYNC_ISSUE_SEVERITIES,
 } from '../../../platform/database/schema/admin-new-sync.schema.js';
-import { workflowInstances } from '../../../platform/database/schema/workflow.schema.js';
+import {
+  workflowInstances,
+  workflowReprogrammings,
+} from '../../../platform/database/schema/workflow.schema.js';
 import type { WorkflowStatus } from '../../workflow/domain/statuses.js';
 import type { PropertySnapshot } from '../domain/source-property.js';
 
@@ -278,8 +281,94 @@ export async function insertSourceChange(
     detectedAt: Date;
     processedAt?: Date | null;
   },
+): Promise<number> {
+  const [inserted] = await executor.insert(propertySourceChanges).values(change).$returningId();
+  if (!inserted) throw new Error('La inserción del cambio de origen no devolvió identificador');
+  return inserted.id;
+}
+
+export interface PendingDateReprogramming {
+  readonly id: number;
+  readonly workflowId: number;
+  readonly sourceChangeId: number;
+  readonly adminNewId: number;
+  readonly currentValues: unknown;
+}
+
+export async function insertPendingDateReprogramming(
+  executor: DatabaseExecutor,
+  reprogramming: {
+    workflowId: number;
+    sourceChangeId: number;
+    previousAuctionAt: Date | null;
+    newAuctionAt: Date | null;
+    createdAt: Date;
+  },
 ): Promise<void> {
-  await executor.insert(propertySourceChanges).values(change);
+  await executor.insert(workflowReprogrammings).values({
+    workflowInstanceId: reprogramming.workflowId,
+    sourceChangeId: reprogramming.sourceChangeId,
+    previousAuctionAt: reprogramming.previousAuctionAt,
+    newAuctionAt: reprogramming.newAuctionAt,
+    origin: 'SYNC',
+    status: 'PENDING',
+    createdAt: reprogramming.createdAt,
+  });
+}
+
+export async function listPendingDateReprogrammings(
+  executor: DatabaseExecutor,
+): Promise<PendingDateReprogramming[]> {
+  return executor
+    .select({
+      id: workflowReprogrammings.id,
+      workflowId: workflowReprogrammings.workflowInstanceId,
+      sourceChangeId: propertySourceChanges.id,
+      adminNewId: properties.adminNewId,
+      currentValues: propertySourceChanges.currentValues,
+    })
+    .from(workflowReprogrammings)
+    .innerJoin(
+      propertySourceChanges,
+      eq(propertySourceChanges.id, workflowReprogrammings.sourceChangeId),
+    )
+    .innerJoin(properties, eq(properties.id, propertySourceChanges.propertyId))
+    .where(eq(workflowReprogrammings.status, 'PENDING'))
+    .orderBy(workflowReprogrammings.id);
+}
+
+export async function lockPendingDateReprogramming(
+  executor: DatabaseExecutor,
+  reprogrammingId: number,
+) {
+  const [reprogramming] = await executor
+    .select({ id: workflowReprogrammings.id, status: workflowReprogrammings.status })
+    .from(workflowReprogrammings)
+    .where(eq(workflowReprogrammings.id, reprogrammingId))
+    .for('update');
+  return reprogramming;
+}
+
+export async function markDateReprogrammingApplied(
+  executor: DatabaseExecutor,
+  reprogrammingId: number,
+  appliedAt: Date,
+): Promise<void> {
+  await executor
+    .update(workflowReprogrammings)
+    .set({ status: 'APPLIED', appliedAt, errorMessage: null })
+    .where(eq(workflowReprogrammings.id, reprogrammingId));
+}
+
+export async function markSourceChangeProcessed(
+  executor: DatabaseExecutor,
+  sourceChangeId: number,
+  processedAt: Date,
+): Promise<void> {
+  await executor
+    .update(propertySourceChanges)
+    .set({ status: 'PROCESSED', processedAt, errorMessage: null })
+    .where(eq(propertySourceChanges.id, sourceChangeId));
 }
 
 export async function lockSourceChange(executor: DatabaseExecutor, changeId: number) {

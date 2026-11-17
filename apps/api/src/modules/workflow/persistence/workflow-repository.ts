@@ -185,6 +185,14 @@ export async function updatePropertyAuctionAt(
   await executor.update(properties).set({ auctionAt }).where(eq(properties.id, propertyId));
 }
 
+export async function updatePropertyBusinessDates(
+  executor: DatabaseExecutor,
+  propertyId: number,
+  dates: Partial<BusinessDates>,
+): Promise<void> {
+  await executor.update(properties).set(dates).where(eq(properties.id, propertyId));
+}
+
 // ───────────── Instancia ─────────────
 
 export interface WorkflowRecord {
@@ -546,6 +554,7 @@ export interface NewWorkflowEvent {
   readonly workflowId: number;
   readonly taskId?: number;
   readonly actorUserId: number | null;
+  readonly eventSource?: 'USER' | 'SYSTEM' | 'SYNC';
   readonly eventType: WorkflowEventType;
   readonly details?: Record<string, unknown>;
 }
@@ -562,7 +571,8 @@ export async function insertEvents(
       taskInstanceId: event.taskId ?? null,
       actorUserId: event.actorUserId,
       eventType: event.eventType,
-      eventSource: event.actorUserId === null ? ('SYSTEM' as const) : ('USER' as const),
+      eventSource:
+        event.eventSource ?? (event.actorUserId === null ? ('SYSTEM' as const) : ('USER' as const)),
       details: event.details ?? null,
       occurredAt,
     })),
