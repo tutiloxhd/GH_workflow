@@ -295,6 +295,45 @@ export interface PendingDateReprogramming {
   readonly currentValues: unknown;
 }
 
+export interface OrphanPendingDateChange {
+  readonly sourceChangeId: number;
+  readonly workflowId: number;
+  readonly adminNewId: number;
+  readonly previousValues: unknown;
+  readonly currentValues: unknown;
+  readonly detectedAt: Date;
+}
+
+export async function listOrphanPendingDateChanges(
+  executor: DatabaseExecutor,
+): Promise<OrphanPendingDateChange[]> {
+  return executor
+    .select({
+      sourceChangeId: propertySourceChanges.id,
+      workflowId: workflowInstances.id,
+      adminNewId: properties.adminNewId,
+      previousValues: propertySourceChanges.previousValues,
+      currentValues: propertySourceChanges.currentValues,
+      detectedAt: propertySourceChanges.detectedAt,
+    })
+    .from(propertySourceChanges)
+    .innerJoin(properties, eq(properties.id, propertySourceChanges.propertyId))
+    .innerJoin(workflowInstances, eq(workflowInstances.propertyId, properties.id))
+    .leftJoin(
+      workflowReprogrammings,
+      eq(workflowReprogrammings.sourceChangeId, propertySourceChanges.id),
+    )
+    .where(
+      and(
+        eq(propertySourceChanges.changeType, 'AUCTION_DATE_CHANGED'),
+        eq(propertySourceChanges.status, 'PENDING'),
+        inArray(workflowInstances.status, ['ACTIVE', 'SUSPENDED']),
+        isNull(workflowReprogrammings.id),
+      ),
+    )
+    .orderBy(propertySourceChanges.id);
+}
+
 export async function insertPendingDateReprogramming(
   executor: DatabaseExecutor,
   reprogramming: {
@@ -352,11 +391,21 @@ export async function lockPendingDateReprogramming(
 export async function markDateReprogrammingApplied(
   executor: DatabaseExecutor,
   reprogrammingId: number,
-  appliedAt: Date,
+  application: {
+    previousAuctionAt: Date | null;
+    newAuctionAt: Date | null;
+    appliedAt: Date;
+  },
 ): Promise<void> {
   await executor
     .update(workflowReprogrammings)
-    .set({ status: 'APPLIED', appliedAt, errorMessage: null })
+    .set({
+      status: 'APPLIED',
+      previousAuctionAt: application.previousAuctionAt,
+      newAuctionAt: application.newAuctionAt,
+      appliedAt: application.appliedAt,
+      errorMessage: null,
+    })
     .where(eq(workflowReprogrammings.id, reprogrammingId));
 }
 

@@ -16,9 +16,9 @@ const MVP_TABLES = [
   'task_dependencies',
   'task_evidence_submissions',
   'task_instances',
+  'users',
   'user_roles',
   'user_sessions',
-  'users',
   'workflow_events',
   'workflow_instances',
   'workflow_participants',
@@ -78,7 +78,7 @@ describe('esquema inicial de la base', () => {
       ['Usuario Sintético', 'sintetico@example.test', 'hash-sintetico', 'DESCONOCIDO'],
     );
 
-    await expect(insertInvalidUser).rejects.toMatchObject({ code: 'ER_CHECK_CONSTRAINT_VIOLATED' });
+    await expect(insertInvalidUser).rejects.toThrow(/chk_users_status/i);
   });
 
   it('usa UTC como zona horaria de la sesión', async () => {

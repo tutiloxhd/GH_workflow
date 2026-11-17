@@ -4,6 +4,8 @@ import { runWorkflowCommand } from '../../workflow/application/run-workflow-comm
 import type { BusinessDates } from '../../workflow/domain/due-date.js';
 import { updatePropertyBusinessDates } from '../../workflow/persistence/workflow-repository.js';
 import {
+  insertPendingDateReprogramming,
+  listOrphanPendingDateChanges,
   listPendingDateReprogrammings,
   lockPendingDateReprogramming,
   markDateReprogrammingApplied,
@@ -37,6 +39,7 @@ export interface ReprogrammingFailure {
 export async function applyPendingReprogrammings(
   dependencies: SyncDependencies,
 ): Promise<ReprogrammingFailure[]> {
+  await materializeOrphanPendingChanges(dependencies);
   const pending = await listPendingDateReprogrammings(dependencies.database.db);
   const failures: ReprogrammingFailure[] = [];
 
@@ -51,6 +54,24 @@ export async function applyPendingReprogrammings(
     }
   }
   return failures;
+}
+
+async function materializeOrphanPendingChanges(dependencies: SyncDependencies): Promise<void> {
+  const orphanChanges = await listOrphanPendingDateChanges(dependencies.database.db);
+  for (const change of orphanChanges) {
+    await insertPendingDateReprogramming(dependencies.database.db, {
+      workflowId: change.workflowId,
+      sourceChangeId: change.sourceChangeId,
+      previousAuctionAt: auctionAtFrom(change.previousValues),
+      newAuctionAt: auctionAtFrom(change.currentValues),
+      createdAt: change.detectedAt,
+    });
+  }
+}
+
+function auctionAtFrom(values: unknown): Date | null {
+  const parsed = z.object({ auctionAt: serializedDate.optional() }).safeParse(values);
+  return parsed.success ? (parsed.data.auctionAt ?? null) : null;
 }
 
 async function applyPendingReprogramming(
@@ -81,7 +102,11 @@ async function applyPendingReprogramming(
       context.setBusinessDates(dates);
       await context.recalculateOpenDeadlines(context.now);
       await markSourceChangeProcessed(context.executor, reprogramming.sourceChangeId, context.now);
-      await markDateReprogrammingApplied(context.executor, reprogramming.id, context.now);
+      await markDateReprogrammingApplied(context.executor, reprogramming.id, {
+        previousAuctionAt: previousDates.auctionAt,
+        newAuctionAt: context.businessDates.auctionAt,
+        appliedAt: context.now,
+      });
       context.record({
         eventType: 'WORKFLOW_REPROGRAMMED',
         details: {

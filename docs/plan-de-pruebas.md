@@ -57,26 +57,26 @@ Resultado esperado:
 
 ## 4. Matriz de pruebas de reprogramación
 
-| ID    | Caso                           | Preparación y acción                                                                                | Resultado esperado                                                                                                                        |
-| ----- | ------------------------------ | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| RP-01 | Cambio de fecha de remate      | Crear propiedad aceptada con workflow abierto; cambiar `r1`; ejecutar nuevamente el sincronizador.  | `properties.auction_at` toma la fecha nueva; el cambio queda `PROCESSED`; existe una reprogramación `SYNC/APPLIED`.                |
-| RP-02 | Recálculo de tareas abiertas  | Antes de RP-01 guardar `due_at` de tareas `READY` e `IN_PROGRESS`.                              | Se recalculan conforme a su referencia y al reloj de la reprogramación; se crea un evento por cada valor modificado.                     |
-| RP-03 | Tareas cerradas intactas       | Completar una tarea antes del cambio de fecha.                                                        | Estado, `due_at`, evidencia e historial previo de la tarea completada no cambian.                                                       |
-| RP-04 | Tareas bloqueadas intactas     | Guardar los datos de una tarea `BLOCKED` antes de reprogramar.                                      | La tarea bloqueada no cambia ni genera evento de recálculo.                                                                              |
-| RP-05 | Workflow suspendido            | Suspender un workflow sin nueva fecha; cambiar una fecha de origen; sincronizar.                      | La fecha se aplica; las tareas suspendidas abiertas recalculan sus plazos sin reactivarse; el workflow sigue `SUSPENDED`.               |
-| RP-06 | Fecha de garantía             | Cambiar `r3` o su hora final.                                                                       | Solo los plazos cuya referencia es `GUARANTEE_PAYMENT_AT` usan la fecha nueva; las demás reglas conservan su referencia.               |
-| RP-07 | Fecha de devolución           | Cambiar `r4`.                                                                                       | Los plazos con referencia `GUARANTEE_RETURN_AT` se recalculan.                                                                          |
-| RP-08 | Fecha de pago de saldo         | Cambiar `r5`.                                                                                       | Los plazos con referencia `BALANCE_PAYMENT_AT` se recalculan.                                                                           |
-| RP-09 | Fecha eliminada                | Cambiar una fecha de negocio válida a vacía o nula.                                                 | La copia local queda en `NULL`; las tareas abiertas que dependen de ella quedan con `due_reference_at` y `due_at` nulos.            |
-| RP-10 | Varias fechas en un ciclo      | Cambiar dos o más fechas de referencia antes de sincronizar.                                         | Se aplican juntas en una transacción y cada plazo se calcula con la referencia correspondiente.                                          |
-| RP-11 | Idempotencia                   | Ejecutar otra sincronización sin modificar el origen.                                                | No se crean nuevos cambios, reprogramaciones ni eventos; los vencimientos no vuelven a moverse.                                           |
-| RP-12 | Recuperación de pendiente     | Dejar una reprogramación válida en `PENDING` y ejecutar el sincronizador sin otro cambio de hash. | El pendiente se retoma y termina `APPLIED`; el cambio de origen termina `PROCESSED`.                                                  |
-| RP-13 | Fallo durante aplicación      | Forzar un error controlado dentro de la transacción de prueba.                                       | No quedan fechas o vencimientos aplicados parcialmente; el cambio permanece recuperable y la ejecución informa `REPROGRAMMING_FAILED`. |
-| RP-14 | Concurrencia                   | Lanzar dos sincronizaciones simultáneas.                                                             | Solo una adquiere el cursor; no hay duplicados ni doble recálculo.                                                                       |
-| RP-15 | Workflow cerrado               | Reprogramar después de completar o cancelar el workflow, según el escenario aprobado.               | No se reabren tareas ni cambia un estado cerrado; cualquier actualización de la copia de origen queda trazada.                           |
-| RP-16 | Trazabilidad                   | Consultar cambio, reprogramación y eventos después de RP-01.                                        | Se conserva valor anterior, valor nuevo, `source_change_id`, origen `SYNC`, fecha de detección y fecha de aplicación.               |
-| RP-17 | Cambio no temporal simultáneo | Cambiar fecha y comuna en el mismo ciclo.                                                             | La comuna y la fecha se aplican; se registran cambios separados sin perder ninguno.                                                       |
-| RP-18 | Valor inválido                | Ingresar una fecha de origen con formato inválido en la fuente de pruebas.                           | No se inventa una fecha; se registra la incidencia correspondiente y no se corrompen los datos vigentes.                                  |
+| ID    | Caso                          | Preparación y acción                                                                               | Resultado esperado                                                                                                                     |
+| ----- | ----------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| RP-01 | Cambio de fecha de remate     | Crear propiedad aceptada con workflow abierto; cambiar `r1`; ejecutar nuevamente el sincronizador. | `properties.auction_at` toma la fecha nueva; el cambio queda `PROCESSED`; existe una reprogramación `SYNC/APPLIED`.                    |
+| RP-02 | Recálculo de tareas abiertas  | Antes de RP-01 guardar `due_at` de tareas `READY` e `IN_PROGRESS`.                                 | Se recalculan conforme a su referencia y al reloj de la reprogramación; se crea un evento por cada valor modificado.                   |
+| RP-03 | Tareas cerradas intactas      | Completar una tarea antes del cambio de fecha.                                                     | Estado, `due_at`, evidencia e historial previo de la tarea completada no cambian.                                                      |
+| RP-04 | Tareas bloqueadas intactas    | Guardar los datos de una tarea `BLOCKED` antes de reprogramar.                                     | La tarea bloqueada no cambia ni genera evento de recálculo.                                                                            |
+| RP-05 | Workflow suspendido           | Suspender un workflow sin nueva fecha; cambiar una fecha de origen; sincronizar.                   | La fecha se aplica; las tareas suspendidas abiertas recalculan sus plazos sin reactivarse; el workflow sigue `SUSPENDED`.              |
+| RP-06 | Fecha de garantía             | Cambiar `r3` o su hora final.                                                                      | Solo los plazos cuya referencia es `GUARANTEE_PAYMENT_AT` usan la fecha nueva; las demás reglas conservan su referencia.               |
+| RP-07 | Fecha de devolución           | Cambiar `r4`.                                                                                      | Los plazos con referencia `GUARANTEE_RETURN_AT` se recalculan.                                                                         |
+| RP-08 | Fecha de pago de saldo        | Cambiar `r5`.                                                                                      | Los plazos con referencia `BALANCE_PAYMENT_AT` se recalculan.                                                                          |
+| RP-09 | Fecha eliminada               | Cambiar una fecha de negocio válida a vacía o nula.                                                | La copia local queda en `NULL`; las tareas abiertas que dependen de ella quedan con `due_reference_at` y `due_at` nulos.               |
+| RP-10 | Varias fechas en un ciclo     | Cambiar dos o más fechas de referencia antes de sincronizar.                                       | Se aplican juntas en una transacción y cada plazo se calcula con la referencia correspondiente.                                        |
+| RP-11 | Idempotencia                  | Ejecutar otra sincronización sin modificar el origen.                                              | No se crean nuevos cambios, reprogramaciones ni eventos; los vencimientos no vuelven a moverse.                                        |
+| RP-12 | Recuperación de pendiente     | Dejar una reprogramación válida en `PENDING` y ejecutar el sincronizador sin otro cambio de hash.  | El pendiente se retoma y termina `APPLIED`; el cambio de origen termina `PROCESSED`.                                                   |
+| RP-13 | Fallo durante aplicación      | Forzar un error controlado dentro de la transacción de prueba.                                     | No quedan fechas o vencimientos aplicados parcialmente; el cambio permanece recuperable y la ejecución informa `REPROGRAMMING_FAILED`. |
+| RP-14 | Concurrencia                  | Lanzar dos sincronizaciones simultáneas.                                                           | Solo una adquiere el cursor; no hay duplicados ni doble recálculo.                                                                     |
+| RP-15 | Workflow cerrado              | Reprogramar después de completar o cancelar el workflow, según el escenario aprobado.              | No se reabren tareas ni cambia un estado cerrado; cualquier actualización de la copia de origen queda trazada.                         |
+| RP-16 | Trazabilidad                  | Consultar cambio, reprogramación y eventos después de RP-01.                                       | Se conserva valor anterior, valor nuevo, `source_change_id`, origen `SYNC`, fecha de detección y fecha de aplicación.                  |
+| RP-17 | Cambio no temporal simultáneo | Cambiar fecha y comuna en el mismo ciclo.                                                          | La comuna y la fecha se aplican; se registran cambios separados sin perder ninguno.                                                    |
+| RP-18 | Valor inválido                | Ingresar una fecha de origen con formato inválido en la fuente de pruebas.                         | No se inventa una fecha; se registra la incidencia correspondiente y no se corrompen los datos vigentes.                               |
 
 ## 5. Verificación mediante SQL de solo lectura
 
@@ -199,14 +199,21 @@ El Sprint 5 se considera aprobado cuando:
 
 Agregar una fila por cada sesión de prueba.
 
-| Fecha      | Ambiente               | Responsable | Casos                                           | Resultado             | Evidencia o incidencia                                                                                        |
-| ---------- | ---------------------- | ----------- | ----------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------- |
-| 2026-11-16 | Local, bases de prueba | Codex       | RP-01, RP-02, RP-11, RP-12, RP-14, RP-16, RP-17 | Parcialmente aprobado | `admin-new-sync.test.ts`: 17/17. Suite completa: 136/138; fallos pendientes en `database-schema.test.ts`. |
+| Fecha      | Ambiente                                         | Responsable | Casos                                           | Resultado             | Evidencia o incidencia                                                                                                                              |
+| ---------- | ------------------------------------------------ | ----------- | ----------------------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-16 | Local, bases de prueba                           | Codex       | RP-01, RP-02, RP-11, RP-12, RP-14, RP-16, RP-17 | Parcialmente aprobado | `admin-new-sync.test.ts`: 17/17. Suite completa: 136/138; fallos pendientes en `database-schema.test.ts`.                                           |
+| 2026-11-17 | Local, bases de prueba y copia operacional local | Codex       | RP-01 a RP-18                                   | Aprobado              | Suite completa: 144/144. Sincronización real `1225`: aplicó el cambio `75`. Sincronización `1264`: idempotente, sin cambios, errores ni pendientes. |
 
-## 9. Pendientes conocidos
+## 9. Cierre del Sprint 5
 
-- Automatizar cobertura explícita de RP-05 a RP-10, RP-13, RP-15 y RP-18.
-- Resolver los dos fallos actuales de `database-schema.test.ts`: orden esperado de tablas y error
-  local `ER_INNODB_AUTOEXTEND_SIZE_OUT_OF_RANGE`.
-- Ejecutar la demostración de la sección 6 únicamente cuando exista autorización para escribir en
-  una copia local descartable de `admin_new`.
+- Se automatizaron los cambios de `r1`, `r3`, `r4` y `r5`, las referencias eliminadas, los
+  workflows suspendidos y cerrados, las tareas completadas y bloqueadas, la recuperación, la
+  idempotencia, la concurrencia, los valores inválidos y la trazabilidad.
+- Los dos fallos de `database-schema.test.ts` quedaron corregidos con una expectativa compatible
+  con la colación de MariaDB y una validación portable de la restricción `chk_users_status`.
+- La demostración local aplicó el cambio `75` de la propiedad `13220`: cambio `PROCESSED`,
+  reprogramación `SYNC/APPLIED`, vencimiento recalculado e historial con origen `SYNC`.
+- La auditoría histórica de `workflow_reprogrammings.id = 2` quedó corregida para reflejar como
+  fecha anterior el valor local efectivo al aplicar la reprogramación.
+- La ejecución idempotente `1264` no creó cambios, reprogramaciones ni eventos adicionales y no
+  dejó pendientes.

@@ -15,14 +15,14 @@ La fase 1 se divide en seis sprints. Cada uno termina con un entregable demostra
 
 ## Sprints
 
-| Sprint | Contenido | Entregable | Estado |
-| --- | --- | --- | --- |
-| 0. Fundaciones | ADRs, estructura del repositorio, `apps/api` y `apps/web`, migración inicial de 17 tablas, seed de roles, esqueleto OpenAPI. | La API arranca y valida su entorno; la base se crea desde SQL revisable; Angular compila. | Terminado |
-| 1. Identidad | Registro, login y logout, sesiones revocables, roles, autorización en backend; shell Angular con login y layout de la maqueta. | Un usuario inicia sesión y un administrador asigna roles. | Terminado |
-| 2. Motor | Seed de la plantilla (15 tareas manuales), inicio idempotente, activación por dependencias, responsables y suplentes, cálculo de `due_at`, completar tarea, suspender/reanudar/cancelar, historial; pruebas de concurrencia. | El flujo completo corre por API con propiedades sintéticas y pruebas en verde. | Terminado |
-| 3. Pantallas de trabajo | Tablero de remates, Mis tareas, modal de tarea (en curso, evidencia, completar), detalle del workflow con participantes, plazos, suspender/reanudar/cancelar e historial. Sin porcentaje de avance. | Un usuario recorre el flujo desde la interfaz. | Terminado |
-| 4. Sincronización | Adaptador de solo lectura de `admin_new`, proceso separado del servidor HTTP, cursores, ejecuciones, incidencias y cambios de origen; pantalla «Sincronización» para ADMIN. Reglas en [ADR 0007](./adr/0007-sincronizacion-admin-new.md). | Una propiedad aceptada genera su workflow sola, sin duplicados. | Terminado |
-| 5. Reprogramación | Detección del cambio de fecha, recálculo de vencimientos abiertos, historial; demo de cierre. | Cambiar la fecha en el origen recalcula los plazos y queda trazado. | Pendiente |
+| Sprint                  | Contenido                                                                                                                                                                                                                                 | Entregable                                                                                | Estado    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------- |
+| 0. Fundaciones          | ADRs, estructura del repositorio, `apps/api` y `apps/web`, migración inicial de 17 tablas, seed de roles, esqueleto OpenAPI.                                                                                                              | La API arranca y valida su entorno; la base se crea desde SQL revisable; Angular compila. | Terminado |
+| 1. Identidad            | Registro, login y logout, sesiones revocables, roles, autorización en backend; shell Angular con login y layout de la maqueta.                                                                                                            | Un usuario inicia sesión y un administrador asigna roles.                                 | Terminado |
+| 2. Motor                | Seed de la plantilla (15 tareas manuales), inicio idempotente, activación por dependencias, responsables y suplentes, cálculo de `due_at`, completar tarea, suspender/reanudar/cancelar, historial; pruebas de concurrencia.              | El flujo completo corre por API con propiedades sintéticas y pruebas en verde.            | Terminado |
+| 3. Pantallas de trabajo | Tablero de remates, Mis tareas, modal de tarea (en curso, evidencia, completar), detalle del workflow con participantes, plazos, suspender/reanudar/cancelar e historial. Sin porcentaje de avance.                                       | Un usuario recorre el flujo desde la interfaz.                                            | Terminado |
+| 4. Sincronización       | Adaptador de solo lectura de `admin_new`, proceso separado del servidor HTTP, cursores, ejecuciones, incidencias y cambios de origen; pantalla «Sincronización» para ADMIN. Reglas en [ADR 0007](./adr/0007-sincronizacion-admin-new.md). | Una propiedad aceptada genera su workflow sola, sin duplicados.                           | Terminado |
+| 5. Reprogramación       | Detección del cambio de fecha, recálculo de vencimientos abiertos, historial; demo de cierre.                                                                                                                                             | Cambiar la fecha en el origen recalcula los plazos y queda trazado.                       | Terminado |
 
 El motor va antes que la sincronización porque puede probarse con datos sintéticos y concentra el mayor riesgo.
 
@@ -37,9 +37,9 @@ Estructura y formatos confirmados con una muestra de la copia local (13 nov 2026
 
 ## Decisiones de negocio que bloquean sprints
 
-| Decisión | Bloquea |
-| --- | --- |
-| Plazos definitivos por tarea (hoy, 3 días provisorios y editables por workflow) | No bloquea; se ajusta publicando una plantilla nueva |
-| Si las revisiones legales bloquean el avance | No bloquea; hoy solo bloquean el cierre |
-| Estructura definitiva de los formularios de evidencia (hoy básicos de prueba) | No bloquea; se ajusta en `evidence-forms.ts` y una plantilla nueva si cambia qué tareas la exigen |
-| Frecuencia del sincronizador, criterio para filas duplicadas, no iniciar remates ya ocurridos, hora 00:00 cuando falta `hora_remate` | No bloquea; hoy 60 s, fila de mayor id y las reglas provisorias del ADR 0007 |
+| Decisión                                                                                                                             | Bloquea                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Plazos definitivos por tarea (hoy, 3 días provisorios y editables por workflow)                                                      | No bloquea; se ajusta publicando una plantilla nueva                                              |
+| Si las revisiones legales bloquean el avance                                                                                         | No bloquea; hoy solo bloquean el cierre                                                           |
+| Estructura definitiva de los formularios de evidencia (hoy básicos de prueba)                                                        | No bloquea; se ajusta en `evidence-forms.ts` y una plantilla nueva si cambia qué tareas la exigen |
+| Frecuencia del sincronizador, criterio para filas duplicadas, no iniciar remates ya ocurridos, hora 00:00 cuando falta `hora_remate` | No bloquea; hoy 60 s, fila de mayor id y las reglas provisorias del ADR 0007                      |

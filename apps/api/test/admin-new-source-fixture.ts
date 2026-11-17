@@ -34,6 +34,10 @@ export interface SourceFixture {
   setClassification(adminNewId: number, classificationId: number): Promise<void>;
   addDetailRow(adminNewId: number, detail: SourceDetailInput): Promise<void>;
   setAuctionDate(adminNewId: number, auctionDate: string): Promise<void>;
+  setReferenceDates(
+    adminNewId: number,
+    dates: Pick<SourceDetailInput, 'r3' | 'r4' | 'r5'>,
+  ): Promise<void>;
   setCommune(adminNewId: number, commune: string): Promise<void>;
   deleteProperty(adminNewId: number): Promise<void>;
   reset(): Promise<void>;
@@ -44,6 +48,8 @@ export interface SourceDetailInput {
   readonly r1?: string | null;
   readonly r2?: string | null;
   readonly r3?: string | null;
+  readonly r4?: string | null;
+  readonly r5?: string | null;
   readonly horaRemate?: string | null;
 }
 
@@ -84,12 +90,14 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
          (id_p, corte, tribunal, rol_normalizado, r1, r2, r3, r4, r5,
           hora_garantia_desde, hora_garantia_hasta)
        VALUES (?, 'C.A. de Santiago', '1° Juzgado Civil Sintético', 'c-0001-2026', ?, ?, ?,
-               NULL, NULL, '09:00:00', '12:00:00')`,
+               ?, ?, '09:00:00', '12:00:00')`,
       [
         String(adminNewId),
         detail.r1 === undefined ? '2026-12-07' : detail.r1,
         detail.r2 === undefined ? '8.100.000' : detail.r2,
         detail.r3 === undefined ? '2026-12-04' : detail.r3,
+        detail.r4 ?? null,
+        detail.r5 ?? null,
       ],
     );
   };
@@ -128,6 +136,12 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
         auctionDate,
         String(adminNewId),
       ]);
+    },
+    async setReferenceDates(adminNewId, dates) {
+      await adminPool.query(
+        `UPDATE ${table('dato_propiedad')} SET r3 = ?, r4 = ?, r5 = ? WHERE id_p = ?`,
+        [dates.r3 ?? null, dates.r4 ?? null, dates.r5 ?? null, String(adminNewId)],
+      );
     },
     async setCommune(adminNewId, commune) {
       await adminPool.query(`UPDATE ${table('propiedad')} SET comuna = ? WHERE id_propiedad = ?`, [
