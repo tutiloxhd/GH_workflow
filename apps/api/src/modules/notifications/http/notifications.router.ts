@@ -2,12 +2,34 @@ import { and, count, desc, eq, isNull } from 'drizzle-orm';
 import { Router } from 'express';
 import { z } from 'zod';
 import type { IdentityDependencies } from '../../identity/application/identity-dependencies.js';
-import { getCurrentUser, requireSession } from '../../identity/http/authorization.js';
-import { notifications } from '../../../platform/database/schema/notification.schema.js';
-import { sendValidationProblem } from '../../../platform/http/problem-details.js';
+import { getCurrentUser, requireRole, requireSession } from '../../identity/http/authorization.js';
+import {
+  notifications,
+  NOTIFICATION_TRIGGERS,
+} from '../../../platform/database/schema/notification.schema.js';
+import {
+  PROBLEMS,
+  sendProblem,
+  sendValidationProblem,
+} from '../../../platform/http/problem-details.js';
+import {
+  hasAllNotificationTriggers,
+  listPublishedNotificationRuleSets,
+  publishNotificationRuleSet,
+} from '../application/notification-rules.js';
 
 const positiveId = z.coerce.number().int().positive();
 const notificationParams = z.strictObject({ notificationId: positiveId });
+const ruleSetParams = z.strictObject({ ruleSetId: positiveId });
+const rulesBody = z.strictObject({
+  rules: z.array(
+    z.strictObject({
+      eventType: z.enum(NOTIFICATION_TRIGGERS),
+      offsetMinutes: z.number().int().min(0).max(525_600),
+      isEnabled: z.boolean(),
+    }),
+  ),
+});
 const listQuery = z.strictObject({
   limit: z.coerce.number().int().min(1).max(100).default(30),
   offset: z.coerce.number().int().min(0).default(0),
@@ -17,6 +39,37 @@ const listQuery = z.strictObject({
 export function createNotificationsRouter(identity: IdentityDependencies): Router {
   const router = Router();
   router.use(requireSession(identity));
+
+  router.get('/notification-rules', requireRole('ADMIN'), async (_request, response) => {
+    response.json({ ruleSets: await listPublishedNotificationRuleSets(identity) });
+  });
+
+  router.put('/notification-rules/:ruleSetId', requireRole('ADMIN'), async (request, response) => {
+    const parsedParams = ruleSetParams.safeParse(request.params);
+    const parsedBody = rulesBody.safeParse(request.body);
+    if (!parsedParams.success) {
+      sendValidationProblem(response, parsedParams.error);
+      return;
+    }
+    if (!parsedBody.success) {
+      sendValidationProblem(response, parsedBody.error);
+      return;
+    }
+    if (!hasAllNotificationTriggers(parsedBody.data.rules)) {
+      sendProblem(response, PROBLEMS.validationFailed, { invalidFields: ['rules'] });
+      return;
+    }
+    const ruleSet = await publishNotificationRuleSet(
+      identity,
+      parsedParams.data.ruleSetId,
+      parsedBody.data.rules,
+    );
+    if (!ruleSet) {
+      sendProblem(response, PROBLEMS.notFound);
+      return;
+    }
+    response.json({ ruleSet });
+  });
 
   router.get('/notifications', async (request, response) => {
     const parsed = listQuery.safeParse(request.query);

@@ -1,0 +1,127 @@
+.control-panel {
+  max-width: 1040px;
+}
+.section-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+}
+.section-tab {
+  padding: 12px 4px;
+  border-bottom: 2px solid var(--navy);
+  font-size: 0.875rem;
+  font-weight: 750;
+}
+.settings-header {
+  align-items: end;
+}
+.settings-header p,
+.settings-actions p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+.template-selector {
+  min-width: 260px;
+}
+.version-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.rule-list {
+  padding: 0 22px;
+}
+.notification-rule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 92px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rule-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  cursor: pointer;
+}
+.rule-toggle input {
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  accent-color: var(--navy);
+}
+.rule-toggle span {
+  display: grid;
+  gap: 5px;
+}
+.rule-toggle strong {
+  font-size: 0.875rem;
+}
+.rule-toggle small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+.offset-field {
+  width: 190px;
+  flex: none;
+}
+.number-with-unit {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.number-with-unit input {
+  border-radius: 10px 0 0 10px;
+}
+.number-with-unit > span {
+  min-height: 42px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+}
+.settings-actions p {
+  margin: 0;
+}
+.success-message {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #bce7cd;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+@media (max-width: 680px) {
+  .settings-header,
+  .notification-rule,
+  .settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .template-selector,
+  .offset-field {
+    width: 100%;
+    min-width: 0;
+  }
+  .settings-actions .button {
+    width: 100%;
+  }
+}

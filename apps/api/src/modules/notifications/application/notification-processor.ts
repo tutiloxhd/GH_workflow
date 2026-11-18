@@ -189,6 +189,30 @@ async function scheduleTaskNotifications(
   }
 }
 
+export async function rebuildNotificationsForRuleSet(
+  dependencies: NotificationProcessorDependencies,
+  ruleSetId: number,
+): Promise<void> {
+  const [tasks] = await dependencies.database.pool.execute<TaskRow[]>(
+    `SELECT ti.id, ti.workflow_instance_id, td.name, ti.status, ti.assigned_user_id, ti.due_at
+       FROM workflow_notification_rule_sets wnrs
+       JOIN task_instances ti ON ti.workflow_instance_id = wnrs.workflow_instance_id
+       JOIN task_definitions td ON td.id = ti.task_definition_id
+      WHERE wnrs.rule_set_id = ? AND ti.status IN ('READY', 'IN_PROGRESS')`,
+    [ruleSetId],
+  );
+  const occurrence = `rule-set-${ruleSetId}`;
+  for (const task of tasks) {
+    await cancelPendingJobs(dependencies.database, task.id);
+    await scheduleTaskNotifications(
+      dependencies.database,
+      task,
+      occurrence,
+      dependencies.clock.now(),
+    );
+  }
+}
+
 async function handleOutboxRow(
   dependencies: NotificationProcessorDependencies,
   row: OutboxRow,

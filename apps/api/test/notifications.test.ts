@@ -34,6 +34,37 @@ describe('notificaciones internas', () => {
     cast = await givenCast(context);
   });
 
+  it('permite al administrador versionar reglas y rechaza a otros roles', async () => {
+    const forbidden = await callApi(context, 'GET', '/api/notification-rules', {
+      sessionCookie: cast.cookies.bidder,
+    });
+    expect(forbidden.status).toBe(403);
+
+    const listed = await callApi(context, 'GET', '/api/notification-rules', {
+      sessionCookie: cast.cookies.admin,
+    });
+    expect(listed.status).toBe(200);
+    const [current] = (
+      listed.body as {
+        ruleSets: Array<{
+          id: number;
+          version: number;
+          rules: Array<{ eventType: string; offsetMinutes: number; isEnabled: boolean }>;
+        }>;
+      }
+    ).ruleSets;
+    expect(current?.rules).toHaveLength(5);
+
+    const published = await callApi(context, 'PUT', `/api/notification-rules/${current?.id}`, {
+      sessionCookie: cast.cookies.admin,
+      body: { rules: current?.rules },
+    });
+    expect(published.status).toBe(200);
+    expect((published.body as { ruleSet: { id: number; version: number } }).ruleSet).toMatchObject({
+      version: (current?.version ?? 0) + 1,
+    });
+  });
+
   it('materializa una sola asignación para el titular y permite marcarla como leída', async () => {
     await startWorkflowFor(context, cast, await givenProperty(context));
     const dependencies = { database: context.database, clock: context.clock };

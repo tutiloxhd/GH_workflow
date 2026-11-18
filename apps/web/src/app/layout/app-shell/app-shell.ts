@@ -20,6 +20,7 @@ const NAVIGATION: readonly NavigationEntry[] = [
   { label: 'Calendario', icon: 'calendar' },
   { label: 'Documentos', icon: 'file' },
   { label: 'Reportes', icon: 'chart' },
+  { label: 'Panel de control', icon: 'settings', path: '/panel-de-control', isAdminOnly: true },
   { label: 'Usuarios', icon: 'users', path: '/usuarios', isAdminOnly: true },
   { label: 'Sincronización', icon: 'sync', path: '/sincronizacion', isAdminOnly: true },
 ];

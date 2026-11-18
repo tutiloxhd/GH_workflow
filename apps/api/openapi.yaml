@@ -701,16 +701,17 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
-security:
-  - sessionCookie: []
-
   /api/notifications:
     get:
       operationId: listNotifications
       summary: Lista las notificaciones permanentes del usuario autenticado
       tags: [notifications]
       parameters:
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 30 },
+          }
         - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
         - { name: unread, in: query, schema: { type: string, enum: ['true', 'false'] } }
       responses:
@@ -776,6 +777,62 @@ security:
             text/event-stream:
               schema: { type: string }
         '401': { $ref: '#/components/responses/Problem' }
+
+  /api/notification-rules:
+    get:
+      operationId: listNotificationRuleSets
+      summary: Lista las reglas de notificación publicadas (ADMIN)
+      tags: [notifications]
+      responses:
+        '200':
+          description: Reglas publicadas por versión de plantilla
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ruleSets]
+                properties:
+                  ruleSets:
+                    type: array
+                    items: { $ref: '#/components/schemas/NotificationRuleSet' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /api/notification-rules/{ruleSetId}:
+    put:
+      operationId: publishNotificationRuleSet
+      summary: Publica una nueva versión de reglas y regenera avisos pendientes (ADMIN)
+      tags: [notifications]
+      parameters:
+        - { name: ruleSetId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rules]
+              properties:
+                rules:
+                  type: array
+                  minItems: 5
+                  maxItems: 5
+                  items: { $ref: '#/components/schemas/NotificationRule' }
+      responses:
+        '200':
+          description: Nueva versión publicada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ruleSet]
+                properties:
+                  ruleSet: { $ref: '#/components/schemas/NotificationRuleSet' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+security:
+  - sessionCookie: []
 
 components:
   securitySchemes:
@@ -846,6 +903,34 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    NotificationRule:
+      type: object
+      additionalProperties: false
+      required: [eventType, offsetMinutes, isEnabled]
+      properties:
+        eventType:
+          type: string
+          enum: [TASK_ASSIGNED, TASK_REMINDER, TASK_ESCALATION, TASK_OVERDUE, TASK_COMPLETED]
+        offsetMinutes: { type: integer, minimum: 0, maximum: 525600 }
+        isEnabled: { type: boolean }
+    NotificationRuleSet:
+      type: object
+      additionalProperties: false
+      required: [id, version, workflowTemplate, rules]
+      properties:
+        id: { type: integer }
+        version: { type: integer }
+        workflowTemplate:
+          type: object
+          required: [id, code, name, version]
+          properties:
+            id: { type: integer }
+            code: { type: string }
+            name: { type: string }
+            version: { type: integer }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationRule' }
     Notification:
       type: object
       additionalProperties: false
