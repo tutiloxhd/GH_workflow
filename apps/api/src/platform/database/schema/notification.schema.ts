@@ -25,6 +25,10 @@ export const NOTIFICATION_TRIGGERS = [
   'TASK_ESCALATION',
   'TASK_OVERDUE',
   'TASK_COMPLETED',
+  'WORKFLOW_SUSPENDED',
+  'WORKFLOW_RESUMED',
+  'WORKFLOW_CANCELLED',
+  'WORKFLOW_REPROGRAMMED',
 ] as const;
 export type NotificationTrigger = (typeof NOTIFICATION_TRIGGERS)[number];
 
@@ -70,7 +74,7 @@ export const notificationRules = mysqlTable(
     }),
     check(
       'chk_notification_rules_trigger',
-      sql`${table.trigger} IN ('TASK_ASSIGNED', 'TASK_REMINDER', 'TASK_ESCALATION', 'TASK_OVERDUE', 'TASK_COMPLETED')`,
+      sql`${table.trigger} IN ('TASK_ASSIGNED', 'TASK_REMINDER', 'TASK_ESCALATION', 'TASK_OVERDUE', 'TASK_COMPLETED', 'WORKFLOW_SUSPENDED', 'WORKFLOW_RESUMED', 'WORKFLOW_CANCELLED', 'WORKFLOW_REPROGRAMMED')`,
     ),
     check('chk_notification_rules_enabled', sql`${table.isEnabled} IN (0, 1)`),
   ],

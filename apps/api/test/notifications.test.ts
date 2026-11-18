@@ -53,7 +53,7 @@ describe('notificaciones internas', () => {
         }>;
       }
     ).ruleSets;
-    expect(current?.rules).toHaveLength(5);
+    expect(current?.rules).toHaveLength(9);
 
     const published = await callApi(context, 'PUT', `/api/notification-rules/${current?.id}`, {
       sessionCookie: cast.cookies.admin,

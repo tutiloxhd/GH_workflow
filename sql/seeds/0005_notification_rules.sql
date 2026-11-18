@@ -10,6 +10,11 @@ UNION ALL SELECT id, 'TASK_REMINDER', 2880, 1 FROM notification_rule_sets
 UNION ALL SELECT id, 'TASK_ESCALATION', 1440, 1 FROM notification_rule_sets
 UNION ALL SELECT id, 'TASK_OVERDUE', 0, 1 FROM notification_rule_sets
 UNION ALL SELECT id, 'TASK_COMPLETED', 0, 1 FROM notification_rule_sets;
+INSERT IGNORE INTO notification_rules (rule_set_id, event_type, offset_minutes, is_enabled)
+SELECT id, 'WORKFLOW_SUSPENDED', 0, 1 FROM notification_rule_sets
+UNION ALL SELECT id, 'WORKFLOW_RESUMED', 0, 1 FROM notification_rule_sets
+UNION ALL SELECT id, 'WORKFLOW_CANCELLED', 0, 1 FROM notification_rule_sets
+UNION ALL SELECT id, 'WORKFLOW_REPROGRAMMED', 0, 1 FROM notification_rule_sets;
 
 INSERT IGNORE INTO workflow_notification_rule_sets (workflow_instance_id, rule_set_id)
 SELECT wi.id, nrs.id

@@ -1,5 +1,13 @@
 export type NotificationTrigger =
-  'TASK_ASSIGNED' | 'TASK_REMINDER' | 'TASK_ESCALATION' | 'TASK_OVERDUE' | 'TASK_COMPLETED';
+  | 'TASK_ASSIGNED'
+  | 'TASK_REMINDER'
+  | 'TASK_ESCALATION'
+  | 'TASK_OVERDUE'
+  | 'TASK_COMPLETED'
+  | 'WORKFLOW_SUSPENDED'
+  | 'WORKFLOW_RESUMED'
+  | 'WORKFLOW_CANCELLED'
+  | 'WORKFLOW_REPROGRAMMED';
 
 export interface UserNotification {
   readonly id: number;

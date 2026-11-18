@@ -8,7 +8,7 @@ import {
   signal,
   type OnInit,
 } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { problemMessage, toApiProblem } from '../../core/api/api-problem';
 import { AuthService } from '../../core/auth/auth.service';
 import { formatDateTime } from '../../core/time/santiago-time';
@@ -43,6 +43,7 @@ const PARTICIPANT_ORDER: readonly ParticipantType[] = ['MANAGER', 'BIDDER', 'LEG
 export class WorkflowPage implements OnInit {
   private readonly api = inject(WorkflowApiService);
   private readonly auth = inject(AuthService);
+  private readonly route = inject(ActivatedRoute);
 
   // Parámetro de ruta (withComponentInputBinding).
   readonly workflowId = input.required({ transform: numberAttribute });
@@ -104,6 +105,10 @@ export class WorkflowPage implements OnInit {
       ]);
       this.workflow.set(workflow);
       this.events.set([...events].reverse());
+      const requestedTaskId = Number(this.route.snapshot.queryParamMap.get('task'));
+      if (requestedTaskId > 0 && workflow.tasks.some((task) => task.id === requestedTaskId)) {
+        this.openTaskId.set(requestedTaskId);
+      }
     } catch (error) {
       this.errorMessage.set(problemMessage(toApiProblem(error)));
     }

@@ -59,10 +59,16 @@ export class AppShell {
     this.isNotificationPanelOpen.update((isOpen) => !isOpen);
   }
 
-  protected async openNotification(notificationId: number, workflowId: number): Promise<void> {
+  protected async openNotification(
+    notificationId: number,
+    workflowId: number,
+    taskId: number | null,
+  ): Promise<void> {
     await this.notificationService.markRead(notificationId);
     this.isNotificationPanelOpen.set(false);
-    await this.router.navigate(['/workflows', workflowId]);
+    await this.router.navigate(['/workflows', workflowId], {
+      queryParams: taskId === null ? undefined : { task: taskId },
+    });
   }
 
   constructor() {

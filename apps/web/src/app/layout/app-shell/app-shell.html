@@ -58,7 +58,13 @@
                     type="button"
                     class="notification-entry"
                     [class.unread]="!notification.readAt"
-                    (click)="openNotification(notification.id, notification.workflowId)"
+                    (click)="
+                      openNotification(
+                        notification.id,
+                        notification.workflowId,
+                        notification.taskId
+                      )
+                    "
                   >
                     <strong>{{ notification.title }}</strong>
                     <span>{{ notification.body }}</span>

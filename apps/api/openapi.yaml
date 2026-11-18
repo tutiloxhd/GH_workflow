@@ -910,7 +910,16 @@ components:
       properties:
         eventType:
           type: string
-          enum: [TASK_ASSIGNED, TASK_REMINDER, TASK_ESCALATION, TASK_OVERDUE, TASK_COMPLETED]
+          enum:
+            - TASK_ASSIGNED
+            - TASK_REMINDER
+            - TASK_ESCALATION
+            - TASK_OVERDUE
+            - TASK_COMPLETED
+            - WORKFLOW_SUSPENDED
+            - WORKFLOW_RESUMED
+            - WORKFLOW_CANCELLED
+            - WORKFLOW_REPROGRAMMED
         offsetMinutes: { type: integer, minimum: 0, maximum: 525600 }
         isEnabled: { type: boolean }
     NotificationRuleSet:

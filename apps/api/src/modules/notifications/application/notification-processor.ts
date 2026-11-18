@@ -32,6 +32,10 @@ interface UserRow extends RowDataPacket {
   readonly id: number;
 }
 
+interface WorkflowRow extends RowDataPacket {
+  readonly title: string | null;
+}
+
 interface RuleRow extends RowDataPacket {
   readonly event_type: string;
   readonly offset_minutes: number;
@@ -72,6 +76,28 @@ async function escalationRecipients(database: Database): Promise<number[]> {
   return rows.map((row) => row.id);
 }
 
+async function workflowParticipants(database: Database, workflowId: number): Promise<number[]> {
+  const [rows] = await database.pool.execute<UserRow[]>(
+    `SELECT DISTINCT u.id
+       FROM workflow_participants wp
+       JOIN users u ON u.id = wp.user_id
+      WHERE wp.workflow_instance_id = ? AND u.status = 'ACTIVE'`,
+    [workflowId],
+  );
+  return rows.map((row) => row.id);
+}
+
+async function workflowTitle(database: Database, workflowId: number): Promise<string> {
+  const [rows] = await database.pool.execute<WorkflowRow[]>(
+    `SELECT p.title
+       FROM workflow_instances wi
+       JOIN properties p ON p.id = wi.property_id
+      WHERE wi.id = ?`,
+    [workflowId],
+  );
+  return rows[0]?.title ?? `Workflow ${workflowId}`;
+}
+
 async function rulesForWorkflow(database: Database, workflowId: number): Promise<RuleRow[]> {
   const [rows] = await database.pool.execute<RuleRow[]>(
     `SELECT nr.event_type, nr.offset_minutes, nr.is_enabled
@@ -99,8 +125,8 @@ async function createNotification(
     readonly userId: number;
     readonly trigger: string;
     readonly workflowId: number;
-    readonly taskId: number;
-    readonly taskName: string;
+    readonly taskId: number | null;
+    readonly body: string;
     readonly occurrence: string;
   },
 ): Promise<void> {
@@ -110,6 +136,10 @@ async function createNotification(
     TASK_ESCALATION: 'Escalamiento preventivo',
     TASK_OVERDUE: 'Tarea vencida',
     TASK_COMPLETED: 'Tarea completada',
+    WORKFLOW_SUSPENDED: 'Workflow suspendido',
+    WORKFLOW_RESUMED: 'Workflow reanudado',
+    WORKFLOW_CANCELLED: 'Workflow cancelado',
+    WORKFLOW_REPROGRAMMED: 'Workflow reprogramado',
   };
   await database.pool.execute(
     `INSERT IGNORE INTO notifications
@@ -119,7 +149,7 @@ async function createNotification(
       input.userId,
       input.trigger,
       titles[input.trigger] ?? 'Notificación',
-      input.taskName,
+      input.body,
       input.workflowId,
       input.taskId,
       deduplicationKey(input.trigger, input.occurrence, input.userId),
@@ -217,6 +247,32 @@ async function handleOutboxRow(
   dependencies: NotificationProcessorDependencies,
   row: OutboxRow,
 ): Promise<void> {
+  if (
+    [
+      'WORKFLOW_SUSPENDED',
+      'WORKFLOW_RESUMED',
+      'WORKFLOW_CANCELLED',
+      'WORKFLOW_REPROGRAMMED',
+    ].includes(row.event_type)
+  ) {
+    if (await isRuleEnabled(dependencies.database, row.workflow_instance_id, row.event_type)) {
+      const body = await workflowTitle(dependencies.database, row.workflow_instance_id);
+      for (const userId of await workflowParticipants(
+        dependencies.database,
+        row.workflow_instance_id,
+      )) {
+        await createNotification(dependencies.database, {
+          userId,
+          trigger: row.event_type,
+          workflowId: row.workflow_instance_id,
+          taskId: null,
+          body,
+          occurrence: String(row.id),
+        });
+      }
+    }
+    return;
+  }
   if (!row.task_instance_id) return;
   const task = await findTask(dependencies.database, row.task_instance_id);
   if (!task) return;
@@ -234,7 +290,7 @@ async function handleOutboxRow(
         trigger: 'TASK_COMPLETED',
         workflowId: task.workflow_instance_id,
         taskId: task.id,
-        taskName: task.name,
+        body: task.name,
         occurrence,
       });
     }
@@ -264,7 +320,7 @@ async function handleOutboxRow(
         trigger: 'TASK_ASSIGNED',
         workflowId: task.workflow_instance_id,
         taskId: task.id,
-        taskName: task.name,
+        body: task.name,
         occurrence,
       });
     }
@@ -406,7 +462,7 @@ export async function processDueNotificationJobs(
         trigger: job.event_type,
         workflowId: task.workflow_instance_id,
         taskId: task.id,
-        taskName: task.name,
+        body: task.name,
         occurrence: job.occurrence_key,
       });
       await dependencies.database.pool.execute(
