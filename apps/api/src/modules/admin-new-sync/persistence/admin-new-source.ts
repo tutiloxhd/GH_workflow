@@ -7,11 +7,13 @@ import {
   type SourceDetail,
   type SourceProperty,
 } from '../domain/source-property.js';
+import type { SourceAgentUser } from '../domain/source-agent-user.js';
 
 // Lectura de admin_new. Es un sistema externo: aquí solo hay SELECT, y la sesión se declara de
 // solo lectura para que MySQL rechace cualquier escritura aunque el usuario tuviera permisos.
 export interface AdminNewSource {
   readAcceptedProperties(): Promise<SourceProperty[]>;
+  readAgentUsers(): Promise<SourceAgentUser[]>;
   // Clasificación actual de las propiedades indicadas; las que ya no existen no aparecen.
   readClassifications(adminNewIds: readonly number[]): Promise<Map<number, number | null>>;
   close(): Promise<void>;
@@ -118,6 +120,46 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
   }
 
   return {
+    async readAgentUsers() {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT agent.id_user,
+                COALESCE(
+                  NULLIF(TRIM(agent.nombre), ''),
+                  NULLIF(
+                    TRIM(CONCAT_WS(' ', NULLIF(TRIM(source_user.nombres), ''),
+                                       NULLIF(TRIM(source_user.apellidos), ''))),
+                    ''
+                  )
+                ) AS agent_name,
+                agent.rut AS agent_rut,
+                source_user.correo AS email,
+                source_user.pass AS legacy_password,
+                source_user.id_gh_area AS area_id,
+                area.descripcion AS area_name
+           FROM gh_agente_zona AS agent
+           INNER JOIN \u0060user\u0060 AS source_user ON source_user.id_user = agent.id_user
+           LEFT JOIN gh_area AS area ON area.id_gh_area = source_user.id_gh_area
+          WHERE NOT EXISTS (
+            SELECT 1
+              FROM gh_agente_zona AS newer_agent
+             WHERE newer_agent.id_user = agent.id_user
+               AND (newer_agent.creado > agent.creado
+                    OR (newer_agent.creado = agent.creado
+                        AND newer_agent.id_gh_agente_zona > agent.id_gh_agente_zona))
+          )
+          ORDER BY agent.id_user`,
+      );
+      return rows.map((row): SourceAgentUser => ({
+        adminNewUserId: Number(row.id_user),
+        name: nullableText(row.agent_name),
+        rut: nullableText(row.agent_rut),
+        email: nullableText(row.email),
+        legacyPassword: nullableText(row.legacy_password),
+        adminNewAreaId: Number(row.area_id),
+        adminNewAreaName: nullableText(row.area_name),
+      }));
+    },
+
     async readAcceptedProperties() {
       const [propertyRows] = await pool.query<RowDataPacket[]>(
         `SELECT id_propiedad, nombre, ubicacion, comuna, region
@@ -152,19 +194,14 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
       );
       const auctionIds = [...auctions.values()].map(({ row }) => String(row.rowId));
       const auctionIdsMatchingPropertyIds = new Set(
-        (
-          await selectByIds(
-            `SELECT id_dr FROM datos_lremate WHERE id_dr IN (?)`,
-            textIds,
-          )
-        ).map((row) => String(row.id_dr)),
+        (await selectByIds(`SELECT id_dr FROM datos_lremate WHERE id_dr IN (?)`, textIds)).map(
+          (row) => String(row.id_dr),
+        ),
       );
       const propertyIdsForAuctionStateFallback = new Set(
         textIds.filter((propertyId) => !auctionIdsMatchingPropertyIds.has(propertyId)),
       );
-      const auctionStateIds = [
-        ...new Set([...auctionIds, ...propertyIdsForAuctionStateFallback]),
-      ];
+      const auctionStateIds = [...new Set([...auctionIds, ...propertyIdsForAuctionStateFallback])];
       const auctionStates = latestByProperty(
         await selectByIds(
           `SELECT id_er, id_r, postor, pagador

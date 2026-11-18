@@ -1053,11 +1053,14 @@ components:
     User:
       type: object
       additionalProperties: false
-      required: [id, name, email, status, roles, createdAt]
+      required: [id, name, email, rut, adminNewAreaId, adminNewAreaName, status, roles, createdAt]
       properties:
         id: { type: integer }
         name: { type: string }
         email: { type: string }
+        rut: { type: [string, 'null'] }
+        adminNewAreaId: { type: [integer, 'null'] }
+        adminNewAreaName: { type: [string, 'null'] }
         status: { type: string, enum: [ACTIVE, INACTIVE, BLOCKED] }
         roles:
           type: array

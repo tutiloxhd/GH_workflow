@@ -9,6 +9,9 @@ export interface User {
   readonly id: number;
   readonly name: string;
   readonly email: string;
+  readonly rut: string | null;
+  readonly adminNewAreaId: number | null;
+  readonly adminNewAreaName: string | null;
   readonly status: UserStatus;
   readonly roles: readonly RoleCode[];
   readonly createdAt: string;

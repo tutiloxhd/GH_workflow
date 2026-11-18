@@ -372,6 +372,7 @@ describe('sincronización con admin_new', () => {
 
     it('si admin_new no responde, la ejecución queda FAILED y la siguiente funciona', async () => {
       const brokenSource: AdminNewSource = {
+        readAgentUsers: () => Promise.reject(new Error('Conexión rechazada')),
         readAcceptedProperties: () => Promise.reject(new Error('Conexión rechazada')),
         readClassifications: () => Promise.resolve(new Map()),
         close: () => Promise.resolve(),

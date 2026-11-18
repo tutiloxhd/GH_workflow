@@ -17,6 +17,7 @@
     "test": "vitest run",
     "sync": "tsx --env-file=.env src/entrypoints/sync.ts",
     "sync:start": "node --env-file=.env dist/entrypoints/sync.js",
+    "users:import-admin-new-agents": "tsx --env-file=.env src/entrypoints/import-admin-new-agents.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/entrypoints/migrate.ts",
     "users:create-admin": "tsx --env-file=.env src/entrypoints/create-admin.ts"

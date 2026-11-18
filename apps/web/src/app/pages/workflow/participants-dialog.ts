@@ -60,7 +60,9 @@ interface Selection {
               <select [name]="type + '-primary'" [(ngModel)]="selections[type].primaryUserId">
                 <option [ngValue]="null">Sin cambios</option>
                 @for (user of candidates()[type]; track user.id) {
-                  <option [ngValue]="user.id">{{ user.name }}</option>
+                  <option [ngValue]="user.id">
+                    {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
+                  </option>
                 }
               </select>
             </label>
@@ -69,7 +71,9 @@ interface Selection {
               <select [name]="type + '-backup'" [(ngModel)]="selections[type].backupUserId">
                 <option [ngValue]="null">Sin suplente</option>
                 @for (user of candidates()[type]; track user.id) {
-                  <option [ngValue]="user.id">{{ user.name }}</option>
+                  <option [ngValue]="user.id">
+                    {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
+                  </option>
                 }
               </select>
             </label>

@@ -67,6 +67,10 @@ erDiagram
         varchar name
         varchar email UK
         varchar password_hash
+        varchar rut
+        int admin_new_user_id UK
+        int admin_new_area_id
+        varchar admin_new_area_name
         varchar status
     }
 
@@ -264,6 +268,10 @@ Campos principales:
 - `email`: identificador único de acceso.
 - `password_hash`: hash seguro; nunca contraseña en texto plano.
 - `status`: `ACTIVE`, `INACTIVE` o `BLOCKED`.
+- `rut`: RUT informado por `gh_agente_zona`; puede ser nulo en cuentas locales.
+- `admin_new_user_id`: identificador del usuario importado desde `admin_new`, único para hacer
+  idempotente la importación.
+- `admin_new_area_id`, `admin_new_area_name`: identificador y descripción del área de origen.
 - `created_at`, `updated_at`.
 
 El registro de usuario no debe permitir que una persona se asigne libremente un rol privilegiado.
@@ -683,4 +691,3 @@ Este documento no resuelve:
 - Si un remate ya ocurrido debe iniciar workflow, y qué hora usar cuando falta `hora_remate` (hoy: no se inicia; 00:00).
 
 Un agente no debe tomar estas decisiones silenciosamente. Debe presentar alternativas y solicitar aprobación antes de incorporarlas al código o al esquema definitivo.
-

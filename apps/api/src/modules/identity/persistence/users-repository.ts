@@ -1,6 +1,7 @@
 import { and, asc, count, eq, inArray, like, ne, or, type SQL } from 'drizzle-orm';
 import type { DatabaseExecutor } from '../../../platform/database/database.js';
 import { roles, userRoles, users } from '../../../platform/database/schema/identity.schema.js';
+import { normalizeEmail } from '../domain/email.js';
 import { ADMIN_ROLE, type RoleCode } from '../domain/role-code.js';
 import type { UserStatus } from '../domain/user-status.js';
 
@@ -8,6 +9,9 @@ export interface UserAccount {
   readonly id: number;
   readonly name: string;
   readonly email: string;
+  readonly rut: string | null;
+  readonly adminNewAreaId: number | null;
+  readonly adminNewAreaName: string | null;
   readonly status: UserStatus;
   readonly roles: readonly RoleCode[];
   readonly createdAt: Date;
@@ -23,6 +27,9 @@ const userColumns = {
   id: users.id,
   name: users.name,
   email: users.email,
+  rut: users.rut,
+  adminNewAreaId: users.adminNewAreaId,
+  adminNewAreaName: users.adminNewAreaName,
   status: users.status,
   createdAt: users.createdAt,
 };
@@ -99,9 +106,45 @@ export async function emailExists(
   return match !== undefined;
 }
 
+export async function findUserIdsByAdminNewUserIds(
+  executor: DatabaseExecutor,
+  adminNewUserIds: readonly number[],
+): Promise<Map<number, number>> {
+  if (adminNewUserIds.length === 0) return new Map();
+  const rows = await executor
+    .select({ id: users.id, adminNewUserId: users.adminNewUserId })
+    .from(users)
+    .where(inArray(users.adminNewUserId, adminNewUserIds));
+  return new Map(
+    rows.flatMap((row) =>
+      row.adminNewUserId === null ? [] : [[row.adminNewUserId, row.id] as const],
+    ),
+  );
+}
+
+export async function findExistingEmails(
+  executor: DatabaseExecutor,
+  emails: readonly string[],
+): Promise<Set<string>> {
+  if (emails.length === 0) return new Set();
+  const rows = await executor
+    .select({ email: users.email })
+    .from(users)
+    .where(inArray(users.email, emails));
+  return new Set(rows.map((row) => normalizeEmail(row.email)));
+}
+
 export async function insertUser(
   executor: DatabaseExecutor,
-  user: { name: string; email: string; passwordHash: string },
+  user: {
+    name: string;
+    email: string;
+    passwordHash: string;
+    rut?: string | null;
+    adminNewUserId?: number | null;
+    adminNewAreaId?: number | null;
+    adminNewAreaName?: string | null;
+  },
 ): Promise<number> {
   const [inserted] = await executor.insert(users).values(user).$returningId();
   if (!inserted) throw new Error('La inserción del usuario no devolvió identificador');
