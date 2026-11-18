@@ -12,6 +12,11 @@ import {
   workflowReprogrammings,
   workflowTemplates,
 } from '../../../platform/database/schema/workflow.schema.js';
+import {
+  notificationOutbox,
+  notificationRuleSets,
+  workflowNotificationRuleSets,
+} from '../../../platform/database/schema/notification.schema.js';
 import type { RoleCode } from '../../identity/domain/role-code.js';
 import type { BusinessDates, DueReference } from '../domain/due-date.js';
 import type {
@@ -330,6 +335,28 @@ export async function insertTasksFromTemplate(
      WHERE workflow_template_id = ${templateId}`);
 }
 
+export async function assignPublishedNotificationRuleSet(
+  executor: DatabaseExecutor,
+  workflowId: number,
+  templateId: number,
+): Promise<void> {
+  const [ruleSet] = await executor
+    .select({ id: notificationRuleSets.id })
+    .from(notificationRuleSets)
+    .where(
+      and(
+        eq(notificationRuleSets.workflowTemplateId, templateId),
+        eq(notificationRuleSets.isPublished, 1),
+      ),
+    )
+    .orderBy(desc(notificationRuleSets.version))
+    .limit(1);
+  if (!ruleSet) throw new Error('La plantilla activa no tiene reglas de notificación publicadas');
+  await executor
+    .insert(workflowNotificationRuleSets)
+    .values({ workflowInstanceId: workflowId, ruleSetId: ruleSet.id });
+}
+
 export async function findWorkflowTasks(
   executor: DatabaseExecutor,
   workflowId: number,
@@ -567,17 +594,35 @@ export async function insertEvents(
   occurredAt: Date,
 ): Promise<void> {
   if (events.length === 0) return;
-  await executor.insert(workflowEvents).values(
-    events.map((event) => ({
-      workflowInstanceId: event.workflowId,
-      taskInstanceId: event.taskId ?? null,
-      actorUserId: event.actorUserId,
-      eventType: event.eventType,
-      eventSource:
-        event.eventSource ?? (event.actorUserId === null ? ('SYSTEM' as const) : ('USER' as const)),
-      details: event.details ?? null,
-      occurredAt,
-    })),
+  const insertedEvents = await executor
+    .insert(workflowEvents)
+    .values(
+      events.map((event) => ({
+        workflowInstanceId: event.workflowId,
+        taskInstanceId: event.taskId ?? null,
+        actorUserId: event.actorUserId,
+        eventType: event.eventType,
+        eventSource:
+          event.eventSource ??
+          (event.actorUserId === null ? ('SYSTEM' as const) : ('USER' as const)),
+        details: event.details ?? null,
+        occurredAt,
+      })),
+    )
+    .$returningId();
+  await executor.insert(notificationOutbox).values(
+    events.map((event, index) => {
+      const inserted = insertedEvents[index];
+      if (!inserted) throw new Error('El evento de workflow no devolvió identificador');
+      return {
+        workflowEventId: inserted.id,
+        eventType: event.eventType,
+        workflowInstanceId: event.workflowId,
+        taskInstanceId: event.taskId ?? null,
+        payload: event.details ?? null,
+        availableAt: occurredAt,
+      };
+    }),
   );
 }
 

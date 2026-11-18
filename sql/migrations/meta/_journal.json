@@ -43,6 +43,13 @@
       "when": 1794938823629,
       "tag": "0005_auction_party_names",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1795015573789,
+      "tag": "0006_notifications",
+      "breakpoints": true
     }
   ]
 }

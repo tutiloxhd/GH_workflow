@@ -1,6 +1,7 @@
 import { isDuplicateEntryError } from '../../../platform/database/database-errors.js';
 import { fail, succeed, type Result } from '../../../platform/result.js';
 import {
+  assignPublishedNotificationRuleSet,
   findActiveTemplateId,
   findPropertyDates,
   findWorkflowIdByProperty,
@@ -61,6 +62,7 @@ export async function startWorkflow(
           assignedBy: null,
         });
       }
+      await assignPublishedNotificationRuleSet(transaction, createdId, templateId);
 
       const context = await WorkflowContext.load(transaction, createdId, now, actorUserId);
       if (!context) throw new Error('El workflow recién creado no se encontró');

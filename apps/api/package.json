@@ -17,6 +17,10 @@
     "test": "vitest run",
     "sync": "tsx --env-file=.env src/entrypoints/sync.ts",
     "sync:start": "node --env-file=.env dist/entrypoints/sync.js",
+    "notifications:worker": "tsx --env-file=.env src/entrypoints/notifications-worker.ts",
+    "notifications:worker:start": "node --env-file=.env dist/entrypoints/notifications-worker.js",
+    "notifications:scheduler": "tsx --env-file=.env src/entrypoints/notifications-scheduler.ts",
+    "notifications:scheduler:start": "node --env-file=.env dist/entrypoints/notifications-scheduler.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file=.env src/entrypoints/migrate.ts",
     "users:create-admin": "tsx --env-file=.env src/entrypoints/create-admin.ts"

@@ -5,6 +5,7 @@ import type { IdentityDependencies } from '../modules/identity/application/ident
 import { createAuthRouter } from '../modules/identity/http/auth.router.js';
 import { createUsersRouter } from '../modules/identity/http/users.router.js';
 import { createWorkflowRouter } from '../modules/workflow/http/workflow.router.js';
+import { createNotificationsRouter } from '../modules/notifications/http/notifications.router.js';
 import { createApp } from '../platform/http/create-app.js';
 import { logger } from '../platform/logging/logger.js';
 
@@ -26,6 +27,7 @@ export function buildApiApp(identity: IdentityDependencies, settings: ApiAppSett
         router: createAuthRouter(identity, { isSecure: settings.isSecureCookie }),
       },
       { path: '/users', router: createUsersRouter(identity) },
+      { path: '', router: createNotificationsRouter(identity) },
       { path: '/sync', router: createSyncRouter(workflow, identity) },
       { path: '', router: createWorkflowRouter(workflow, identity) },
     ],
