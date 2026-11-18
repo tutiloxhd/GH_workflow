@@ -6,6 +6,11 @@ import { connectTestDatabase } from './test-database.js';
 
 const MVP_TABLES = [
   'login_attempts',
+  'notifications',
+  'notification_jobs',
+  'notification_outbox',
+  'notification_rules',
+  'notification_rule_sets',
   'properties',
   'property_source_changes',
   'roles',
@@ -21,6 +26,7 @@ const MVP_TABLES = [
   'user_sessions',
   'workflow_events',
   'workflow_instances',
+  'workflow_notification_rule_sets',
   'workflow_participants',
   'workflow_reprogrammings',
   'workflow_templates',
@@ -38,7 +44,7 @@ describe('esquema inicial de la base', () => {
     await database.close();
   });
 
-  it('crea las 19 tablas del modelo MVP', async () => {
+  it('crea las 25 tablas del modelo MVP', async () => {
     const [rows] = await database.pool.query<RowDataPacket[]>(
       `SELECT table_name AS tableName
          FROM information_schema.tables

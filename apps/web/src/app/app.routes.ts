@@ -32,6 +32,13 @@ export const routes: Routes = [
           import('./pages/workflow/workflow-page').then((page) => page.WorkflowPage),
       },
       {
+        path: 'panel-de-control',
+        canActivate: [adminGuard],
+        title: 'Panel de control · GrupoHouse',
+        loadComponent: () =>
+          import('./pages/control-panel/control-panel-page').then((page) => page.ControlPanelPage),
+      },
+      {
         path: 'usuarios',
         canActivate: [adminGuard],
         title: 'Gestor de usuarios · GrupoHouse',

@@ -18,10 +18,15 @@ const BASE_SEED_PATHS = [
   '0001_roles.sql',
   '0002_workflow_template_v1.sql',
   '0004_workflow_template_v2.sql',
+  '0005_notification_rules.sql',
 ].map((fileName) => new URL(`../../../sql/seeds/${fileName}`, import.meta.url));
 // Tablas que escriben las pruebas, en orden compatible con las claves foráneas.
 // La plantilla (workflow_templates, task_definitions, task_dependencies) y los roles se conservan.
 const MUTABLE_TABLES = [
+  'notification_jobs',
+  'notifications',
+  'notification_outbox',
+  'workflow_notification_rule_sets',
   'workflow_events',
   'task_evidence_submissions',
   'task_instances',

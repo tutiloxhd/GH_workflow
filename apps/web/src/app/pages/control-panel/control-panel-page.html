@@ -1,0 +1,86 @@
+<header class="page-header">
+  <div>
+    <h1>Panel de control</h1>
+    <p>Configura las reglas operacionales del sistema.</p>
+  </div>
+</header>
+<div class="page-body control-panel">
+  <nav class="section-tabs" aria-label="Secciones del panel de control">
+    <span class="section-tab" aria-current="page">Notificaciones</span>
+  </nav>
+  @if (errorMessage(); as message) {
+    <p class="form-error" role="alert">{{ message }}</p>
+  }
+  @if (successMessage(); as message) {
+    <p class="success-message" role="status">{{ message }}</p>
+  }
+  <section class="card" aria-labelledby="notification-settings-title">
+    <div class="card-header settings-header">
+      <div>
+        <h2 id="notification-settings-title">Notificaciones</h2>
+        <p>Activa avisos y define con cuánta anticipación deben enviarse.</p>
+      </div>
+      @if (ruleSets().length > 1) {
+        <label class="field template-selector"
+          ><span>Flujo</span
+          ><select [value]="selectedId()" (change)="selectRuleSet(+$any($event.target).value)">
+            @for (ruleSet of ruleSets(); track ruleSet.id) {
+              <option [value]="ruleSet.id">
+                {{ ruleSet.workflowTemplate.name }} · v{{ ruleSet.workflowTemplate.version }}
+              </option>
+            }
+          </select></label
+        >
+      }
+    </div>
+    @if (isLoading()) {
+      <p class="empty-state">Cargando reglas…</p>
+    } @else if (selectedRuleSet(); as ruleSet) {
+      <div class="version-summary">
+        <span>{{ ruleSet.workflowTemplate.name }}</span><span class="status-pill inactive"
+          >Reglas v{{ ruleSet.version }}</span
+        >
+      </div>
+      <div class="rule-list">
+        @for (rule of draftRules(); track rule.eventType) {
+          <article class="notification-rule">
+            <label class="rule-toggle"
+              ><input
+                type="checkbox"
+                [checked]="rule.isEnabled"
+                (change)="setEnabled(rule.eventType, $any($event.target).checked)"
+              /><span
+                ><strong>{{ labels[rule.eventType] }}</strong
+                ><small>{{ descriptions[rule.eventType] }}</small></span
+              ></label
+            >
+            @if (usesOffset(rule)) {
+              <label class="field offset-field"
+                ><span>Anticipación</span
+                ><span class="number-with-unit"
+                  ><input
+                    type="number"
+                    min="0"
+                    max="8760"
+                    step="1"
+                    [value]="rule.offsetMinutes / 60"
+                    [disabled]="!rule.isEnabled"
+                    (change)="setOffsetHours(rule.eventType, $any($event.target).value)"
+                  /><span>horas</span></span
+                ></label
+              >
+            }
+          </article>
+        }
+      </div>
+      <div class="settings-actions">
+        <p>Al publicar se crea una nueva versión y se regeneran los avisos pendientes.</p>
+        <button type="button" class="button primary" [disabled]="isSaving()" (click)="save()">
+          {{ isSaving() ? 'Publicando…' : 'Publicar cambios' }}
+        </button>
+      </div>
+    } @else {
+      <p class="empty-state">No hay reglas de notificación publicadas.</p>
+    }
+  </section>
+</div>

@@ -25,6 +25,51 @@
     <header class="topbar">
       <img class="topbar-logo" src="logohouse.png" alt="GrupoHouse" />
       @if (user(); as currentUser) {
+        <div class="notifications-menu">
+          <button
+            type="button"
+            class="notification-button"
+            aria-label="Notificaciones"
+            [attr.aria-expanded]="isNotificationPanelOpen()"
+            (click)="toggleNotifications()"
+          >
+            <app-icon name="bell" />
+            @if (notificationService.hasUnread()) {
+              <span class="notification-count">{{ notificationService.unreadCount() }}</span>
+            }
+          </button>
+          @if (isNotificationPanelOpen()) {
+            <section class="notification-panel" aria-label="Notificaciones recientes">
+              <header>
+                <strong>Notificaciones</strong>
+                @if (notificationService.hasUnread()) {
+                  <button
+                    type="button"
+                    class="button link"
+                    (click)="notificationService.markAllRead()"
+                  >
+                    Marcar todas como leídas
+                  </button>
+                }
+              </header>
+              <div class="notification-list">
+                @for (notification of notificationService.notifications(); track notification.id) {
+                  <button
+                    type="button"
+                    class="notification-entry"
+                    [class.unread]="!notification.readAt"
+                    (click)="openNotification(notification.id, notification.workflowId)"
+                  >
+                    <strong>{{ notification.title }}</strong>
+                    <span>{{ notification.body }}</span>
+                  </button>
+                } @empty {
+                  <p>No tienes notificaciones.</p>
+                }
+              </div>
+            </section>
+          }
+        </div>
         <div class="account">
           <div class="account-text">
             <strong>{{ currentUser.name }}</strong>

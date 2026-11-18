@@ -17,6 +17,11 @@ const ICON_PATHS = {
   ],
   search: ['M4 11a7 7 0 1 0 14 0 7 7 0 1 0-14 0', 'm20 20-4-4'],
   logout: ['M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10'],
+  bell: ['M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4'],
+  settings: [
+    'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 1 0 0 7',
+    'M19 13.5a7 7 0 0 0 0-3l2-1.5-2-3.5-2.3 1a7 7 0 0 0-2.6-1.5L14 2.5h-4L9.9 5a7 7 0 0 0-2.6 1.5L5 5.5 3 9l2 1.5a7 7 0 0 0 0 3L3 15l2 3.5 2.3-1a7 7 0 0 0 2.6 1.5l.1 2.5h4l.1-2.5a7 7 0 0 0 2.6-1.5l2.3 1 2-3.5z',
+  ],
   // Flechas en círculo (sincronización); trazo propio, en el mismo estilo de la maqueta.
   sync: ['M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3', 'M18 3v4h-4M6 21v-4h4'],
 } as const;

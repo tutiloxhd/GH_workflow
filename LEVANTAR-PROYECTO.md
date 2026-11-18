@@ -79,6 +79,7 @@ npm run db:migrate
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0001_roles.sql"
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0002_workflow_template_v1.sql"
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0004_workflow_template_v2.sql"
+mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0005_notification_rules.sql"
 ADMIN_INITIAL_PASSWORD='<contraseña>' npm run users:create-admin -- --email <email> --name "<nombre>"
 ```
 
@@ -132,13 +133,20 @@ No necesita `.env`: en desarrollo reenvía `/api` a `localhost:3000` (`proxy.con
 
 ## 6. Levantar todo
 
-Tres terminales:
+Cinco terminales después de aplicar la migración de notificaciones aprobada:
 
 | Terminal | Comando | Resultado |
 | --- | --- | --- |
 | 1 | `cd apps/api && npm run dev` | API en `http://localhost:3000`, con recarga |
 | 2 | `cd apps/web && npm start` | aplicación en `http://localhost:4200` |
 | 3 | `cd apps/api && npm run sync` | sincronizador cada `SYNC_INTERVAL_SECONDS` |
+| 4 | `cd apps/api && npm run notifications:worker` | consume el outbox del workflow |
+| 5 | `cd apps/api && npm run notifications:scheduler` | materializa recordatorios, escalamientos y vencimientos |
+
+En un servidor, la API, el sincronizador, el worker y el scheduler se ejecutan como procesos
+independientes bajo el supervisor nativo del sistema operativo. Todos aceptan `SIGINT` y `SIGTERM`
+para cierre ordenado. No se debe ejecutar más de una instancia del sincronizador; worker y scheduler
+sí toleran concurrencia mediante bloqueos y leases en MariaDB.
 
 Abre **`http://localhost:4200`** (no `127.0.0.1`: la API solo acepta escrituras desde `WEB_ORIGIN`) e inicia sesión con un usuario de la sección 3.3.
 

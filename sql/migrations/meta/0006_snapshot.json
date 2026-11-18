@@ -174,12 +174,16 @@
       "indexes": {
         "uq_properties_admin_new_id": {
           "name": "uq_properties_admin_new_id",
-          "columns": ["admin_new_id"],
+          "columns": [
+            "admin_new_id"
+          ],
           "isUnique": true
         },
         "idx_properties_auction_at": {
           "name": "idx_properties_auction_at",
-          "columns": ["auction_at"],
+          "columns": [
+            "auction_at"
+          ],
           "isUnique": false
         }
       },
@@ -187,7 +191,9 @@
       "compositePrimaryKeys": {
         "properties_id": {
           "name": "properties_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -277,12 +283,18 @@
       "indexes": {
         "idx_property_changes_property": {
           "name": "idx_property_changes_property",
-          "columns": ["property_id", "detected_at"],
+          "columns": [
+            "property_id",
+            "detected_at"
+          ],
           "isUnique": false
         },
         "idx_property_changes_status": {
           "name": "idx_property_changes_status",
-          "columns": ["status", "detected_at"],
+          "columns": [
+            "status",
+            "detected_at"
+          ],
           "isUnique": false
         }
       },
@@ -291,8 +303,12 @@
           "name": "fk_property_changes_property",
           "tableFrom": "property_source_changes",
           "tableTo": "properties",
-          "columnsFrom": ["property_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "property_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -300,8 +316,12 @@
           "name": "fk_property_changes_processed_by",
           "tableFrom": "property_source_changes",
           "tableTo": "users",
-          "columnsFrom": ["processed_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "processed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -309,7 +329,9 @@
       "compositePrimaryKeys": {
         "property_source_changes_id": {
           "name": "property_source_changes_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -404,7 +426,9 @@
       "indexes": {
         "uq_sync_cursors_source": {
           "name": "uq_sync_cursors_source",
-          "columns": ["source_code"],
+          "columns": [
+            "source_code"
+          ],
           "isUnique": true
         }
       },
@@ -412,7 +436,9 @@
       "compositePrimaryKeys": {
         "sync_cursors_id": {
           "name": "sync_cursors_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -520,7 +546,10 @@
       "indexes": {
         "idx_sync_executions_source_started": {
           "name": "idx_sync_executions_source_started",
-          "columns": ["source_code", "started_at"],
+          "columns": [
+            "source_code",
+            "started_at"
+          ],
           "isUnique": false
         }
       },
@@ -528,7 +557,9 @@
       "compositePrimaryKeys": {
         "sync_executions_id": {
           "name": "sync_executions_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -596,7 +627,9 @@
       "indexes": {
         "idx_sync_issues_execution": {
           "name": "idx_sync_issues_execution",
-          "columns": ["sync_execution_id"],
+          "columns": [
+            "sync_execution_id"
+          ],
           "isUnique": false
         }
       },
@@ -605,8 +638,12 @@
           "name": "fk_sync_issues_execution",
           "tableFrom": "sync_issues",
           "tableTo": "sync_executions",
-          "columnsFrom": ["sync_execution_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "sync_execution_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -614,7 +651,9 @@
       "compositePrimaryKeys": {
         "sync_issues_id": {
           "name": "sync_issues_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -660,7 +699,10 @@
       "indexes": {
         "idx_login_attempts_email": {
           "name": "idx_login_attempts_email",
-          "columns": ["email", "attempted_at"],
+          "columns": [
+            "email",
+            "attempted_at"
+          ],
           "isUnique": false
         }
       },
@@ -668,7 +710,9 @@
       "compositePrimaryKeys": {
         "login_attempts_id": {
           "name": "login_attempts_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -710,7 +754,9 @@
       "indexes": {
         "uq_roles_code": {
           "name": "uq_roles_code",
-          "columns": ["code"],
+          "columns": [
+            "code"
+          ],
           "isUnique": true
         }
       },
@@ -718,7 +764,9 @@
       "compositePrimaryKeys": {
         "roles_id": {
           "name": "roles_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -760,7 +808,9 @@
       "indexes": {
         "idx_user_roles_role": {
           "name": "idx_user_roles_role",
-          "columns": ["role_id"],
+          "columns": [
+            "role_id"
+          ],
           "isUnique": false
         }
       },
@@ -769,8 +819,12 @@
           "name": "fk_user_roles_user",
           "tableFrom": "user_roles",
           "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -778,8 +832,12 @@
           "name": "fk_user_roles_role",
           "tableFrom": "user_roles",
           "tableTo": "roles",
-          "columnsFrom": ["role_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "role_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -787,8 +845,12 @@
           "name": "fk_user_roles_assigned_by",
           "tableFrom": "user_roles",
           "tableTo": "users",
-          "columnsFrom": ["assigned_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "assigned_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -796,7 +858,10 @@
       "compositePrimaryKeys": {
         "pk_user_roles": {
           "name": "pk_user_roles",
-          "columns": ["user_id", "role_id"]
+          "columns": [
+            "user_id",
+            "role_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -852,12 +917,17 @@
       "indexes": {
         "uq_user_sessions_token_hash": {
           "name": "uq_user_sessions_token_hash",
-          "columns": ["token_hash"],
+          "columns": [
+            "token_hash"
+          ],
           "isUnique": true
         },
         "idx_user_sessions_user": {
           "name": "idx_user_sessions_user",
-          "columns": ["user_id", "expires_at"],
+          "columns": [
+            "user_id",
+            "expires_at"
+          ],
           "isUnique": false
         }
       },
@@ -866,8 +936,12 @@
           "name": "fk_user_sessions_user",
           "tableFrom": "user_sessions",
           "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -875,7 +949,9 @@
       "compositePrimaryKeys": {
         "user_sessions_id": {
           "name": "user_sessions_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -968,12 +1044,16 @@
       "indexes": {
         "uq_users_email": {
           "name": "uq_users_email",
-          "columns": ["email"],
+          "columns": [
+            "email"
+          ],
           "isUnique": true
         },
         "uq_users_admin_new_user_id": {
           "name": "uq_users_admin_new_user_id",
-          "columns": ["admin_new_user_id"],
+          "columns": [
+            "admin_new_user_id"
+          ],
           "isUnique": true
         }
       },
@@ -981,7 +1061,9 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1089,7 +1171,10 @@
       "indexes": {
         "uq_task_definitions_code": {
           "name": "uq_task_definitions_code",
-          "columns": ["workflow_template_id", "code"],
+          "columns": [
+            "workflow_template_id",
+            "code"
+          ],
           "isUnique": true
         }
       },
@@ -1098,8 +1183,12 @@
           "name": "fk_task_definitions_template",
           "tableFrom": "task_definitions",
           "tableTo": "workflow_templates",
-          "columnsFrom": ["workflow_template_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workflow_template_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1107,7 +1196,9 @@
       "compositePrimaryKeys": {
         "task_definitions_id": {
           "name": "task_definitions_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1143,7 +1234,9 @@
       "indexes": {
         "idx_task_dependencies_parent": {
           "name": "idx_task_dependencies_parent",
-          "columns": ["depends_on_task_definition_id"],
+          "columns": [
+            "depends_on_task_definition_id"
+          ],
           "isUnique": false
         }
       },
@@ -1152,8 +1245,12 @@
           "name": "fk_task_dependencies_task",
           "tableFrom": "task_dependencies",
           "tableTo": "task_definitions",
-          "columnsFrom": ["task_definition_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "task_definition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1161,8 +1258,12 @@
           "name": "fk_task_dependencies_parent",
           "tableFrom": "task_dependencies",
           "tableTo": "task_definitions",
-          "columnsFrom": ["depends_on_task_definition_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "depends_on_task_definition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1170,7 +1271,10 @@
       "compositePrimaryKeys": {
         "pk_task_dependencies": {
           "name": "pk_task_dependencies",
-          "columns": ["task_definition_id", "depends_on_task_definition_id"]
+          "columns": [
+            "task_definition_id",
+            "depends_on_task_definition_id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1232,7 +1336,9 @@
       "indexes": {
         "uq_task_evidence_task": {
           "name": "uq_task_evidence_task",
-          "columns": ["task_instance_id"],
+          "columns": [
+            "task_instance_id"
+          ],
           "isUnique": true
         }
       },
@@ -1241,8 +1347,12 @@
           "name": "fk_task_evidence_task",
           "tableFrom": "task_evidence_submissions",
           "tableTo": "task_instances",
-          "columnsFrom": ["task_instance_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "task_instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1250,8 +1360,12 @@
           "name": "fk_task_evidence_submitter",
           "tableFrom": "task_evidence_submissions",
           "tableTo": "users",
-          "columnsFrom": ["submitted_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "submitted_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1259,7 +1373,9 @@
       "compositePrimaryKeys": {
         "task_evidence_submissions_id": {
           "name": "task_evidence_submissions_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1412,22 +1528,36 @@
       "indexes": {
         "uq_task_instances_definition": {
           "name": "uq_task_instances_definition",
-          "columns": ["workflow_instance_id", "task_definition_id"],
+          "columns": [
+            "workflow_instance_id",
+            "task_definition_id"
+          ],
           "isUnique": true
         },
         "idx_task_instances_assignee": {
           "name": "idx_task_instances_assignee",
-          "columns": ["assigned_user_id", "status", "due_at"],
+          "columns": [
+            "assigned_user_id",
+            "status",
+            "due_at"
+          ],
           "isUnique": false
         },
         "idx_task_instances_backup": {
           "name": "idx_task_instances_backup",
-          "columns": ["backup_user_id", "status", "due_at"],
+          "columns": [
+            "backup_user_id",
+            "status",
+            "due_at"
+          ],
           "isUnique": false
         },
         "idx_task_instances_workflow": {
           "name": "idx_task_instances_workflow",
-          "columns": ["workflow_instance_id", "status"],
+          "columns": [
+            "workflow_instance_id",
+            "status"
+          ],
           "isUnique": false
         }
       },
@@ -1436,8 +1566,12 @@
           "name": "fk_task_instances_workflow",
           "tableFrom": "task_instances",
           "tableTo": "workflow_instances",
-          "columnsFrom": ["workflow_instance_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workflow_instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1445,8 +1579,12 @@
           "name": "fk_task_instances_definition",
           "tableFrom": "task_instances",
           "tableTo": "task_definitions",
-          "columnsFrom": ["task_definition_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "task_definition_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1454,8 +1592,12 @@
           "name": "fk_task_instances_assignee",
           "tableFrom": "task_instances",
           "tableTo": "users",
-          "columnsFrom": ["assigned_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "assigned_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1463,8 +1605,12 @@
           "name": "fk_task_instances_backup",
           "tableFrom": "task_instances",
           "tableTo": "users",
-          "columnsFrom": ["backup_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "backup_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1472,8 +1618,12 @@
           "name": "fk_task_instances_completed_by",
           "tableFrom": "task_instances",
           "tableTo": "users",
-          "columnsFrom": ["completed_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "completed_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1481,7 +1631,9 @@
       "compositePrimaryKeys": {
         "task_instances_id": {
           "name": "task_instances_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1564,17 +1716,26 @@
       "indexes": {
         "idx_workflow_events_instance": {
           "name": "idx_workflow_events_instance",
-          "columns": ["workflow_instance_id", "occurred_at"],
+          "columns": [
+            "workflow_instance_id",
+            "occurred_at"
+          ],
           "isUnique": false
         },
         "idx_workflow_events_task": {
           "name": "idx_workflow_events_task",
-          "columns": ["task_instance_id", "occurred_at"],
+          "columns": [
+            "task_instance_id",
+            "occurred_at"
+          ],
           "isUnique": false
         },
         "idx_workflow_events_actor": {
           "name": "idx_workflow_events_actor",
-          "columns": ["actor_user_id", "occurred_at"],
+          "columns": [
+            "actor_user_id",
+            "occurred_at"
+          ],
           "isUnique": false
         }
       },
@@ -1583,8 +1744,12 @@
           "name": "fk_workflow_events_instance",
           "tableFrom": "workflow_events",
           "tableTo": "workflow_instances",
-          "columnsFrom": ["workflow_instance_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workflow_instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1592,8 +1757,12 @@
           "name": "fk_workflow_events_task",
           "tableFrom": "workflow_events",
           "tableTo": "task_instances",
-          "columnsFrom": ["task_instance_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "task_instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1601,8 +1770,12 @@
           "name": "fk_workflow_events_actor",
           "tableFrom": "workflow_events",
           "tableTo": "users",
-          "columnsFrom": ["actor_user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1610,7 +1783,9 @@
       "compositePrimaryKeys": {
         "workflow_events_id": {
           "name": "workflow_events_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1709,12 +1884,17 @@
       "indexes": {
         "uq_workflow_instances_property": {
           "name": "uq_workflow_instances_property",
-          "columns": ["property_id"],
+          "columns": [
+            "property_id"
+          ],
           "isUnique": true
         },
         "idx_workflow_instances_status": {
           "name": "idx_workflow_instances_status",
-          "columns": ["status", "started_at"],
+          "columns": [
+            "status",
+            "started_at"
+          ],
           "isUnique": false
         }
       },
@@ -1723,8 +1903,12 @@
           "name": "fk_workflow_instances_property",
           "tableFrom": "workflow_instances",
           "tableTo": "properties",
-          "columnsFrom": ["property_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "property_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1732,8 +1916,12 @@
           "name": "fk_workflow_instances_template",
           "tableFrom": "workflow_instances",
           "tableTo": "workflow_templates",
-          "columnsFrom": ["workflow_template_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workflow_template_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1741,7 +1929,9 @@
       "compositePrimaryKeys": {
         "workflow_instances_id": {
           "name": "workflow_instances_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1833,7 +2023,10 @@
         },
         "idx_workflow_participants_user": {
           "name": "idx_workflow_participants_user",
-          "columns": ["user_id", "valid_to"],
+          "columns": [
+            "user_id",
+            "valid_to"
+          ],
           "isUnique": false
         }
       },
@@ -1842,8 +2035,12 @@
           "name": "fk_workflow_participants_instance",
           "tableFrom": "workflow_participants",
           "tableTo": "workflow_instances",
-          "columnsFrom": ["workflow_instance_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workflow_instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1851,8 +2048,12 @@
           "name": "fk_workflow_participants_user",
           "tableFrom": "workflow_participants",
           "tableTo": "users",
-          "columnsFrom": ["user_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1860,8 +2061,12 @@
           "name": "fk_workflow_participants_assigner",
           "tableFrom": "workflow_participants",
           "tableTo": "users",
-          "columnsFrom": ["assigned_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "assigned_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1869,7 +2074,9 @@
       "compositePrimaryKeys": {
         "workflow_participants_id": {
           "name": "workflow_participants_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -1981,12 +2188,18 @@
       "indexes": {
         "idx_workflow_reprogrammings_instance": {
           "name": "idx_workflow_reprogrammings_instance",
-          "columns": ["workflow_instance_id", "created_at"],
+          "columns": [
+            "workflow_instance_id",
+            "created_at"
+          ],
           "isUnique": false
         },
         "idx_workflow_reprogrammings_status": {
           "name": "idx_workflow_reprogrammings_status",
-          "columns": ["status", "created_at"],
+          "columns": [
+            "status",
+            "created_at"
+          ],
           "isUnique": false
         }
       },
@@ -1995,8 +2208,12 @@
           "name": "fk_workflow_reprogrammings_instance",
           "tableFrom": "workflow_reprogrammings",
           "tableTo": "workflow_instances",
-          "columnsFrom": ["workflow_instance_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "workflow_instance_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2004,8 +2221,12 @@
           "name": "fk_workflow_reprogrammings_change",
           "tableFrom": "workflow_reprogrammings",
           "tableTo": "property_source_changes",
-          "columnsFrom": ["source_change_id"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "source_change_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2013,8 +2234,12 @@
           "name": "fk_workflow_reprogrammings_requester",
           "tableFrom": "workflow_reprogrammings",
           "tableTo": "users",
-          "columnsFrom": ["requested_by"],
-          "columnsTo": ["id"],
+          "columnsFrom": [
+            "requested_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2022,7 +2247,9 @@
       "compositePrimaryKeys": {
         "workflow_reprogrammings_id": {
           "name": "workflow_reprogrammings_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},
@@ -2088,7 +2315,10 @@
       "indexes": {
         "uq_workflow_templates_code_version": {
           "name": "uq_workflow_templates_code_version",
-          "columns": ["code", "version"],
+          "columns": [
+            "code",
+            "version"
+          ],
           "isUnique": true
         }
       },
@@ -2096,7 +2326,9 @@
       "compositePrimaryKeys": {
         "workflow_templates_id": {
           "name": "workflow_templates_id",
-          "columns": ["id"]
+          "columns": [
+            "id"
+          ]
         }
       },
       "uniqueConstraints": {},

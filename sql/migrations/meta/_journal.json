@@ -50,6 +50,13 @@
       "when": 1795009370301,
       "tag": "0006_admin_new_agent_users",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1795015573789,
+      "tag": "0007_notifications",
+      "breakpoints": true
     }
   ]
 }

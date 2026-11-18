@@ -19,6 +19,7 @@ tags:
     description: Administración de usuarios; exige rol ADMIN
   - name: workflows
   - name: tasks
+  - name: notifications
   - name: sync
     description: Estado de la sincronización con admin_new; exige rol ADMIN
 paths:
@@ -700,6 +701,136 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /api/notifications:
+    get:
+      operationId: listNotifications
+      summary: Lista las notificaciones permanentes del usuario autenticado
+      tags: [notifications]
+      parameters:
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 30 },
+          }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: unread, in: query, schema: { type: string, enum: ['true', 'false'] } }
+      responses:
+        '200':
+          description: Notificaciones del usuario
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notifications]
+                properties:
+                  notifications:
+                    type: array
+                    items: { $ref: '#/components/schemas/Notification' }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/notifications/unread-count:
+    get:
+      operationId: getUnreadNotificationCount
+      summary: Cuenta las notificaciones no leídas del usuario
+      tags: [notifications]
+      responses:
+        '200':
+          description: Contador actual
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [unreadCount]
+                properties:
+                  unreadCount: { type: integer, minimum: 0 }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/notifications/{notificationId}/read:
+    post:
+      operationId: markNotificationRead
+      summary: Marca como leída una notificación propia
+      tags: [notifications]
+      parameters:
+        - { name: notificationId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '204': { description: Marcada como leída o ya estaba leída }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/notifications/read-all:
+    post:
+      operationId: markAllNotificationsRead
+      summary: Marca como leídas todas las notificaciones propias
+      tags: [notifications]
+      responses:
+        '204': { description: Operación completada }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/notifications/stream:
+    get:
+      operationId: streamNotificationChanges
+      summary: Informa por SSE los cambios del contador del usuario
+      tags: [notifications]
+      responses:
+        '200':
+          description: Flujo text/event-stream; el cliente recupera el estado por HTTP
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/notification-rules:
+    get:
+      operationId: listNotificationRuleSets
+      summary: Lista las reglas de notificación publicadas (ADMIN)
+      tags: [notifications]
+      responses:
+        '200':
+          description: Reglas publicadas por versión de plantilla
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ruleSets]
+                properties:
+                  ruleSets:
+                    type: array
+                    items: { $ref: '#/components/schemas/NotificationRuleSet' }
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /api/notification-rules/{ruleSetId}:
+    put:
+      operationId: publishNotificationRuleSet
+      summary: Publica una nueva versión de reglas y regenera avisos pendientes (ADMIN)
+      tags: [notifications]
+      parameters:
+        - { name: ruleSetId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rules]
+              properties:
+                rules:
+                  type: array
+                  minItems: 5
+                  maxItems: 5
+                  items: { $ref: '#/components/schemas/NotificationRule' }
+      responses:
+        '200':
+          description: Nueva versión publicada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ruleSet]
+                properties:
+                  ruleSet: { $ref: '#/components/schemas/NotificationRuleSet' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+
 security:
   - sessionCookie: []
 
@@ -772,6 +903,49 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    NotificationRule:
+      type: object
+      additionalProperties: false
+      required: [eventType, offsetMinutes, isEnabled]
+      properties:
+        eventType:
+          type: string
+          enum: [TASK_ASSIGNED, TASK_REMINDER, TASK_ESCALATION, TASK_OVERDUE, TASK_COMPLETED]
+        offsetMinutes: { type: integer, minimum: 0, maximum: 525600 }
+        isEnabled: { type: boolean }
+    NotificationRuleSet:
+      type: object
+      additionalProperties: false
+      required: [id, version, workflowTemplate, rules]
+      properties:
+        id: { type: integer }
+        version: { type: integer }
+        workflowTemplate:
+          type: object
+          required: [id, code, name, version]
+          properties:
+            id: { type: integer }
+            code: { type: string }
+            name: { type: string }
+            version: { type: integer }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/NotificationRule' }
+    Notification:
+      type: object
+      additionalProperties: false
+      required: [id, trigger, title, body, workflowId, taskId, readAt, createdAt]
+      properties:
+        id: { type: integer }
+        trigger:
+          type: string
+          enum: [TASK_ASSIGNED, TASK_REMINDER, TASK_ESCALATION, TASK_OVERDUE, TASK_COMPLETED]
+        title: { type: string }
+        body: { type: string }
+        workflowId: { type: integer }
+        taskId: { type: [integer, 'null'] }
+        readAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
     SyncCursor:
       type: object
       required: [lastStatus, lastStartedAt, lastCompletedAt, lastSourceId, lastError]
