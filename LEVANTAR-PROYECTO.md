@@ -194,7 +194,7 @@ npm run build
 
 ## Más documentación
 
-- [docs/plan-fase-1.md](docs/plan-fase-1.md): sprints y estado.
+- [docs/roadmap.md](docs/roadmap.md): estado, camino al MVP definitivo y backlog de la semana.
 - [docs/modelo-datos-mvp.md](docs/modelo-datos-mvp.md): tablas y relaciones.
 - [docs/adr/](docs/adr/): decisiones técnicas.
 - [apps/api/openapi.yaml](apps/api/openapi.yaml): contrato de la API.
