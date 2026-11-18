@@ -91,6 +91,8 @@ CREATE TABLE properties (
   court                    VARCHAR(150) NULL,
   tribunal                 VARCHAR(150) NULL,
   case_reference           VARCHAR(100) NULL,
+  auction_bidder_name      TEXT NULL,
+  auction_payer_name       TEXT NULL,
   auction_at               DATETIME(6) NULL,
   guarantee_amount         DECIMAL(18,2) NULL,
   guarantee_payment_at     DATETIME(6) NULL,

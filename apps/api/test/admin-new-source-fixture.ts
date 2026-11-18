@@ -1,4 +1,4 @@
-import type { Pool } from 'mysql2/promise';
+import type { Pool, ResultSetHeader } from 'mysql2/promise';
 import { parseEnv } from '../src/config/env.js';
 import {
   connectAdminNewSource,
@@ -25,6 +25,11 @@ const SOURCE_TABLES = [
      id_dr INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
      idp TEXT, hora_remate TEXT
    ) ENGINE=MyISAM`,
+  `CREATE TABLE IF NOT EXISTS estado_remate (
+     id_er INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+     id_r TEXT NOT NULL, postor TEXT, pagador TEXT,
+     KEY idx_er_idr (id_r(20))
+   ) ENGINE=InnoDB`,
 ];
 
 export interface SourceFixture {
@@ -34,6 +39,15 @@ export interface SourceFixture {
   setClassification(adminNewId: number, classificationId: number): Promise<void>;
   addDetailRow(adminNewId: number, detail: SourceDetailInput): Promise<void>;
   setAuctionDate(adminNewId: number, auctionDate: string): Promise<void>;
+  setReferenceDates(
+    adminNewId: number,
+    dates: Pick<SourceDetailInput, 'r3' | 'r4' | 'r5'>,
+  ): Promise<void>;
+  setAuctionParticipants(
+    adminNewId: number,
+    bidder: string | null,
+    payer: string | null,
+  ): Promise<void>;
   setCommune(adminNewId: number, commune: string): Promise<void>;
   deleteProperty(adminNewId: number): Promise<void>;
   reset(): Promise<void>;
@@ -44,6 +58,8 @@ export interface SourceDetailInput {
   readonly r1?: string | null;
   readonly r2?: string | null;
   readonly r3?: string | null;
+  readonly r4?: string | null;
+  readonly r5?: string | null;
   readonly horaRemate?: string | null;
 }
 
@@ -52,6 +68,8 @@ export interface SourcePropertyInput extends SourceDetailInput {
   readonly name?: string;
   readonly commune?: string;
   readonly classificationId?: number;
+  readonly bidder?: string | null;
+  readonly payer?: string | null;
 }
 
 export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture> {
@@ -84,12 +102,14 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
          (id_p, corte, tribunal, rol_normalizado, r1, r2, r3, r4, r5,
           hora_garantia_desde, hora_garantia_hasta)
        VALUES (?, 'C.A. de Santiago', '1° Juzgado Civil Sintético', 'c-0001-2026', ?, ?, ?,
-               NULL, NULL, '09:00:00', '12:00:00')`,
+               ?, ?, '09:00:00', '12:00:00')`,
       [
         String(adminNewId),
         detail.r1 === undefined ? '2026-12-07' : detail.r1,
         detail.r2 === undefined ? '8.100.000' : detail.r2,
         detail.r3 === undefined ? '2026-12-04' : detail.r3,
+        detail.r4 ?? null,
+        detail.r5 ?? null,
       ],
     );
   };
@@ -110,10 +130,16 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
       );
       await addDetailRow(property.id, property);
       if (property.horaRemate !== null) {
-        await adminPool.query(
+        const [auction] = await adminPool.query<ResultSetHeader>(
           `INSERT INTO ${table('datos_lremate')} (idp, hora_remate) VALUES (?, ?)`,
           [String(property.id), property.horaRemate ?? '10:30'],
         );
+        if (property.bidder !== undefined || property.payer !== undefined) {
+          await adminPool.query(
+            `INSERT INTO ${table('estado_remate')} (id_r, postor, pagador) VALUES (?, ?, ?)`,
+            [String(auction.insertId), property.bidder ?? null, property.payer ?? null],
+          );
+        }
       }
     },
     async setClassification(adminNewId, classificationId) {
@@ -129,6 +155,18 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
         String(adminNewId),
       ]);
     },
+    async setReferenceDates(adminNewId, dates) {
+      await adminPool.query(
+        `UPDATE ${table('dato_propiedad')} SET r3 = ?, r4 = ?, r5 = ? WHERE id_p = ?`,
+        [dates.r3 ?? null, dates.r4 ?? null, dates.r5 ?? null, String(adminNewId)],
+      );
+    },
+    async setAuctionParticipants(adminNewId, bidder, payer) {
+      await adminPool.query(
+        `INSERT INTO ${table('estado_remate')} (id_r, postor, pagador) VALUES (?, ?, ?)`,
+        [String(adminNewId), bidder, payer],
+      );
+    },
     async setCommune(adminNewId, commune) {
       await adminPool.query(`UPDATE ${table('propiedad')} SET comuna = ? WHERE id_propiedad = ?`, [
         commune,
@@ -141,7 +179,7 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
       ]);
     },
     async reset() {
-      for (const name of ['propiedad', 'dato_propiedad', 'datos_lremate']) {
+      for (const name of ['propiedad', 'dato_propiedad', 'datos_lremate', 'estado_remate']) {
         await adminPool.query(`DELETE FROM ${table(name)}`);
       }
     },

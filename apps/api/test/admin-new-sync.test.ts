@@ -6,9 +6,12 @@ import {
   type SyncOutcome,
 } from '../src/modules/admin-new-sync/application/run-sync.js';
 import type { AdminNewSource } from '../src/modules/admin-new-sync/persistence/admin-new-source.js';
+import { insertSourceChange } from '../src/modules/admin-new-sync/persistence/sync-repository.js';
 import { startSourceFixture, type SourceFixture } from './admin-new-source-fixture.js';
 import {
   callApi,
+  givenUser,
+  logInAs,
   resetIdentityTables,
   startIdentityTestContext,
   type IdentityTestContext,
@@ -127,6 +130,132 @@ describe('sincronización con admin_new', () => {
 
       const [cursor] = await rows("SELECT * FROM sync_cursors WHERE source_code = 'ADMIN_NEW'");
       expect(cursor).toMatchObject({ last_status: 'SUCCEEDED', last_source_id: 101 });
+    });
+
+    it('asigna al pagador y al postor por nombre exacto y completa la tarea de asignación', async () => {
+      const admin = await givenUser(context, {
+        email: 'source-admin@example.test',
+        name: 'Administrador de origen',
+        roles: ['ADMIN'],
+      });
+      const manager = await givenUser(context, {
+        email: 'source-manager@example.test',
+        name: 'Gestor de origen',
+        roles: ['MANAGER'],
+      });
+      const bidder = await givenUser(context, {
+        email: 'source-bidder@example.test',
+        name: 'Postor de origen',
+        roles: ['BIDDER'],
+      });
+      await fixture.givenAccepted({
+        id: 112,
+        r1: FUTURE_AUCTION,
+        payer: manager.name,
+        bidder: bidder.name,
+      });
+
+      await completedSync();
+
+      const [workflow] = await workflowsOf(112);
+      const participants = await rows(
+        `SELECT participant_type AS participantType, user_id AS userId
+           FROM workflow_participants WHERE workflow_instance_id = ? ORDER BY participant_type`,
+        [workflow?.id],
+      );
+      expect(participants).toEqual([
+        { participantType: 'BIDDER', userId: bidder.id },
+        { participantType: 'MANAGER', userId: manager.id },
+      ]);
+      const [assignmentTask] = await rows(
+        `SELECT ti.status, ti.assigned_user_id AS assignedUserId
+           FROM task_instances ti JOIN task_definitions td ON td.id = ti.task_definition_id
+          WHERE ti.workflow_instance_id = ? AND td.code = 'ASSIGN_MANAGER_AND_BIDDER'`,
+        [workflow?.id],
+      );
+      expect(assignmentTask).toMatchObject({ status: 'COMPLETED', assignedUserId: admin.id });
+    });
+
+    it('deja abierta la asignación y advierte si los nombres no identifican usuarios únicos', async () => {
+      await givenUser(context, {
+        email: 'unmatched-admin@example.test',
+        name: 'Administrador de origen',
+        roles: ['ADMIN'],
+      });
+      await fixture.givenAccepted({
+        id: 113,
+        r1: FUTURE_AUCTION,
+        payer: 'Gestor sin cuenta',
+        bidder: 'Postor sin cuenta',
+      });
+
+      const outcome = await completedSync();
+
+      expect(outcome.totals.warningCount).toBe(2);
+      expect(await issueCodes(outcome.executionId)).toEqual([
+        'SOURCE_PARTICIPANT_NOT_MATCHED',
+        'SOURCE_PARTICIPANT_NOT_MATCHED',
+      ]);
+      const [workflow] = await workflowsOf(113);
+      const [assignmentTask] = await rows(
+        `SELECT ti.status FROM task_instances ti JOIN task_definitions td ON td.id = ti.task_definition_id
+          WHERE ti.workflow_instance_id = ? AND td.code = 'ASSIGN_MANAGER_AND_BIDDER'`,
+        [workflow?.id],
+      );
+      expect(assignmentTask?.status).toBe('READY');
+      expect(
+        await rows('SELECT id FROM workflow_participants WHERE workflow_instance_id = ?', [
+          workflow?.id,
+        ]),
+      ).toHaveLength(0);
+    });
+
+    it('asigna el postor a un workflow existente aunque falte el pagador', async () => {
+      const admin = await givenUser(context, {
+        email: 'property-13913-admin@example.test',
+        name: 'Administrador 13913',
+        roles: ['ADMIN'],
+      });
+      const bidder = await givenUser(context, {
+        email: 'property-13913-bidder@example.test',
+        name: 'Postor 13913',
+        roles: ['BIDDER'],
+      });
+      await fixture.givenAccepted({ id: 13913, r1: FUTURE_AUCTION });
+      await completedSync();
+      await fixture.setAuctionParticipants(13913, bidder.name, null);
+
+      const outcome = await completedSync();
+
+      expect(outcome.totals.warningCount).toBe(1);
+      const [workflow] = await workflowsOf(13913);
+      const adminCookie = await logInAs(context, 'property-13913-admin@example.test');
+      const detail = await callApi(context, 'GET', `/api/workflows/${String(workflow?.id)}`, {
+        sessionCookie: adminCookie,
+      });
+      expect(detail.body).toMatchObject({
+        workflow: {
+          property: {
+            auctionBidderName: bidder.name,
+            auctionPayerName: null,
+          },
+        },
+      });
+      expect(await changesOf(13913)).toHaveLength(1);
+      expect(
+        await rows(
+          `SELECT participant_type AS participantType, user_id AS userId
+             FROM workflow_participants WHERE workflow_instance_id = ?`,
+          [workflow?.id],
+        ),
+      ).toEqual([{ participantType: 'BIDDER', userId: bidder.id }]);
+      const [assignmentTask] = await rows(
+        `SELECT ti.status, ti.assigned_user_id AS assignedUserId
+           FROM task_instances ti JOIN task_definitions td ON td.id = ti.task_definition_id
+          WHERE ti.workflow_instance_id = ? AND td.code = 'ASSIGN_MANAGER_AND_BIDDER'`,
+        [workflow?.id],
+      );
+      expect(assignmentTask).toMatchObject({ status: 'READY', assignedUserId: admin.id });
     });
 
     it('repetir la sincronización no duplica propiedades, workflows ni cambios', async () => {
@@ -260,10 +389,17 @@ describe('sincronización con admin_new', () => {
   });
 
   describe('cambios en propiedades ya sincronizadas', () => {
-    it('un cambio de fecha con workflow abierto queda pendiente; los demás datos se aplican', async () => {
+    it('un cambio de fecha con workflow abierto reprograma plazos e historial', async () => {
       await fixture.givenAccepted({ id: 108, r1: FUTURE_AUCTION });
       await completedSync();
+      const [workflow] = await workflowsOf(108);
+      const [deadlineBefore] = await rows(
+        `SELECT due_at AS dueAt FROM task_instances
+          WHERE workflow_instance_id = ? AND status = 'READY' ORDER BY id LIMIT 1`,
+        [workflow?.id],
+      );
 
+      context.clock.advanceMinutes(60);
       await fixture.setAuctionDate(108, '2026-12-14');
       await fixture.setCommune(108, 'Providencia');
       const outcome = await completedSync();
@@ -271,14 +407,13 @@ describe('sincronización con admin_new', () => {
       expect(outcome.totals.recordsUpdated).toBe(1);
       const property = await propertyOf(108);
       expect(property?.commune).toBe('Providencia');
-      // La fecha no se sobrescribe: la aplica la reprogramación, que recalcula los plazos.
-      expect((property?.auction_at as Date).toISOString()).toBe('2026-12-07T13:30:00.000Z');
+      expect((property?.auction_at as Date).toISOString()).toBe('2026-12-14T13:30:00.000Z');
 
       const changes = await changesOf(108);
       expect(changes.slice(1)).toMatchObject([
         {
           changeType: 'AUCTION_DATE_CHANGED',
-          status: 'PENDING',
+          status: 'PROCESSED',
           previousValues: { auctionAt: '2026-12-07T13:30:00.000Z' },
           currentValues: { auctionAt: '2026-12-14T13:30:00.000Z' },
         },
@@ -290,9 +425,256 @@ describe('sincronización con admin_new', () => {
         },
       ]);
 
+      const [deadlineAfter] = await rows(
+        `SELECT due_at AS dueAt FROM task_instances
+          WHERE workflow_instance_id = ? AND status = 'READY' ORDER BY id LIMIT 1`,
+        [workflow?.id],
+      );
+      expect(
+        (deadlineAfter?.dueAt as Date).getTime() - (deadlineBefore?.dueAt as Date).getTime(),
+      ).toBe(60 * 60 * 1000);
+      const [reprogramming] = await rows(
+        `SELECT origin, status, source_change_id AS sourceChangeId
+           FROM workflow_reprogrammings WHERE workflow_instance_id = ?`,
+        [workflow?.id],
+      );
+      expect(reprogramming).toMatchObject({
+        origin: 'SYNC',
+        status: 'APPLIED',
+        sourceChangeId: Number(changes[1]?.id),
+      });
+      const events = await rows(
+        `SELECT event_type AS eventType, event_source AS eventSource
+           FROM workflow_events WHERE workflow_instance_id = ? ORDER BY id`,
+        [workflow?.id],
+      );
+      expect(events).toEqual(
+        expect.arrayContaining([
+          { eventType: 'TASK_DUE_DATE_RECALCULATED', eventSource: 'SYNC' },
+          { eventType: 'WORKFLOW_REPROGRAMMED', eventSource: 'SYNC' },
+        ]),
+      );
+
       // Sin nuevos cambios en el origen, no se repite el aviso.
       await completedSync();
       expect(await changesOf(108)).toHaveLength(3);
+    });
+
+    it('retoma una reprogramación pendiente aunque el origen no vuelva a cambiar', async () => {
+      await fixture.givenAccepted({ id: 114, r1: FUTURE_AUCTION });
+      await completedSync();
+      const property = await propertyOf(114);
+      const [workflow] = await workflowsOf(114);
+      const detectedAt = context.clock.now();
+      const sourceChangeId = await insertSourceChange(context.database.db, {
+        propertyId: Number(property?.id),
+        changeType: 'AUCTION_DATE_CHANGED',
+        status: 'PENDING',
+        previousValues: { auctionAt: '2026-12-07T13:30:00.000Z' },
+        currentValues: { auctionAt: '2026-12-15T13:30:00.000Z' },
+        detectedAt,
+      });
+      const outcome = await completedSync();
+
+      expect(outcome.totals.recordsUpdated).toBe(0);
+      expect(((await propertyOf(114))?.auction_at as Date).toISOString()).toBe(
+        '2026-12-15T13:30:00.000Z',
+      );
+      expect((await changesOf(114)).at(-1)).toMatchObject({ status: 'PROCESSED' });
+      const [reprogramming] = await rows(
+        `SELECT source_change_id AS sourceChangeId, status,
+                previous_auction_at AS previousAuctionAt, new_auction_at AS newAuctionAt
+           FROM workflow_reprogrammings WHERE workflow_instance_id = ?`,
+        [workflow?.id],
+      );
+      expect(reprogramming).toMatchObject({
+        sourceChangeId,
+        status: 'APPLIED',
+        previousAuctionAt: new Date('2026-12-07T13:30:00.000Z'),
+        newAuctionAt: new Date('2026-12-15T13:30:00.000Z'),
+      });
+    });
+
+    it('conserva intactas las tareas completadas y bloqueadas', async () => {
+      await fixture.givenAccepted({ id: 115, r1: FUTURE_AUCTION });
+      await completedSync();
+      const [workflow] = await workflowsOf(115);
+      const tasksBefore = await rows(
+        `SELECT id, status, due_at AS dueAt FROM task_instances
+          WHERE workflow_instance_id = ? ORDER BY id`,
+        [workflow?.id],
+      );
+      const completedTask = tasksBefore.find((task) => task.status === 'READY');
+      const blockedTask = tasksBefore.find((task) => task.status === 'BLOCKED');
+      const completedTaskId = Number(completedTask?.id);
+      const blockedTaskId = Number(blockedTask?.id);
+      await context.database.pool.query(
+        `UPDATE task_instances SET status = 'COMPLETED', completed_at = ? WHERE id = ?`,
+        [context.clock.now(), completedTaskId],
+      );
+
+      await fixture.setAuctionDate(115, '2026-12-14');
+      await completedSync();
+
+      const tasksAfter = await rows(
+        `SELECT id, status, due_at AS dueAt FROM task_instances
+          WHERE id IN (?, ?) ORDER BY id`,
+        [completedTaskId, blockedTaskId],
+      );
+      expect(
+        tasksAfter.map((task) => ({ id: Number(task.id), status: String(task.status) })),
+      ).toEqual([
+        { id: completedTaskId, status: 'COMPLETED' },
+        { id: blockedTaskId, status: 'BLOCKED' },
+      ]);
+      expect(String(tasksAfter[0]?.dueAt ?? null)).toBe(String(completedTask?.dueAt ?? null));
+      expect(String(tasksAfter[1]?.dueAt ?? null)).toBe(String(blockedTask?.dueAt ?? null));
+    });
+
+    it('reprograma tareas suspendidas sin reactivar el workflow', async () => {
+      const cast = await givenCast(context);
+      await fixture.givenAccepted({ id: 116, r1: FUTURE_AUCTION });
+      await completedSync();
+      const [workflow] = await workflowsOf(116);
+      const workflowId = Number(workflow?.id);
+      const suspended = await callApi(context, 'POST', `/api/workflows/${workflowId}/suspend`, {
+        sessionCookie: cast.cookies.legal,
+        body: { reason: 'Revisión legal' },
+      });
+      expect(suspended.status).toBe(200);
+      const [taskBefore] = await rows(
+        `SELECT id, due_at AS dueAt FROM task_instances
+          WHERE workflow_instance_id = ? AND status = 'SUSPENDED' ORDER BY id LIMIT 1`,
+        [workflowId],
+      );
+
+      context.clock.advanceMinutes(30);
+      await fixture.setAuctionDate(116, '2026-12-14');
+      await completedSync();
+
+      expect((await workflowsOf(116))[0]?.status).toBe('SUSPENDED');
+      const [taskAfter] = await rows(
+        'SELECT status, due_at AS dueAt FROM task_instances WHERE id = ?',
+        [taskBefore?.id],
+      );
+      expect(taskAfter?.status).toBe('SUSPENDED');
+      expect((taskAfter?.dueAt as Date).getTime() - (taskBefore?.dueAt as Date).getTime()).toBe(
+        30 * 60 * 1000,
+      );
+    });
+
+    it('aplica juntas las fechas r3, r4 y r5 y permite eliminar una referencia', async () => {
+      await fixture.givenAccepted({ id: 117, r1: FUTURE_AUCTION });
+      await completedSync();
+      const [workflow] = await workflowsOf(117);
+      const tasks = await rows(
+        'SELECT id FROM task_instances WHERE workflow_instance_id = ? ORDER BY id LIMIT 3',
+        [workflow?.id],
+      );
+      const references = ['GUARANTEE_PAYMENT_AT', 'GUARANTEE_RETURN_AT', 'BALANCE_PAYMENT_AT'];
+      for (const [index, task] of tasks.entries()) {
+        await context.database.pool.query(
+          `UPDATE task_instances
+              SET status = 'READY', due_reference = ?, due_reference_at = NULL, due_at = NULL
+            WHERE id = ?`,
+          [references[index], task.id],
+        );
+      }
+
+      await fixture.setReferenceDates(117, {
+        r3: '2026-12-10',
+        r4: '2026-12-11',
+        r5: '2026-12-12',
+      });
+      await completedSync();
+
+      const recalculated = await rows(
+        `SELECT due_reference AS dueReference, due_reference_at AS dueReferenceAt
+           FROM task_instances WHERE id IN (?, ?, ?) ORDER BY id`,
+        tasks.map((task) => Number(task.id)),
+      );
+      expect(recalculated).toEqual([
+        {
+          dueReference: 'GUARANTEE_PAYMENT_AT',
+          dueReferenceAt: new Date('2026-12-10T15:00:00.000Z'),
+        },
+        {
+          dueReference: 'GUARANTEE_RETURN_AT',
+          dueReferenceAt: new Date('2026-12-11T03:00:00.000Z'),
+        },
+        {
+          dueReference: 'BALANCE_PAYMENT_AT',
+          dueReferenceAt: new Date('2026-12-12T03:00:00.000Z'),
+        },
+      ]);
+
+      await fixture.setReferenceDates(117, {
+        r3: null,
+        r4: '2026-12-11',
+        r5: '2026-12-12',
+      });
+      await completedSync();
+      const [withoutGuaranteeDate] = await rows(
+        'SELECT due_reference_at AS dueReferenceAt, due_at AS dueAt FROM task_instances WHERE id = ?',
+        [tasks[0]?.id],
+      );
+      expect(withoutGuaranteeDate).toMatchObject({ dueReferenceAt: null, dueAt: null });
+    });
+
+    it('un pendiente inválido no aplica cambios parciales y queda recuperable', async () => {
+      await fixture.givenAccepted({ id: 118, r1: FUTURE_AUCTION });
+      await completedSync();
+      const property = await propertyOf(118);
+      const sourceChangeId = await insertSourceChange(context.database.db, {
+        propertyId: Number(property?.id),
+        changeType: 'AUCTION_DATE_CHANGED',
+        status: 'PENDING',
+        previousValues: { auctionAt: '2026-12-07T13:30:00.000Z' },
+        currentValues: { auctionAt: 'fecha-inválida' },
+        detectedAt: context.clock.now(),
+      });
+
+      const outcome = await completedSync();
+
+      expect(outcome.status).toBe('PARTIAL');
+      expect((await propertyOf(118))?.auction_at).toEqual(property?.auction_at);
+      expect((await changesOf(118)).at(-1)).toMatchObject({
+        id: sourceChangeId,
+        status: 'PENDING',
+      });
+      expect(await issueCodes(outcome.executionId)).toContain('REPROGRAMMING_FAILED');
+    });
+
+    it('un workflow cerrado no se reabre ni crea reprogramación pendiente', async () => {
+      await fixture.givenAccepted({ id: 119, r1: FUTURE_AUCTION });
+      await completedSync();
+      const [workflow] = await workflowsOf(119);
+      await context.database.pool.query(
+        `UPDATE workflow_instances SET status = 'CANCELLED', cancelled_at = ? WHERE id = ?`,
+        [context.clock.now(), workflow?.id],
+      );
+      await context.database.pool.query(
+        `UPDATE task_instances SET status = 'CANCELLED'
+          WHERE workflow_instance_id = ? AND status <> 'COMPLETED'`,
+        [workflow?.id],
+      );
+
+      await fixture.setAuctionDate(119, '2026-12-14');
+      await completedSync();
+
+      expect((await workflowsOf(119))[0]?.status).toBe('CANCELLED');
+      expect(((await propertyOf(119))?.auction_at as Date).toISOString()).toBe(
+        '2026-12-14T13:30:00.000Z',
+      );
+      expect((await changesOf(119)).at(-1)).toMatchObject({
+        changeType: 'AUCTION_DATE_CHANGED',
+        status: 'PROCESSED',
+      });
+      expect(
+        await rows('SELECT id FROM workflow_reprogrammings WHERE workflow_instance_id = ?', [
+          workflow?.id,
+        ]),
+      ).toHaveLength(0);
     });
 
     it('una propiedad que deja de estar aceptada se avisa una vez y el workflow sigue', async () => {

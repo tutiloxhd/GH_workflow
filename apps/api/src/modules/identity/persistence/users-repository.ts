@@ -151,6 +151,22 @@ export async function findFirstActiveUserIdWithRole(
   return row?.id ?? null;
 }
 
+// The database collation may consider case or accents equivalent; filter again in JavaScript
+// so source synchronization only accepts a literal, unique display-name match.
+export async function findActiveUserIdsByExactNameAndRole(
+  executor: DatabaseExecutor,
+  name: string,
+  role: RoleCode,
+): Promise<number[]> {
+  const rows = await executor
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .innerJoin(userRoles, eq(userRoles.userId, users.id))
+    .innerJoin(roles, eq(roles.id, userRoles.roleId))
+    .where(and(eq(roles.code, role), eq(users.status, 'ACTIVE'), eq(users.name, name)));
+  return rows.filter((user) => user.name === name).map((user) => user.id);
+}
+
 export async function findUserNames(
   executor: DatabaseExecutor,
   userIds: readonly number[],

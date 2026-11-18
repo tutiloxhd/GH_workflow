@@ -1,7 +1,9 @@
 import type { Clock } from '../../../platform/clock/clock.js';
 import type { Database } from '../../../platform/database/database.js';
 import { isDuplicateEntryError } from '../../../platform/database/database-errors.js';
+import { findActiveUserIdsByExactNameAndRole } from '../../identity/persistence/users-repository.js';
 import { startWorkflow } from '../../workflow/application/start-workflow.js';
+import { synchronizeSourceParticipants } from '../../workflow/application/synchronize-source-participants.js';
 import { businessDayKey } from '../../workflow/domain/due-date.js';
 import {
   REFERENCE_DATE_FIELDS,
@@ -20,6 +22,7 @@ import {
   finishExecution,
   findLatestAcceptanceChanges,
   findTrackedProperties,
+  insertPendingDateReprogramming,
   insertExecution,
   insertIssues,
   insertProperty,
@@ -33,6 +36,7 @@ import {
   type SyncExecutionStatus,
   type TrackedProperty,
 } from '../persistence/sync-repository.js';
+import { applyPendingReprogrammings } from './apply-pending-reprogrammings.js';
 
 export const ADMIN_NEW_SOURCE_CODE = 'ADMIN_NEW';
 // Una ejecución que lleva más que esto marcada como en curso se considera abandonada.
@@ -166,6 +170,10 @@ class SyncRun {
       }
     }
 
+    for (const failure of await applyPendingReprogrammings(this.dependencies)) {
+      this.reportError(failure.adminNewId, 'REPROGRAMMING_FAILED', failure.message);
+    }
+
     await this.detectNoLongerAccepted(new Set(accepted.map((source) => source.adminNewId)));
     return accepted.reduce<number | null>(
       (highest, source) => Math.max(highest ?? 0, source.adminNewId),
@@ -177,12 +185,13 @@ class SyncRun {
     const normalized = normalizeSourceProperty(source);
     const existing = this.tracked.get(source.adminNewId);
     if (!existing) {
-      await this.createProperty(source.adminNewId, normalized);
+      await this.createProperty(source.adminNewId, normalized, source.auctionState);
       return;
     }
 
     let auctionAt = existing.auctionAt;
-    if (existing.sourceHash !== normalized.sourceHash) {
+    const sourceChanged = existing.sourceHash !== normalized.sourceHash;
+    if (sourceChanged) {
       auctionAt = await this.applySourceChanges(existing, normalized);
     }
     if (this.latestAcceptance.get(existing.id) === 'NO_LONGER_ACCEPTED') {
@@ -197,10 +206,23 @@ class SyncRun {
     }
     // Una propiedad sin workflow lo recibe en cuanto es elegible (p. ej., se le asignó una fecha
     // de remate futura, o falló el inicio en una ejecución anterior).
-    if (existing.workflowId === null) await this.startWorkflowIfEligible(existing.id, auctionAt);
+    if (existing.workflowId === null) {
+      await this.startWorkflowIfEligible(existing.id, auctionAt, source.auctionState, sourceChanged);
+    } else if (existing.workflowStatus === 'ACTIVE' && source.auctionState !== null) {
+      const assignments = await this.resolveSourceParticipants(
+        source.adminNewId,
+        source.auctionState,
+        sourceChanged,
+      );
+      await synchronizeSourceParticipants(this.dependencies, existing.workflowId, assignments);
+    }
   }
 
-  private async createProperty(adminNewId: number, normalized: NormalizedProperty): Promise<void> {
+  private async createProperty(
+    adminNewId: number,
+    normalized: NormalizedProperty,
+    sourceParticipants: { bidder: string | null; payer: string | null } | null,
+  ): Promise<void> {
     const now = this.dependencies.clock.now();
     let propertyId: number;
     try {
@@ -218,7 +240,12 @@ class SyncRun {
     this.recordsCreated++;
     this.reportWarnings(adminNewId, normalized);
 
-    const start = await this.startWorkflowIfEligible(propertyId, normalized.snapshot.auctionAt);
+    const start = await this.startWorkflowIfEligible(
+      propertyId,
+      normalized.snapshot.auctionAt,
+      sourceParticipants,
+      true,
+    );
     await insertSourceChange(this.db, {
       propertyId,
       changeType: 'PROPERTY_ACCEPTED',
@@ -243,11 +270,18 @@ class SyncRun {
     const { snapshot } = normalized;
     const changedFields = changedSnapshotFields(existing, snapshot);
     const changedDates = changedFields.filter(isReferenceDateField);
-    const changedData = changedFields.filter((field) => !isReferenceDateField(field));
+    const changedData = changedFields.filter(
+      (field) =>
+        !isReferenceDateField(field) &&
+        field !== 'auctionBidderName' &&
+        field !== 'auctionPayerName',
+    );
     const deferDates = changedDates.length > 0 && isOpenWorkflow(existing);
     const now = this.dependencies.clock.now();
 
-    const fieldsToWrite = deferDates ? changedData : changedFields;
+    const fieldsToWrite = deferDates
+      ? changedFields.filter((field) => !isReferenceDateField(field))
+      : changedFields;
     const values: Partial<Record<keyof PropertySnapshot, unknown>> = Object.fromEntries(
       fieldsToWrite.map((field) => [field, snapshot[field]]),
     );
@@ -259,7 +293,7 @@ class SyncRun {
         syncedAt: now,
       });
       if (changedDates.length > 0) {
-        await insertSourceChange(transaction, {
+        const sourceChangeId = await insertSourceChange(transaction, {
           propertyId: existing.id,
           changeType: 'AUCTION_DATE_CHANGED',
           status: deferDates ? 'PENDING' : 'PROCESSED',
@@ -268,6 +302,15 @@ class SyncRun {
           detectedAt: now,
           processedAt: deferDates ? null : now,
         });
+        if (deferDates && existing.workflowId !== null) {
+          await insertPendingDateReprogramming(transaction, {
+            workflowId: existing.workflowId,
+            sourceChangeId,
+            previousAuctionAt: existing.auctionAt,
+            newAuctionAt: snapshot.auctionAt,
+            createdAt: now,
+          });
+        }
       }
       if (changedData.length > 0) {
         await insertSourceChange(transaction, {
@@ -293,17 +336,76 @@ class SyncRun {
   private async startWorkflowIfEligible(
     propertyId: number,
     auctionAt: Date | null,
+    sourceParticipants: { bidder: string | null; payer: string | null } | null,
+    reportUnmatched: boolean,
   ): Promise<{ workflowId: number | null; reason: string | null }> {
     const today = businessDayKey(this.dependencies.clock.now());
     if (auctionAt && businessDayKey(auctionAt) < today) {
       return { workflowId: null, reason: 'El remate ya ocurrió; no se inicia el workflow' };
     }
-    const outcome = await startWorkflow(this.dependencies, null, propertyId);
+    const assignedParticipants = await this.resolveSourceParticipants(
+      propertyId,
+      sourceParticipants,
+      reportUnmatched,
+    );
+    const outcome = await startWorkflow(this.dependencies, null, propertyId, { assignedParticipants });
     if (!outcome.isSuccess) {
       throw new Error(`No se pudo iniciar el workflow: ${outcome.failure}`);
     }
     if (outcome.value.wasCreated) this.workflowsStarted++;
     return { workflowId: outcome.value.workflowId, reason: null };
+  }
+
+  private async resolveSourceParticipants(
+    adminNewId: number,
+    sourceParticipants: { bidder: string | null; payer: string | null } | null,
+    reportUnmatched: boolean,
+  ) {
+    if (!sourceParticipants) return [];
+    const candidates = [
+      { sourceName: sourceParticipants.payer?.trim() ?? '', participantType: 'MANAGER' as const },
+      { sourceName: sourceParticipants.bidder?.trim() ?? '', participantType: 'BIDDER' as const },
+    ];
+    const assignedParticipants: { participantType: 'MANAGER' | 'BIDDER'; userId: number }[] = [];
+    for (const candidate of candidates) {
+      if (candidate.sourceName.length === 0) {
+        if (reportUnmatched) this.reportUnmatchedParticipant(adminNewId, candidate.participantType, false);
+        continue;
+      }
+      const matches = await findActiveUserIdsByExactNameAndRole(
+        this.db,
+        candidate.sourceName,
+        candidate.participantType,
+      );
+      const matchedUserId = matches.length === 1 ? matches[0] : undefined;
+      if (matchedUserId !== undefined) {
+        assignedParticipants.push({
+          participantType: candidate.participantType,
+          userId: matchedUserId,
+        });
+        continue;
+      }
+      if (reportUnmatched) {
+        this.reportUnmatchedParticipant(adminNewId, candidate.participantType, matches.length > 1);
+      }
+    }
+    return assignedParticipants;
+  }
+
+  private reportUnmatchedParticipant(
+    adminNewId: number,
+    participantType: 'MANAGER' | 'BIDDER',
+    hasMultipleMatches: boolean,
+  ): void {
+    this.warningCount++;
+    this.issues.push({
+      adminNewId,
+      severity: 'WARNING',
+      code: 'SOURCE_PARTICIPANT_NOT_MATCHED',
+      message: hasMultipleMatches
+        ? `Hay varias coincidencias con usuarios activos de rol ${participantType}`
+        : `No se encontró una coincidencia única con un usuario activo de rol ${participantType}`,
+    });
   }
 
   // Propiedades copiadas que admin_new ya no muestra como aceptadas: se registra el cambio una

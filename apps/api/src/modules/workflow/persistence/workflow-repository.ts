@@ -87,6 +87,8 @@ export async function findPropertySummary(executor: DatabaseExecutor, propertyId
       commune: properties.commune,
       caseReference: properties.caseReference,
       tribunal: properties.tribunal,
+      auctionBidderName: properties.auctionBidderName,
+      auctionPayerName: properties.auctionPayerName,
     })
     .from(properties)
     .where(eq(properties.id, propertyId));
@@ -183,6 +185,14 @@ export async function updatePropertyAuctionAt(
   auctionAt: Date,
 ): Promise<void> {
   await executor.update(properties).set({ auctionAt }).where(eq(properties.id, propertyId));
+}
+
+export async function updatePropertyBusinessDates(
+  executor: DatabaseExecutor,
+  propertyId: number,
+  dates: Partial<BusinessDates>,
+): Promise<void> {
+  await executor.update(properties).set(dates).where(eq(properties.id, propertyId));
 }
 
 // ───────────── Instancia ─────────────
@@ -367,7 +377,7 @@ export type TaskChanges = Partial<{
   activatedAt: Date;
   startedAt: Date;
   completedAt: Date;
-  completedBy: number;
+  completedBy: number | null;
 }>;
 
 export async function updateTask(
@@ -495,7 +505,7 @@ export async function insertParticipant(
     participantType: ParticipantType;
     assignmentType: AssignmentType;
     validFrom: Date;
-    assignedBy: number;
+    assignedBy: number | null;
   },
 ): Promise<void> {
   await executor.insert(workflowParticipants).values({
@@ -546,6 +556,7 @@ export interface NewWorkflowEvent {
   readonly workflowId: number;
   readonly taskId?: number;
   readonly actorUserId: number | null;
+  readonly eventSource?: 'USER' | 'SYSTEM' | 'SYNC';
   readonly eventType: WorkflowEventType;
   readonly details?: Record<string, unknown>;
 }
@@ -562,7 +573,8 @@ export async function insertEvents(
       taskInstanceId: event.taskId ?? null,
       actorUserId: event.actorUserId,
       eventType: event.eventType,
-      eventSource: event.actorUserId === null ? ('SYSTEM' as const) : ('USER' as const),
+      eventSource:
+        event.eventSource ?? (event.actorUserId === null ? ('SYSTEM' as const) : ('USER' as const)),
       details: event.details ?? null,
       occurredAt,
     })),

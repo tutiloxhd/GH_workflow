@@ -33,6 +33,7 @@ const baseSource: SourceProperty = {
   detailRowCount: 1,
   auction: { rowId: 501, auctionTime: '10:30' },
   auctionRowCount: 1,
+  auctionState: null,
 };
 
 const withDetail = (changes: Partial<SourceDetail>): SourceProperty => ({
@@ -79,6 +80,17 @@ describe('lectura de valores de admin_new', () => {
 });
 
 describe('normalización de una propiedad', () => {
+  it('conserva los nombres del postor y del gestor desde admin_new', () => {
+    const source = {
+      ...baseSource,
+      auctionState: { rowId: 901, bidder: ' Postor Demo ', payer: null },
+    };
+    const { snapshot } = normalizeSourceProperty(source);
+
+    expect(snapshot.auctionBidderName).toBe('Postor Demo');
+    expect(snapshot.auctionPayerName).toBeNull();
+  });
+
   it('convierte fecha y hora del remate de Santiago a UTC', () => {
     const { snapshot, issues } = normalizeSourceProperty(baseSource);
 

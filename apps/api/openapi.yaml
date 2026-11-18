@@ -1003,6 +1003,8 @@ components:
             commune: { type: [string, 'null'] }
             caseReference: { type: [string, 'null'] }
             tribunal: { type: [string, 'null'] }
+            auctionBidderName: { type: [string, 'null'] }
+            auctionPayerName: { type: [string, 'null'] }
         auctionAt: { type: [string, 'null'], format: date-time }
         participants:
           type: array

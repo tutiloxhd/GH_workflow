@@ -45,6 +45,8 @@ export const properties = mysqlTable(
     court: varchar('court', { length: 150 }),
     tribunal: varchar('tribunal', { length: 150 }),
     caseReference: varchar('case_reference', { length: 100 }),
+    auctionBidderName: text('auction_bidder_name'),
+    auctionPayerName: text('auction_payer_name'),
     auctionAt: utcDateTime('auction_at'),
     guaranteeAmount: decimal('guarantee_amount', { precision: 18, scale: 2 }),
     guaranteePaymentAt: utcDateTime('guarantee_payment_at'),

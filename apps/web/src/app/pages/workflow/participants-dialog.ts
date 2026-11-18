@@ -50,6 +50,11 @@ interface Selection {
         @for (type of participantTypes; track type) {
           <fieldset class="checkbox-list">
             <legend>{{ labels[type] }}</legend>
+            @if (isAuctionParticipant(type)) {
+              @if (sourceName(type); as name) {
+                <p class="muted">{{ name }}</p>
+              }
+            }
             <label class="field">
               Titular
               <select [name]="type + '-primary'" [(ngModel)]="selections[type].primaryUserId">
@@ -103,6 +108,17 @@ export class ParticipantsDialog implements OnInit {
   };
   protected readonly isSaving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+
+  protected isAuctionParticipant(type: ParticipantType): boolean {
+    return type !== 'LEGAL_REVIEWER';
+  }
+
+  protected sourceName(type: ParticipantType): string | null {
+    const property = this.workflow().property;
+    if (type === 'MANAGER') return property?.auctionPayerName ?? null;
+    if (type === 'BIDDER') return property?.auctionBidderName ?? null;
+    return null;
+  }
 
   ngOnInit(): void {
     for (const participant of this.workflow().participants) {

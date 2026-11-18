@@ -90,7 +90,7 @@
           @for (row of participantRows(); track row.label) {
             <dt>{{ row.label }}</dt>
             <dd>
-              {{ row.primary ?? 'Sin asignar' }}
+              {{ row.sourceName ?? row.primary ?? 'Sin asignar' }}
               @if (row.backup) {
                 <small class="muted">(suplente: {{ row.backup }})</small>
               }

@@ -10,11 +10,18 @@ export async function runWorkflowCommand<Value>(
   workflowId: number,
   actorUserId: number | null,
   command: (context: WorkflowContext) => Promise<Result<Value, WorkflowFailure>>,
+  eventSource?: 'USER' | 'SYSTEM' | 'SYNC',
 ): Promise<Result<Value, WorkflowFailure>> {
   const now = dependencies.clock.now();
   try {
     return await dependencies.database.db.transaction(async (transaction) => {
-      const context = await WorkflowContext.load(transaction, workflowId, now, actorUserId);
+      const context = await WorkflowContext.load(
+        transaction,
+        workflowId,
+        now,
+        actorUserId,
+        eventSource,
+      );
       if (!context) return fail('WORKFLOW_NOT_FOUND' as const);
 
       const outcome = await command(context);

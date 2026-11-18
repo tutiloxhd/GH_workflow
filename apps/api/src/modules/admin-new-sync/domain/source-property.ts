@@ -13,6 +13,7 @@ export interface SourceProperty {
   readonly detailRowCount: number;
   readonly auction: SourceAuction | null; // datos_lremate
   readonly auctionRowCount: number;
+  readonly auctionState: SourceAuctionState | null; // estado_remate, para datos_lremate.id_dr
 }
 
 export interface SourceDetail {
@@ -34,6 +35,12 @@ export interface SourceAuction {
   readonly auctionTime: string | null; // hora_remate
 }
 
+export interface SourceAuctionState {
+  readonly rowId: number; // id_er
+  readonly bidder: string | null; // postor
+  readonly payer: string | null; // pagador (gestor)
+}
+
 // Valores ya interpretados, con la forma de la tabla `properties`.
 export interface PropertySnapshot {
   readonly title: string | null;
@@ -43,6 +50,8 @@ export interface PropertySnapshot {
   readonly court: string | null;
   readonly tribunal: string | null;
   readonly caseReference: string | null;
+  readonly auctionBidderName: string | null;
+  readonly auctionPayerName: string | null;
   readonly auctionAt: Date | null;
   readonly guaranteeAmount: string | null;
   readonly guaranteePaymentAt: Date | null;
@@ -215,6 +224,8 @@ export function normalizeSourceProperty(source: SourceProperty): NormalizedPrope
     court: text(detail?.court ?? null, 'court', 'corte'),
     tribunal: text(detail?.tribunal ?? null, 'tribunal', 'tribunal'),
     caseReference: text(detail?.caseReference ?? null, 'caseReference', 'rol_normalizado'),
+    auctionBidderName: clean(source.auctionState?.bidder ?? null),
+    auctionPayerName: clean(source.auctionState?.payer ?? null),
     // Sin hora conocida se toma 00:00 de Santiago: los plazos medidos desde el remate quedan
     // en el lado seguro (más temprano).
     auctionAt: auctionDate && businessLocalToInstant(auctionDate, auctionTime ?? undefined),
@@ -228,7 +239,11 @@ export function normalizeSourceProperty(source: SourceProperty): NormalizedPrope
     balancePaymentAt: balancePaymentDate && businessLocalToInstant(balancePaymentDate),
   };
 
-  return { snapshot, issues, sourceHash: hashSource(source) };
+  return {
+    snapshot,
+    issues,
+    sourceHash: hashSource(source),
+  };
 }
 
 // El hash usa los valores tal como vienen del origen y los ids de fila elegidos, para que un
@@ -254,6 +269,9 @@ function hashSource(source: SourceProperty): string {
     detail?.guaranteeWindowEnd ?? null,
     auction?.rowId ?? null,
     auction?.auctionTime ?? null,
+    source.auctionState?.rowId ?? null,
+    source.auctionState?.bidder ?? null,
+    source.auctionState?.payer ?? null,
   ];
   return createHash('sha256').update(JSON.stringify(values)).digest('hex');
 }
@@ -284,6 +302,8 @@ const SNAPSHOT_FIELDS: readonly (keyof PropertySnapshot)[] = [
   'court',
   'tribunal',
   'caseReference',
+  'auctionBidderName',
+  'auctionPayerName',
   'auctionAt',
   'guaranteeAmount',
   'guaranteePaymentAt',

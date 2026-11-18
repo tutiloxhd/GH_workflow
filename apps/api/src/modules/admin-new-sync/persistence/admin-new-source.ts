@@ -2,6 +2,7 @@ import mysql, { type Pool, type RowDataPacket } from 'mysql2/promise';
 import type { DatabaseSettings } from '../../../platform/database/database.js';
 import {
   ACCEPTED_CLASSIFICATION_ID,
+  type SourceAuctionState,
   type SourceAuction,
   type SourceDetail,
   type SourceProperty,
@@ -17,8 +18,8 @@ export interface AdminNewSource {
 }
 
 const CONNECTION_LIMIT = 2;
-// Listas IN acotadas: dato_propiedad.id_p y datos_lremate.idp son TEXT, así que se comparan
-// como texto (comparar TEXT con INT obliga a MySQL a recorrer la tabla convirtiendo cada fila).
+// Listas IN acotadas: dato_propiedad.id_p, datos_lremate.idp y estado_remate.id_r son TEXT,
+// así que se comparan como texto para evitar conversiones de cada fila en MySQL.
 const ID_BATCH_SIZE = 500;
 
 function chunks<Item>(items: readonly Item[], size: number): Item[][] {
@@ -86,6 +87,12 @@ const toAuction = (raw: RowDataPacket): SourceAuction => ({
   auctionTime: nullableText(raw.hora_remate),
 });
 
+const toAuctionState = (raw: RowDataPacket): SourceAuctionState => ({
+  rowId: Number(raw.id_er),
+  bidder: nullableText(raw.postor),
+  payer: nullableText(raw.pagador),
+});
+
 export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSource {
   const pool: Pool = mysql.createPool({
     host: settings.host,
@@ -143,6 +150,32 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
         'id_dr',
         toAuction,
       );
+      const auctionIds = [...auctions.values()].map(({ row }) => String(row.rowId));
+      const auctionIdsMatchingPropertyIds = new Set(
+        (
+          await selectByIds(
+            `SELECT id_dr FROM datos_lremate WHERE id_dr IN (?)`,
+            textIds,
+          )
+        ).map((row) => String(row.id_dr)),
+      );
+      const propertyIdsForAuctionStateFallback = new Set(
+        textIds.filter((propertyId) => !auctionIdsMatchingPropertyIds.has(propertyId)),
+      );
+      const auctionStateIds = [
+        ...new Set([...auctionIds, ...propertyIdsForAuctionStateFallback]),
+      ];
+      const auctionStates = latestByProperty(
+        await selectByIds(
+          `SELECT id_er, id_r, postor, pagador
+             FROM estado_remate
+            WHERE id_r IN (?)`,
+          auctionStateIds,
+        ),
+        'id_r',
+        'id_er',
+        toAuctionState,
+      );
 
       return propertyRows.map((row): SourceProperty => {
         const adminNewId = Number(row.id_propiedad);
@@ -158,6 +191,11 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
           detailRowCount: detail?.count ?? 0,
           auction: auction?.row ?? null,
           auctionRowCount: auction?.count ?? 0,
+          auctionState:
+            (auction ? auctionStates.get(auction.row.rowId)?.row : undefined) ??
+            (propertyIdsForAuctionStateFallback.has(String(adminNewId))
+              ? (auctionStates.get(adminNewId)?.row ?? null)
+              : null),
         };
       });
     },

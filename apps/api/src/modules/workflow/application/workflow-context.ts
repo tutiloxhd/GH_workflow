@@ -39,6 +39,7 @@ export class WorkflowContext {
     private participantList: CurrentParticipant[],
     readonly now: Date,
     readonly actorUserId: number | null,
+    private readonly eventSource?: 'USER' | 'SYSTEM' | 'SYNC',
   ) {
     this.taskList = tasks;
   }
@@ -48,6 +49,7 @@ export class WorkflowContext {
     workflowId: number,
     now: Date,
     actorUserId: number | null,
+    eventSource?: 'USER' | 'SYSTEM' | 'SYNC',
   ): Promise<WorkflowContext | undefined> {
     const workflow = await lockWorkflow(executor, workflowId);
     if (!workflow) return undefined;
@@ -63,6 +65,7 @@ export class WorkflowContext {
       await findCurrentParticipants(executor, workflowId),
       now,
       actorUserId,
+      eventSource,
     );
   }
 
@@ -87,6 +90,7 @@ export class WorkflowContext {
       ...event,
       workflowId: this.workflow.id,
       actorUserId: this.actorUserId,
+      ...(this.eventSource ? { eventSource: this.eventSource } : {}),
     });
   }
 
@@ -105,8 +109,12 @@ export class WorkflowContext {
     this.participantList = await findCurrentParticipants(this.executor, this.workflow.id);
   }
 
+  setBusinessDates(dates: Partial<BusinessDates>): void {
+    this.dates = { ...this.dates, ...dates };
+  }
+
   setAuctionAt(auctionAt: Date): void {
-    this.dates = { ...this.dates, auctionAt };
+    this.setBusinessDates({ auctionAt });
   }
 
   // Responsable efectivo de una tarea del rol: titular vigente del workflow → primer usuario
@@ -158,7 +166,9 @@ export class WorkflowContext {
   // Recalcula el vencimiento de las tareas abiertas. Un plazo medido desde la activación vuelve
   // a correr desde `clockStart`; uno medido desde una fecha de negocio usa la fecha vigente.
   async recalculateOpenDeadlines(clockStart: Date): Promise<void> {
-    for (const task of this.taskList.filter((candidate) => isTaskWorkable(candidate.status))) {
+    for (const task of this.taskList.filter(
+      (candidate) => isTaskWorkable(candidate.status) || candidate.status === 'SUSPENDED',
+    )) {
       const deadline = computeDeadline(task, clockStart, this.dates);
       await this.changeTask(task.id, deadline);
       if (deadline.dueAt?.getTime() !== task.dueAt?.getTime()) {

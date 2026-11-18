@@ -9,10 +9,20 @@ import {
 } from '../persistence/workflow-repository.js';
 import { WorkflowContext } from './workflow-context.js';
 import type { WorkflowDependencies, WorkflowFailure } from './workflow-dependencies.js';
+import type { ParticipantType } from '../domain/participants.js';
+import { ASSIGN_PARTICIPANTS_TASK_CODE, hasRequiredParticipants } from '../domain/task-rules.js';
+import { insertParticipant } from '../persistence/workflow-repository.js';
 
 export interface StartedWorkflow {
   readonly workflowId: number;
   readonly wasCreated: boolean;
+}
+
+export interface StartWorkflowOptions {
+  readonly assignedParticipants: readonly {
+    readonly participantType: ParticipantType;
+    readonly userId: number;
+  }[];
 }
 
 // Idempotente: una propiedad tiene a lo sumo un workflow (UNIQUE property_id). Repetir el inicio,
@@ -21,6 +31,7 @@ export async function startWorkflow(
   dependencies: WorkflowDependencies,
   actorUserId: number | null,
   propertyId: number,
+  options: StartWorkflowOptions = { assignedParticipants: [] },
 ): Promise<Result<StartedWorkflow, WorkflowFailure>> {
   const { db } = dependencies.database;
   if (!(await findPropertyDates(db, propertyId))) return fail('PROPERTY_NOT_FOUND');
@@ -40,10 +51,32 @@ export async function startWorkflow(
         startedAt: now,
       });
       await insertTasksFromTemplate(transaction, createdId, templateId);
+      for (const participant of options.assignedParticipants) {
+        await insertParticipant(transaction, {
+          workflowId: createdId,
+          userId: participant.userId,
+          participantType: participant.participantType,
+          assignmentType: 'PRIMARY',
+          validFrom: now,
+          assignedBy: null,
+        });
+      }
 
       const context = await WorkflowContext.load(transaction, createdId, now, actorUserId);
       if (!context) throw new Error('El workflow recién creado no se encontró');
       context.record({ eventType: 'WORKFLOW_CREATED', details: { propertyId, templateId } });
+      if (options.assignedParticipants.length > 0) {
+        context.record({
+          eventType: 'PARTICIPANTS_ASSIGNED',
+          details: {
+            source: 'ADMIN_NEW',
+            assignments: options.assignedParticipants.map((participant) => ({
+              participantType: participant.participantType,
+              primaryUserId: participant.userId,
+            })),
+          },
+        });
+      }
       for (const task of context.tasks) {
         context.record({
           taskId: task.id,
@@ -52,6 +85,26 @@ export async function startWorkflow(
         });
       }
       await context.activateReadyTasks();
+      if (hasRequiredParticipants(context.participants)) {
+        const assignmentTask = context.tasks.find(
+          (task) => task.code === ASSIGN_PARTICIPANTS_TASK_CODE,
+        );
+        if (assignmentTask?.status === 'READY') {
+          await context.changeTask(assignmentTask.id, {
+            status: 'COMPLETED',
+            startedAt: now,
+            completedAt: now,
+            completedBy: null,
+          });
+          context.record({
+            taskId: assignmentTask.id,
+            eventType: 'TASK_COMPLETED',
+            details: { code: assignmentTask.code, source: 'ADMIN_NEW' },
+          });
+          await context.activateReadyTasks();
+          await context.completeWorkflowIfFinished();
+        }
+      }
       await context.flushEvents();
       return createdId;
     });

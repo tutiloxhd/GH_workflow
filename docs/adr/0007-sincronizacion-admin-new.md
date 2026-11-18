@@ -22,7 +22,7 @@ Solo una propiedad aceptada tenía dos filas en `dato_propiedad`, ambas con la m
 
 **Proceso separado.** `npm run sync` corre cada `SYNC_INTERVAL_SECONDS` (60 por defecto, provisorio), y `npm run sync -- --once` hace una sola ejecución. La siguiente ejecución empieza cuando termina la anterior. La API no dispara sincronizaciones: solo muestra su estado en `/api/sync/*`, para administradores.
 
-**Solo lectura.** El adaptador (`persistence/admin-new-source.ts`) solo hace SELECT y declara la sesión `READ ONLY`. Admite credenciales propias (`ADMIN_NEW_DB_*`); en producción debe usar un usuario con solo SELECT sobre `propiedad`, `dato_propiedad` y `datos_lremate`. Los ids de las tablas hijas se comparan como texto (`IN ('13965', …)`), porque comparar TEXT con INT obliga a MySQL a recorrer la tabla.
+**Solo lectura.** El adaptador (`persistence/admin-new-source.ts`) solo hace SELECT y declara la sesión `READ ONLY`. Admite credenciales propias (`ADMIN_NEW_DB_*`); en producción debe usar un usuario con solo SELECT sobre `propiedad`, `dato_propiedad`, `datos_lremate` y `estado_remate`. Los ids de las tablas hijas se comparan como texto (`IN ('13965', …)`), porque comparar TEXT con INT obliga a MySQL a recorrer la tabla. `estado_remate.id_r` se busca primero por `datos_lremate.id_dr`; la copia local también contiene filas relacionadas por `propiedad.id_propiedad`, que se usan como fallback solo cuando ese valor no corresponde a ningún `id_dr`. Se toma el estado con mayor `id_er` y se leen postor y pagador de forma independiente.
 
 **Detección por hash.** Como el origen no tiene fecha de modificación, cada ejecución lee todas las aceptadas (`id_clasif = 7`, indexado) y compara el SHA-256 de sus valores de origen con `properties.source_hash`. Si no cambió, la propiedad no se procesa. El cursor guarda el estado, el último error y el mayor id leído, y también sirve de candado: un UPDATE condicional impide que dos procesos corran a la vez. Un candado de más de 15 minutos se considera abandonado.
 
@@ -37,6 +37,10 @@ Solo una propiedad aceptada tenía dos filas en `dato_propiedad`, ambas con la m
 - Devolución de la garantía (`r4`) y pago del saldo (`r5`): 00:00.
 
 **Inicio del workflow (provisorio).** Una propiedad aceptada sin workflow lo recibe cuando su remate es hoy o después, o cuando la fecha se desconoce. Un remate ya ocurrido se copia, pero no abre un flujo con todas sus tareas vencidas: el cambio queda `IGNORED` y un administrador puede iniciarlo desde «Propiedades sin workflow». Si después la fecha pasa a ser futura, la siguiente ejecución inicia el workflow. No hay duplicados: `properties.admin_new_id` y `workflow_instances.property_id` son únicos, y el inicio es idempotente.
+
+**Asignación inicial desde `estado_remate`.** `pagador` (gestor) se vincula con un usuario interno activo de rol `MANAGER`, y `postor` con uno de rol `BIDDER`, por coincidencia exacta y única del nombre. Cada participante que tenga coincidencia se asigna al workflow activo aunque falte el otro. Si ambos se vinculan, se crean sus puestos primarios en el workflow antes de activar tareas y se completa automáticamente `ASSIGN_MANAGER_AND_BIDDER`; la tarea conserva su responsable interno y la auditoría identifica `ADMIN_NEW` como origen. Si un nombre no tiene coincidencia única, se registra una advertencia; la tarea continúa abierta hasta que ambos roles estén asignados desde el origen o manualmente.
+
+**Nombres de las partes del remate.** Los valores originales de `postor` y `pagador` se conservan en la copia de `properties` y se muestran en el detalle del workflow junto a los responsables internos. No se usan como cuentas ni como responsables de tareas. Los nombres se actualizan con cada sincronización y no se incluyen en el historial JSON de cambios de propiedad.
 
 **Cambios en propiedades ya copiadas.**
 

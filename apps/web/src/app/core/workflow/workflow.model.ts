@@ -76,6 +76,8 @@ export interface WorkflowDetail {
     readonly commune: string | null;
     readonly caseReference: string | null;
     readonly tribunal: string | null;
+    readonly auctionBidderName: string | null;
+    readonly auctionPayerName: string | null;
   } | null;
   readonly auctionAt: string | null;
   readonly participants: readonly WorkflowParticipant[];
