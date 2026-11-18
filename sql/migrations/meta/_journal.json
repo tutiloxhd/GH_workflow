@@ -59,10 +59,10 @@
       "breakpoints": true
     },
     {
-      "idx": 7,
+      "idx": 8,
       "version": "5",
       "when": 1795019000000,
-      "tag": "0007_notification_workflow_events",
+      "tag": "0008_notification_workflow_events",
       "breakpoints": true
     }
   ]

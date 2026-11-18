@@ -1,7 +1,7 @@
 -- Amplía las reglas configurables con eventos del ciclo de vida del workflow.
--- Los destinatarios se resuelven en runtime entre todos los participantes activos.
+-- Reejecutable: conserva reglas existentes y reconstruye solamente la restricción de eventos.
 
-ALTER TABLE `notification_rules` DROP CONSTRAINT `chk_notification_rules_trigger`;
+ALTER TABLE `notification_rules` DROP CONSTRAINT IF EXISTS `chk_notification_rules_trigger`;
 --> statement-breakpoint
 ALTER TABLE `notification_rules` ADD CONSTRAINT `chk_notification_rules_trigger`
   CHECK (`event_type` IN (
