@@ -76,14 +76,29 @@
             </section>
           }
         </div>
-        <div class="account">
-          <div class="account-text">
-            <strong>{{ currentUser.name }}</strong>
-            <small>{{ roleSummary() || 'Sin roles asignados' }}</small>
-          </div>
-          <button type="button" class="button link" (click)="logOut()">
-            <app-icon name="logout" />Cerrar sesión
+        <div class="account-menu">
+          <button
+            type="button"
+            class="account-trigger"
+            aria-label="Abrir menú de usuario"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="isAccountMenuOpen()"
+            (click)="toggleAccountMenu()"
+          >
+            <span class="account-avatar" aria-hidden="true">{{ currentUser.name.charAt(0) }}</span>
+            <span class="account-text">
+              <strong>{{ currentUser.name }}</strong>
+              <small>{{ roleSummary() || 'Sin roles asignados' }}</small>
+            </span>
+            <span class="account-chevron" aria-hidden="true">⌄</span>
           </button>
+          @if (isAccountMenuOpen()) {
+            <div class="account-dropdown" role="menu">
+              <button type="button" role="menuitem" (click)="logOut()">
+                <app-icon name="logout" />Cerrar sesión
+              </button>
+            </div>
+          }
         </div>
       }
     </header>
