@@ -127,6 +127,27 @@ paths:
           schema: { $ref: '#/components/schemas/RoleCode' }
         - $ref: '#/components/parameters/Limit'
         - $ref: '#/components/parameters/Offset'
+        - name: status
+          in: query
+          schema: { type: string, enum: [ACTIVE, SUSPENDED, CANCELLED, COMPLETED] }
+        - name: responsibleUserId
+          in: query
+          description: Identificador de un titular o suplente con una tarea abierta
+          schema: { type: integer, minimum: 1 }
+        - name: commune
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: region
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: auctionFrom
+          in: query
+          description: Inicio inclusivo del rango de remate
+          schema: { type: string, format: date-time }
+        - name: auctionTo
+          in: query
+          description: Fin exclusivo del rango de remate
+          schema: { type: string, format: date-time }
       responses:
         '200':
           description: Página de usuarios
@@ -287,7 +308,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [workflows, total, limit, offset]
+                required: [workflows, total, limit, offset, filterOptions]
                 properties:
                   workflows:
                     type: array
@@ -295,6 +316,13 @@ paths:
                   total: { type: integer }
                   limit: { type: integer }
                   offset: { type: integer }
+                  filterOptions:
+                    type: object
+                    required: [communes, regions, responsibles]
+                    properties:
+                      communes: { type: array, items: { type: string } }
+                      regions: { type: array, items: { type: string } }
+                      responsibles: { type: array, items: { $ref: '#/components/schemas/PersonRef' } }
 
   /api/properties:
     get:
@@ -487,6 +515,9 @@ paths:
       operationId: listMyTasks
       summary: Tareas abiertas donde el usuario es titular o suplente
       tags: [tasks]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Bandeja, ordenada por vencimiento (sin vencimiento al final)
@@ -494,11 +525,21 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [tasks]
+                required: [tasks, total, limit, offset, metrics]
                 properties:
                   tasks:
                     type: array
                     items: { $ref: '#/components/schemas/MyTask' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  metrics:
+                    type: object
+                    required: [overdue, today, thisWeek]
+                    properties:
+                      overdue: { type: integer }
+                      today: { type: integer }
+                      thisWeek: { type: integer }
 
   /api/tasks/{taskId}/start:
     post:
@@ -1154,9 +1195,15 @@ components:
             id: { type: integer }
             title: { type: [string, 'null'] }
             commune: { type: [string, 'null'] }
+            region: { type: [string, 'null'] }
         auctionAt: { type: [string, 'null'], format: date-time }
         openTaskCount: { type: integer }
         overdueTaskCount: { type: integer }
+        currentTask:
+          type: [object, 'null']
+          properties:
+            name: { type: string }
+            responsibleName: { type: [string, 'null'] }
     PropertyRow:
       type: object
       properties:

@@ -71,6 +71,19 @@
       }
     }
   }
+
+  @if (totalTasks() > 0) {
+    <section class="card task-pagination">
+      <app-list-pagination
+        [total]="totalTasks()"
+        [pageSize]="pageSize()"
+        [offset]="offset()"
+        [isLoading]="isLoading()"
+        (offsetChange)="setOffset($event)"
+        (pageSizeChange)="setPageSize($event)"
+      />
+    </section>
+  }
 </div>
 
 @if (openTask(); as task) {

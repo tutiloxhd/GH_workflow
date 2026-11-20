@@ -10,12 +10,13 @@ import { problemMessage, toApiProblem } from '../../core/api/api-problem';
 import { formatDateTime, formatRelativeDue } from '../../core/time/santiago-time';
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
 import { TASK_STATUS_LABELS, type MyTask } from '../../core/workflow/workflow.model';
+import { ListPagination } from '../../shared/pagination/list-pagination';
 import { TaskDialog } from '../workflow/task-dialog';
 import { DUE_GROUP_LABELS, DUE_GROUP_ORDER, groupByDue, type DueGroup } from './task-groups';
 
 @Component({
   selector: 'app-my-tasks-page',
-  imports: [TaskDialog],
+  imports: [TaskDialog, ListPagination],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './my-tasks-page.html',
   styleUrl: './my-tasks-page.css',
@@ -24,6 +25,10 @@ export class MyTasksPage implements OnInit {
   private readonly api = inject(WorkflowApiService);
 
   protected readonly tasks = signal<readonly MyTask[]>([]);
+  protected readonly totalTasks = signal(0);
+  protected readonly taskMetrics = signal({ overdue: 0, today: 0, thisWeek: 0 });
+  protected readonly pageSize = signal(10);
+  protected readonly offset = signal(0);
   protected readonly now = signal(new Date());
   protected readonly isLoading = signal(true);
   protected readonly loadError = signal<string | null>(null);
@@ -37,12 +42,12 @@ export class MyTasksPage implements OnInit {
 
   protected readonly groups = computed(() => groupByDue(this.tasks(), this.now()));
   protected readonly metrics = computed(() => {
-    const groups = this.groups();
+    const metrics = this.taskMetrics();
     return [
-      { label: 'Activas', value: this.tasks().length, tone: 'neutral' },
-      { label: 'Vencidas', value: groups.get('OVERDUE')?.length ?? 0, tone: 'late' },
-      { label: 'Vencen hoy', value: groups.get('TODAY')?.length ?? 0, tone: 'alert' },
-      { label: 'Esta semana', value: groups.get('THIS_WEEK')?.length ?? 0, tone: 'good' },
+      { label: 'Activas', value: this.totalTasks(), tone: 'neutral' },
+      { label: 'Vencidas', value: metrics.overdue, tone: 'late' },
+      { label: 'Vencen hoy', value: metrics.today, tone: 'alert' },
+      { label: 'Esta semana', value: metrics.thisWeek, tone: 'good' },
     ];
   });
 
@@ -54,7 +59,10 @@ export class MyTasksPage implements OnInit {
     this.isLoading.set(true);
     this.loadError.set(null);
     try {
-      this.tasks.set(await this.api.listMyTasks());
+      const page = await this.api.listMyTasks(this.pageSize(), this.offset());
+      this.tasks.set(page.tasks);
+      this.totalTasks.set(page.total);
+      this.taskMetrics.set(page.metrics);
       this.now.set(new Date());
     } catch (error) {
       this.loadError.set(problemMessage(toApiProblem(error)));
@@ -78,6 +86,17 @@ export class MyTasksPage implements OnInit {
       else next.add(group);
       return next;
     });
+  }
+
+  protected setPageSize(pageSize: number): void {
+    this.pageSize.set(pageSize);
+    this.offset.set(0);
+    void this.load();
+  }
+
+  protected setOffset(offset: number): void {
+    this.offset.set(offset);
+    void this.load();
   }
 
   // Al cerrar el modal se recarga la bandeja: completar o reasignar cambia lo que corresponde ver.

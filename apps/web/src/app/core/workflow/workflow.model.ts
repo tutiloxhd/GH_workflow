@@ -102,10 +102,21 @@ export interface WorkflowSummary {
     readonly id: number;
     readonly title: string | null;
     readonly commune: string | null;
+    readonly region: string | null;
   };
   readonly auctionAt: string | null;
   readonly openTaskCount: number;
   readonly overdueTaskCount: number;
+  readonly currentTask: {
+    readonly name: string;
+    readonly responsibleName: string | null;
+  } | null;
+}
+
+export interface WorkflowFilterOptions {
+  readonly communes: readonly string[];
+  readonly regions: readonly string[];
+  readonly responsibles: readonly PersonRef[];
 }
 
 export interface PropertyRow {

@@ -1,6 +1,7 @@
-import { and, asc, count, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { DatabaseExecutor } from '../../../platform/database/database.js';
 import { properties } from '../../../platform/database/schema/admin-new-sync.schema.js';
+import { users } from '../../../platform/database/schema/identity.schema.js';
 import {
   taskDefinitions,
   taskDependencies,
@@ -112,7 +113,18 @@ const OPEN_TASK_STATUSES_SQL = sql.raw(`'READY', 'IN_PROGRESS'`);
 // donde el usuario tiene un puesto vigente o alguna tarea.
 export async function listWorkflowSummaries(
   executor: DatabaseExecutor,
-  query: { visibleToUserId: number | null; now: Date; limit: number; offset: number },
+  query: {
+    visibleToUserId: number | null;
+    now: Date;
+    limit: number;
+    offset: number;
+    status?: WorkflowStatus | undefined;
+    responsibleUserId?: number | undefined;
+    commune?: string | undefined;
+    region?: string | undefined;
+    auctionFrom?: Date | undefined;
+    auctionTo?: Date | undefined;
+  },
 ) {
   const visibility =
     query.visibleToUserId === null
@@ -125,6 +137,26 @@ export async function listWorkflowSummaries(
                            AND (ti.assigned_user_id = ${query.visibleToUserId}
                                 OR ti.backup_user_id = ${query.visibleToUserId})))`;
 
+  const filters = and(
+    visibility,
+    query.status ? eq(workflowInstances.status, query.status) : undefined,
+    query.commune
+      ? sql`LOWER(${properties.commune}) LIKE ${`%${query.commune.toLowerCase()}%`}`
+      : undefined,
+    query.region
+      ? sql`LOWER(${properties.region}) LIKE ${`%${query.region.toLowerCase()}%`}`
+      : undefined,
+    query.responsibleUserId
+      ? sql`EXISTS (SELECT 1 FROM ${taskInstances} filter_task
+          WHERE filter_task.workflow_instance_id = ${workflowInstances.id}
+            AND filter_task.status IN (${OPEN_TASK_STATUSES_SQL})
+            AND (filter_task.assigned_user_id = ${query.responsibleUserId}
+              OR filter_task.backup_user_id = ${query.responsibleUserId}))`
+      : undefined,
+    query.auctionFrom ? gte(properties.auctionAt, query.auctionFrom) : undefined,
+    query.auctionTo ? lt(properties.auctionAt, query.auctionTo) : undefined,
+  );
+
   const rows = await executor
     .select({
       id: workflowInstances.id,
@@ -133,6 +165,7 @@ export async function listWorkflowSummaries(
       propertyId: properties.id,
       propertyTitle: properties.title,
       commune: properties.commune,
+      region: properties.region,
       auctionAt: properties.auctionAt,
       openTaskCount: sql<number>`(SELECT COUNT(*) FROM task_instances ti
         WHERE ti.workflow_instance_id = ${workflowInstances.id}
@@ -142,10 +175,27 @@ export async function listWorkflowSummaries(
           AND ti.status IN (${OPEN_TASK_STATUSES_SQL}) AND ti.due_at < ${query.now})`.mapWith(
         Number,
       ),
+      currentTaskName: sql<string | null>`(SELECT td.name
+        FROM task_instances ti
+        INNER JOIN task_definitions td ON td.id = ti.task_definition_id
+        WHERE ti.workflow_instance_id = ${workflowInstances.id}
+          AND ti.status IN (${OPEN_TASK_STATUSES_SQL})
+        ORDER BY CASE WHEN ti.status = 'IN_PROGRESS' THEN 0 ELSE 1 END,
+          td.display_order, ti.id
+        LIMIT 1)`,
+      currentTaskResponsibleName: sql<string | null>`(SELECT responsible_user.name
+        FROM task_instances ti
+        INNER JOIN task_definitions td ON td.id = ti.task_definition_id
+        LEFT JOIN users responsible_user ON responsible_user.id = ti.assigned_user_id
+        WHERE ti.workflow_instance_id = ${workflowInstances.id}
+          AND ti.status IN (${OPEN_TASK_STATUSES_SQL})
+        ORDER BY CASE WHEN ti.status = 'IN_PROGRESS' THEN 0 ELSE 1 END,
+          td.display_order, ti.id
+        LIMIT 1)`,
     })
     .from(workflowInstances)
     .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
-    .where(visibility)
+    .where(filters)
     .orderBy(
       sql`${properties.auctionAt} IS NULL`,
       asc(properties.auctionAt),
@@ -156,8 +206,46 @@ export async function listWorkflowSummaries(
   const [totalRow] = await executor
     .select({ total: count() })
     .from(workflowInstances)
-    .where(visibility);
+    .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
+    .where(filters);
   return { rows, total: totalRow?.total ?? 0 };
+}
+
+export async function listWorkflowFilterOptions(
+  executor: DatabaseExecutor,
+  visibleToUserId: number | null,
+) {
+  const visibility =
+    visibleToUserId === null
+      ? undefined
+      : sql`(EXISTS (SELECT 1 FROM workflow_participants wp
+                      WHERE wp.workflow_instance_id = ${workflowInstances.id}
+                        AND wp.user_id = ${visibleToUserId} AND wp.valid_to IS NULL)
+             OR EXISTS (SELECT 1 FROM task_instances ti
+                         WHERE ti.workflow_instance_id = ${workflowInstances.id}
+                           AND (ti.assigned_user_id = ${visibleToUserId}
+                                OR ti.backup_user_id = ${visibleToUserId})))`;
+  const [locations, responsibles] = await Promise.all([
+    executor
+      .selectDistinct({ commune: properties.commune, region: properties.region })
+      .from(workflowInstances)
+      .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
+      .where(visibility),
+    executor
+      .selectDistinct({ id: users.id, name: users.name })
+      .from(users)
+      .innerJoin(
+        taskInstances,
+        or(eq(taskInstances.assignedUserId, users.id), eq(taskInstances.backupUserId, users.id)),
+      )
+      .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))
+      .where(and(visibility, inArray(taskInstances.status, ['READY', 'IN_PROGRESS']))),
+  ]);
+  return {
+    communes: [...new Set(locations.map(({ commune }) => commune).filter((value) => value !== null))].sort(),
+    regions: [...new Set(locations.map(({ region }) => region).filter((value) => value !== null))].sort(),
+    responsibles: responsibles.sort((left, right) => left.name.localeCompare(right.name, 'es')),
+  };
 }
 
 export async function listPropertiesWithWorkflow(
@@ -674,8 +762,24 @@ export async function insertAppliedReprogramming(
 
 // ───────────── Bandeja ─────────────
 
-export async function findTasksOfUser(executor: DatabaseExecutor, userId: number) {
-  return executor
+export async function findTasksOfUser(
+  executor: DatabaseExecutor,
+  userId: number,
+  page: {
+    limit: number;
+    offset: number;
+    now: Date;
+    todayStart: Date;
+    tomorrowStart: Date;
+    weekEnd: Date;
+  },
+) {
+  const filter = and(
+    or(eq(taskInstances.assignedUserId, userId), eq(taskInstances.backupUserId, userId)),
+    inArray(taskInstances.status, ['READY', 'IN_PROGRESS']),
+    eq(workflowInstances.status, 'ACTIVE'),
+  );
+  const rows = await executor
     .select({
       id: taskInstances.id,
       workflowId: taskInstances.workflowInstanceId,
@@ -696,12 +800,27 @@ export async function findTasksOfUser(executor: DatabaseExecutor, userId: number
     .innerJoin(taskDefinitions, eq(taskDefinitions.id, taskInstances.taskDefinitionId))
     .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))
     .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
-    .where(
-      and(
-        or(eq(taskInstances.assignedUserId, userId), eq(taskInstances.backupUserId, userId)),
-        inArray(taskInstances.status, ['READY', 'IN_PROGRESS']),
-        eq(workflowInstances.status, 'ACTIVE'),
-      ),
-    )
-    .orderBy(sql`${taskInstances.dueAt} IS NULL`, asc(taskInstances.dueAt), asc(taskInstances.id));
+    .where(filter)
+    .orderBy(sql`${taskInstances.dueAt} IS NULL`, asc(taskInstances.dueAt), asc(taskInstances.id))
+    .limit(page.limit)
+    .offset(page.offset);
+  const [summary] = await executor
+    .select({
+      total: count(),
+      overdue: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} < ${page.now} THEN 1 ELSE 0 END)`.mapWith(Number),
+      today: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.todayStart} AND ${taskInstances.dueAt} < ${page.tomorrowStart} THEN 1 ELSE 0 END)`.mapWith(Number),
+      thisWeek: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.tomorrowStart} AND ${taskInstances.dueAt} < ${page.weekEnd} THEN 1 ELSE 0 END)`.mapWith(Number),
+    })
+    .from(taskInstances)
+    .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))
+    .where(filter);
+  return {
+    rows,
+    total: summary?.total ?? 0,
+    metrics: {
+      overdue: summary?.overdue ?? 0,
+      today: summary?.today ?? 0,
+      thisWeek: summary?.thisWeek ?? 0,
+    },
+  };
 }

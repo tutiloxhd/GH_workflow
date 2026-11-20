@@ -72,6 +72,10 @@
   list-style: none;
 }
 
+.task-pagination {
+  overflow: hidden;
+}
+
 .task-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 180px auto;

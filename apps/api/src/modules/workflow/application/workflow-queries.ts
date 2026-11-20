@@ -1,8 +1,14 @@
 import { fail, succeed, type Result } from '../../../platform/result.js';
 import { findUserNames } from '../../identity/persistence/users-repository.js';
-import { isOverdue } from '../domain/due-date.js';
+import {
+  addBusinessCalendarDays,
+  businessDayKey,
+  businessLocalToInstant,
+  isOverdue,
+} from '../domain/due-date.js';
 import { evidenceFormFor } from '../domain/evidence-forms.js';
 import { isAdmin, type Actor } from '../domain/task-rules.js';
+import type { WorkflowStatus } from '../domain/statuses.js';
 import {
   findCurrentParticipants,
   findEvidenceOfWorkflow,
@@ -10,6 +16,7 @@ import {
   findPropertySummary,
   listPropertiesWithWorkflow,
   listWorkflowSummaries,
+  listWorkflowFilterOptions,
   findTaskRequirements,
   findTasksOfUser,
   findWorkflow,
@@ -123,28 +130,51 @@ export interface PageQuery {
   readonly offset: number;
 }
 
+export interface WorkflowPageQuery extends PageQuery {
+  readonly status?: WorkflowStatus | undefined;
+  readonly responsibleUserId?: number | undefined;
+  readonly commune?: string | undefined;
+  readonly region?: string | undefined;
+  readonly auctionFrom?: Date | undefined;
+  readonly auctionTo?: Date | undefined;
+}
+
 // Tablero: ADMIN ve todos los workflows; los demás, aquellos en que participan.
 export async function listWorkflows(
   dependencies: WorkflowDependencies,
   actor: Actor,
-  page: PageQuery,
+  page: WorkflowPageQuery,
 ) {
-  const { rows, total } = await listWorkflowSummaries(dependencies.database.db, {
-    visibleToUserId: isAdmin(actor) ? null : actor.id,
-    now: dependencies.clock.now(),
-    ...page,
-  });
+  const visibleToUserId = isAdmin(actor) ? null : actor.id;
+  const [{ rows, total }, filterOptions] = await Promise.all([
+    listWorkflowSummaries(dependencies.database.db, {
+      visibleToUserId,
+      now: dependencies.clock.now(),
+      ...page,
+    }),
+    listWorkflowFilterOptions(dependencies.database.db, visibleToUserId),
+  ]);
   return {
     workflows: rows.map((row) => ({
       id: row.id,
       status: row.status,
       startedAt: row.startedAt.toISOString(),
-      property: { id: row.propertyId, title: row.propertyTitle, commune: row.commune },
+      property: {
+        id: row.propertyId,
+        title: row.propertyTitle,
+        commune: row.commune,
+        region: row.region,
+      },
       auctionAt: toIso(row.auctionAt),
       openTaskCount: row.openTaskCount,
       overdueTaskCount: row.overdueTaskCount,
+      currentTask:
+        row.currentTaskName === null
+          ? null
+          : { name: row.currentTaskName, responsibleName: row.currentTaskResponsibleName },
     })),
     total,
+    filterOptions,
     ...page,
   };
 }
@@ -183,10 +213,24 @@ export async function getWorkflowEvents(
 }
 
 // Bandeja: tareas abiertas donde el usuario es titular o suplente, en workflows activos.
-export async function listMyTasks(dependencies: WorkflowDependencies, actor: Actor) {
+export async function listMyTasks(
+  dependencies: WorkflowDependencies,
+  actor: Actor,
+  page: PageQuery,
+) {
   const now = dependencies.clock.now();
-  const tasks = await findTasksOfUser(dependencies.database.db, actor.id);
-  return tasks.map((task) => ({
+  const [year, month, day] = businessDayKey(now).split('-').map(Number);
+  const todayStart = businessLocalToInstant({ year: year ?? 0, month: month ?? 0, day: day ?? 0 });
+  const tomorrowStart = addBusinessCalendarDays(todayStart, 1);
+  const weekEnd = addBusinessCalendarDays(todayStart, 7);
+  const { rows, total, metrics } = await findTasksOfUser(dependencies.database.db, actor.id, {
+    ...page,
+    now,
+    todayStart,
+    tomorrowStart,
+    weekEnd,
+  });
+  return { tasks: rows.map((task) => ({
     id: task.id,
     workflowId: task.workflowId,
     code: task.code,
@@ -203,5 +247,5 @@ export async function listMyTasks(dependencies: WorkflowDependencies, actor: Act
       commune: task.propertyCommune,
       auctionAt: toIso(task.auctionAt),
     },
-  }));
+  })), total, metrics, ...page };
 }

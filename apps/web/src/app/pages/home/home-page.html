@@ -16,21 +16,127 @@
     <p class="form-error" role="alert">{{ message }}</p>
   }
 
+  <div class="status-filters" aria-label="Filtrar por estado">
+    <button type="button" [class.active]="statusFilter() === ''" (click)="setStatusFilter('')">
+      <strong>Todos</strong>
+      <span>Todos los estados</span>
+    </button>
+    <button
+      type="button"
+      class="good"
+      [class.active]="statusFilter() === 'ACTIVE'"
+      (click)="setStatusFilter('ACTIVE')"
+    >
+      <strong>Activos</strong>
+      <span>Workflow en curso</span>
+    </button>
+    <button
+      type="button"
+      class="paused"
+      [class.active]="statusFilter() === 'SUSPENDED'"
+      (click)="setStatusFilter('SUSPENDED')"
+    >
+      <strong>Suspendidos</strong>
+      <span>Temporalmente detenidos</span>
+    </button>
+    <button
+      type="button"
+      class="neutral"
+      [class.active]="statusFilter() === 'COMPLETED'"
+      (click)="setStatusFilter('COMPLETED')"
+    >
+      <strong>Terminados</strong>
+      <span>Proceso completado</span>
+    </button>
+    <button
+      type="button"
+      class="cancelled"
+      [class.active]="statusFilter() === 'CANCELLED'"
+      (click)="setStatusFilter('CANCELLED')"
+    >
+      <strong>Cancelados</strong>
+      <span>Workflow cerrado</span>
+    </button>
+  </div>
+
   <section class="card" aria-labelledby="workflows-title">
     <div class="card-header">
       <div>
         <h2 id="workflows-title">Remates de la semana</h2>
-        <span class="muted">{{ visibleWorkflows().length }} remates</span>
+        <span class="muted">{{ totalWorkflows() }} remates</span>
       </div>
       <div class="week-selector" aria-label="Selector semanal">
         <button type="button" (click)="changeWeek(-1)" aria-label="Semana anterior">‹</button>
         <strong aria-live="polite">{{ weekLabel() }}</strong>
         <button type="button" (click)="changeWeek(1)" aria-label="Semana siguiente">›</button>
+        <button
+          type="button"
+          class="filter-toggle"
+          [class.active]="isFiltersOpen() || hasFilters()"
+          [attr.aria-expanded]="isFiltersOpen()"
+          aria-controls="workflow-filter-panel"
+          [attr.aria-label]="isFiltersOpen() ? 'Cerrar filtros' : 'Abrir filtros'"
+          (click)="toggleFilters()"
+        >
+          <app-icon name="filter" />
+        </button>
       </div>
     </div>
+    @if (isFiltersOpen()) {
+      <form
+        id="workflow-filter-panel"
+        class="workflow-filters"
+        (submit)="applyFilters(); $event.preventDefault()"
+      >
+        <label>
+          <span>Responsable</span>
+          <select
+            #responsible
+            [value]="responsibleFilter() ?? ''"
+            (change)="setResponsibleFilter(responsible.value)"
+          >
+            <option value="">Todos</option>
+            @for (person of filterOptions().responsibles; track person.id) {
+              <option [value]="person.id">{{ person.name }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Comuna</span>
+          <select #commune [value]="communeFilter()" (change)="communeFilter.set(commune.value)">
+            <option value="">Todas</option>
+            @for (value of filterOptions().communes; track value) {
+              <option [value]="value">{{ value }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Región</span>
+          <select #region [value]="regionFilter()" (change)="regionFilter.set(region.value)">
+            <option value="">Todas</option>
+            @for (value of filterOptions().regions; track value) {
+              <option [value]="value">{{ value }}</option>
+            }
+          </select>
+        </label>
+        <div class="filter-actions">
+          <button type="submit" class="button primary" [disabled]="isLoading()">Filtrar</button>
+          @if (hasFilters()) {
+            <button
+              type="button"
+              class="button"
+              (click)="clearFilters()"
+              [disabled]="isLoading()"
+            >
+              Limpiar
+            </button>
+          }
+        </div>
+      </form>
+    }
     @if (visibleWorkflows().length === 0) {
       <p class="empty-state">
-        {{ isLoading() ? 'Cargando…' : 'No hay remates programados para esta semana.' }}
+        {{ emptyWorkflowMessage() }}
       </p>
     } @else {
       <div class="table-wrap">
@@ -40,36 +146,59 @@
               <th scope="col">Propiedad</th>
               <th scope="col">Comuna</th>
               <th scope="col">Remate</th>
-              <th scope="col">Tareas abiertas</th>
-              <th scope="col">Vencidas</th>
+              <th scope="col">Tarea actual</th>
               <th scope="col">Estado</th>
             </tr>
           </thead>
           <tbody>
             @for (workflow of visibleWorkflows(); track workflow.id) {
-              <tr>
+              <tr
+                class="workflow-row"
+                tabindex="0"
+                [attr.aria-label]="
+                  'Abrir ficha de ' +
+                  (workflow.property.title ?? 'Propiedad ' + workflow.property.id)
+                "
+                (click)="openDetail(workflow.id)"
+                (keydown.enter)="openDetail(workflow.id)"
+                (keydown.space)="$event.preventDefault(); openDetail(workflow.id)"
+              >
                 <td>
-                  <button type="button" class="property-link" (click)="openDetail(workflow.id)">
+                  <strong class="property-link">
                     {{ workflow.property.title ?? 'Propiedad ' + workflow.property.id }}
-                  </button>
+                  </strong>
                 </td>
                 <td data-label="Comuna">{{ workflow.property.commune ?? '—' }}</td>
                 <td data-label="Remate">{{ formatDateTime(workflow.auctionAt) }}</td>
-                <td data-label="Tareas abiertas">{{ workflow.openTaskCount }}</td>
-                <td data-label="Vencidas" [class.field-error]="workflow.overdueTaskCount > 0">
-                  {{ workflow.overdueTaskCount }}
+                <td data-label="Tarea actual" class="current-task-cell">
+                  @if (workflow.currentTask; as task) {
+                    <strong>{{ task.name }}</strong>
+                    <small>{{ task.responsibleName ?? 'Sin responsable asignado' }}</small>
+                  } @else {
+                    <span class="muted">Sin tareas abiertas</span>
+                  }
                 </td>
                 <td>
-                  <button type="button" class="row-action" (click)="openDetail(workflow.id)" aria-label="Abrir ficha lateral">
-                    <span class="status-pill" [class]="statusTones[workflow.status]">{{ statusLabels[workflow.status] }}</span>
+                  <span class="row-action">
+                    <span class="status-pill" [class]="statusTones[workflow.status]">
+                      {{ statusLabels[workflow.status] }}
+                    </span>
                     <span aria-hidden="true">›</span>
-                  </button>
+                  </span>
                 </td>
               </tr>
             }
           </tbody>
         </table>
       </div>
+      <app-list-pagination
+        [total]="totalWorkflows()"
+        [pageSize]="pageSize()"
+        [offset]="offset()"
+        [isLoading]="isLoading()"
+        (offsetChange)="setWorkflowOffset($event)"
+        (pageSizeChange)="setPageSize($event)"
+      />
     }
   </section>
 
@@ -77,7 +206,7 @@
     <section class="card" aria-labelledby="properties-title">
       <div class="card-header">
         <h2 id="properties-title">Propiedades sin workflow</h2>
-        <span class="muted">{{ properties().length }}</span>
+        <span class="muted">{{ totalProperties() }}</span>
       </div>
       @if (properties().length === 0) {
         <p class="empty-state">Todas las propiedades cargadas tienen workflow.</p>
@@ -113,6 +242,14 @@
             </tbody>
           </table>
         </div>
+        <app-list-pagination
+          [total]="totalProperties()"
+          [pageSize]="propertyPageSize()"
+          [offset]="propertyOffset()"
+          [isLoading]="isLoading()"
+          (offsetChange)="setPropertyOffset($event)"
+          (pageSizeChange)="setPropertyPageSize($event)"
+        />
       }
     </section>
   }
