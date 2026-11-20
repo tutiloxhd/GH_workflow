@@ -169,6 +169,23 @@ export async function listWorkflowSummaries(
           AND ti.status IN (${OPEN_TASK_STATUSES_SQL}) AND ti.due_at < ${query.now})`.mapWith(
         Number,
       ),
+      currentTaskName: sql<string | null>`(SELECT td.name
+        FROM task_instances ti
+        INNER JOIN task_definitions td ON td.id = ti.task_definition_id
+        WHERE ti.workflow_instance_id = ${workflowInstances.id}
+          AND ti.status IN (${OPEN_TASK_STATUSES_SQL})
+        ORDER BY CASE WHEN ti.status = 'IN_PROGRESS' THEN 0 ELSE 1 END,
+          td.display_order, ti.id
+        LIMIT 1)`,
+      currentTaskResponsibleName: sql<string | null>`(SELECT responsible_user.name
+        FROM task_instances ti
+        INNER JOIN task_definitions td ON td.id = ti.task_definition_id
+        LEFT JOIN users responsible_user ON responsible_user.id = ti.assigned_user_id
+        WHERE ti.workflow_instance_id = ${workflowInstances.id}
+          AND ti.status IN (${OPEN_TASK_STATUSES_SQL})
+        ORDER BY CASE WHEN ti.status = 'IN_PROGRESS' THEN 0 ELSE 1 END,
+          td.display_order, ti.id
+        LIMIT 1)`,
     })
     .from(workflowInstances)
     .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))

@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth/auth.service';
 import { formatDateTime, santiagoLocalToIso } from '../../core/time/santiago-time';
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
 import { ListPagination } from '../../shared/pagination/list-pagination';
+import { Icon } from '../../shared/icon/icon';
 import {
   PARTICIPANT_LABELS,
   WORKFLOW_STATUS_LABELS,
@@ -37,7 +38,7 @@ const EMPTY_FILTER_OPTIONS: WorkflowFilterOptions = { communes: [], regions: [],
 // Tablero inicial: remates con workflow y, para ADMIN, propiedades que aún no lo tienen.
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, ListPagination],
+  imports: [RouterLink, ListPagination, Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home-page.html',
   styleUrl: './home-page.css',
@@ -59,6 +60,7 @@ export class HomePage implements OnInit {
   protected readonly startingPropertyId = signal<number | null>(null);
   protected readonly selectedWeekStart = signal(keyFromDate(mondayFor(localDateKey(new Date()))));
   protected readonly selectedWorkflow = signal<WorkflowDetail | null>(null);
+  protected readonly isFiltersOpen = signal(false);
   protected readonly statusFilter = signal<WorkflowStatus | ''>('');
   protected readonly responsibleFilter = signal<number | null>(null);
   protected readonly communeFilter = signal('');
@@ -74,6 +76,11 @@ export class HomePage implements OnInit {
       Boolean(this.communeFilter().trim()) ||
       Boolean(this.regionFilter().trim()),
   );
+  protected readonly emptyWorkflowMessage = computed(() => {
+    if (this.isLoading()) return 'Cargando…';
+    if (this.hasFilters()) return 'No hay remates que coincidan con los filtros en esta semana.';
+    return 'No hay remates programados para esta semana.';
+  });
 
   protected readonly visibleWorkflows = this.workflows;
   protected readonly weekLabel = computed(() => {
@@ -147,6 +154,10 @@ export class HomePage implements OnInit {
     void this.load();
   }
 
+  protected toggleFilters(): void {
+    this.isFiltersOpen.update((isOpen) => !isOpen);
+  }
+
   protected clearFilters(): void {
     this.statusFilter.set('');
     this.responsibleFilter.set(null);
@@ -158,6 +169,10 @@ export class HomePage implements OnInit {
   protected setStatusFilter(value: string): void {
     this.statusFilter.set(value as WorkflowStatus | '');
     this.applyFilters();
+  }
+
+  protected setResponsibleFilter(value: string): void {
+    this.responsibleFilter.set(value === '' ? null : Number(value));
   }
 
   protected setPageSize(value: number): void {

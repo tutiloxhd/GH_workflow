@@ -168,6 +168,10 @@ export async function listWorkflows(
       auctionAt: toIso(row.auctionAt),
       openTaskCount: row.openTaskCount,
       overdueTaskCount: row.overdueTaskCount,
+      currentTask:
+        row.currentTaskName === null
+          ? null
+          : { name: row.currentTaskName, responsibleName: row.currentTaskResponsibleName },
     })),
     total,
     filterOptions,

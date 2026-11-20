@@ -1199,6 +1199,11 @@ components:
         auctionAt: { type: [string, 'null'], format: date-time }
         openTaskCount: { type: integer }
         overdueTaskCount: { type: integer }
+        currentTask:
+          type: [object, 'null']
+          properties:
+            name: { type: string }
+            responsibleName: { type: [string, 'null'] }
     PropertyRow:
       type: object
       properties:

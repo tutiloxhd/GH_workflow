@@ -105,6 +105,10 @@ export interface WorkflowSummary {
   readonly auctionAt: string | null;
   readonly openTaskCount: number;
   readonly overdueTaskCount: number;
+  readonly currentTask: {
+    readonly name: string;
+    readonly responsibleName: string | null;
+  } | null;
 }
 
 export interface WorkflowFilterOptions {
