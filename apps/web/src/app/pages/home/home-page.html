@@ -20,7 +20,7 @@
     <div class="card-header">
       <div>
         <h2 id="workflows-title">Remates de la semana</h2>
-        <span class="muted">{{ visibleWorkflows().length }} remates</span>
+        <span class="muted">{{ totalWorkflows() }} remates</span>
       </div>
       <div class="week-selector" aria-label="Selector semanal">
         <button type="button" (click)="changeWeek(-1)" aria-label="Semana anterior">‹</button>
@@ -28,9 +28,47 @@
         <button type="button" (click)="changeWeek(1)" aria-label="Semana siguiente">›</button>
       </div>
     </div>
+    <div class="status-filters" aria-label="Filtrar por estado">
+      <button type="button" [class.active]="statusFilter() === ''" (click)="setStatusFilter('')">Todos</button>
+      <button type="button" class="good" [class.active]="statusFilter() === 'ACTIVE'" (click)="setStatusFilter('ACTIVE')">Activos</button>
+      <button type="button" class="paused" [class.active]="statusFilter() === 'SUSPENDED'" (click)="setStatusFilter('SUSPENDED')">Suspendidos</button>
+      <button type="button" class="neutral" [class.active]="statusFilter() === 'COMPLETED'" (click)="setStatusFilter('COMPLETED')">Terminados</button>
+      <button type="button" class="cancelled" [class.active]="statusFilter() === 'CANCELLED'" (click)="setStatusFilter('CANCELLED')">Cancelados</button>
+    </div>
+    <form class="workflow-filters" (submit)="applyFilters(); $event.preventDefault()">
+      <label>
+        <span>Responsable</span>
+        <select #responsible [value]="responsibleFilter() ?? ''" (change)="responsibleFilter.set(responsible.value ? +responsible.value : null)">
+          <option value="">Todos</option>
+          @for (person of filterOptions().responsibles; track person.id) {
+            <option [value]="person.id">{{ person.name }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Comuna</span>
+        <select #commune [value]="communeFilter()" (change)="communeFilter.set(commune.value)">
+          <option value="">Todas</option>
+          @for (value of filterOptions().communes; track value) { <option [value]="value">{{ value }}</option> }
+        </select>
+      </label>
+      <label>
+        <span>Región</span>
+        <select #region [value]="regionFilter()" (change)="regionFilter.set(region.value)">
+          <option value="">Todas</option>
+          @for (value of filterOptions().regions; track value) { <option [value]="value">{{ value }}</option> }
+        </select>
+      </label>
+      <div class="filter-actions">
+        <button type="submit" class="button primary" [disabled]="isLoading()">Filtrar</button>
+        @if (hasFilters()) {
+          <button type="button" class="button" (click)="clearFilters()" [disabled]="isLoading()">Limpiar</button>
+        }
+      </div>
+    </form>
     @if (visibleWorkflows().length === 0) {
       <p class="empty-state">
-        {{ isLoading() ? 'Cargando…' : 'No hay remates programados para esta semana.' }}
+        {{ isLoading() ? 'Cargando…' : hasFilters() ? 'No hay remates que coincidan con los filtros en esta semana.' : 'No hay remates programados para esta semana.' }}
       </p>
     } @else {
       <div class="table-wrap">
@@ -47,11 +85,18 @@
           </thead>
           <tbody>
             @for (workflow of visibleWorkflows(); track workflow.id) {
-              <tr>
+              <tr
+                class="workflow-row"
+                tabindex="0"
+                [attr.aria-label]="'Abrir ficha de ' + (workflow.property.title ?? 'Propiedad ' + workflow.property.id)"
+                (click)="openDetail(workflow.id)"
+                (keydown.enter)="openDetail(workflow.id)"
+                (keydown.space)="$event.preventDefault(); openDetail(workflow.id)"
+              >
                 <td>
-                  <button type="button" class="property-link" (click)="openDetail(workflow.id)">
+                  <strong class="property-link">
                     {{ workflow.property.title ?? 'Propiedad ' + workflow.property.id }}
-                  </button>
+                  </strong>
                 </td>
                 <td data-label="Comuna">{{ workflow.property.commune ?? '—' }}</td>
                 <td data-label="Remate">{{ formatDateTime(workflow.auctionAt) }}</td>
@@ -60,15 +105,39 @@
                   {{ workflow.overdueTaskCount }}
                 </td>
                 <td>
-                  <button type="button" class="row-action" (click)="openDetail(workflow.id)" aria-label="Abrir ficha lateral">
+                  <span class="row-action">
                     <span class="status-pill" [class]="statusTones[workflow.status]">{{ statusLabels[workflow.status] }}</span>
                     <span aria-hidden="true">›</span>
-                  </button>
+                  </span>
                 </td>
               </tr>
             }
           </tbody>
         </table>
+      </div>
+      <div class="table-pagination" aria-label="Paginación de remates">
+        <label>
+          Mostrar
+          <select #size [value]="pageSize()" (change)="setPageSize(size.value)">
+            @for (value of pageSizes; track value) { <option [value]="value">{{ value }}</option> }
+          </select>
+        </label>
+        <span>Página {{ currentPage() }} de {{ totalPages() }}</span>
+        <div class="page-numbers">
+          @for (page of paginationPages(); track page; let index = $index) {
+            @if (index > 0 && page - paginationPages()[index - 1] > 1) {
+              <span class="page-gap" aria-hidden="true">…</span>
+            }
+            <button
+              type="button"
+              [class.active]="page === currentPage()"
+              [attr.aria-current]="page === currentPage() ? 'page' : null"
+              [attr.aria-label]="'Ir a la página ' + page"
+              [disabled]="isLoading()"
+              (click)="goToPage(page)"
+            >{{ page }}</button>
+          }
+        </div>
       </div>
     }
   </section>

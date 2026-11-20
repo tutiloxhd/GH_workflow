@@ -1,6 +1,7 @@
-import { and, asc, count, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { DatabaseExecutor } from '../../../platform/database/database.js';
 import { properties } from '../../../platform/database/schema/admin-new-sync.schema.js';
+import { users } from '../../../platform/database/schema/identity.schema.js';
 import {
   taskDefinitions,
   taskDependencies,
@@ -106,7 +107,18 @@ const OPEN_TASK_STATUSES_SQL = sql.raw(`'READY', 'IN_PROGRESS'`);
 // donde el usuario tiene un puesto vigente o alguna tarea.
 export async function listWorkflowSummaries(
   executor: DatabaseExecutor,
-  query: { visibleToUserId: number | null; now: Date; limit: number; offset: number },
+  query: {
+    visibleToUserId: number | null;
+    now: Date;
+    limit: number;
+    offset: number;
+    status?: WorkflowStatus | undefined;
+    responsibleUserId?: number | undefined;
+    commune?: string | undefined;
+    region?: string | undefined;
+    auctionFrom?: Date | undefined;
+    auctionTo?: Date | undefined;
+  },
 ) {
   const visibility =
     query.visibleToUserId === null
@@ -119,6 +131,26 @@ export async function listWorkflowSummaries(
                            AND (ti.assigned_user_id = ${query.visibleToUserId}
                                 OR ti.backup_user_id = ${query.visibleToUserId})))`;
 
+  const filters = and(
+    visibility,
+    query.status ? eq(workflowInstances.status, query.status) : undefined,
+    query.commune
+      ? sql`LOWER(${properties.commune}) LIKE ${`%${query.commune.toLowerCase()}%`}`
+      : undefined,
+    query.region
+      ? sql`LOWER(${properties.region}) LIKE ${`%${query.region.toLowerCase()}%`}`
+      : undefined,
+    query.responsibleUserId
+      ? sql`EXISTS (SELECT 1 FROM ${taskInstances} filter_task
+          WHERE filter_task.workflow_instance_id = ${workflowInstances.id}
+            AND filter_task.status IN (${OPEN_TASK_STATUSES_SQL})
+            AND (filter_task.assigned_user_id = ${query.responsibleUserId}
+              OR filter_task.backup_user_id = ${query.responsibleUserId}))`
+      : undefined,
+    query.auctionFrom ? gte(properties.auctionAt, query.auctionFrom) : undefined,
+    query.auctionTo ? lt(properties.auctionAt, query.auctionTo) : undefined,
+  );
+
   const rows = await executor
     .select({
       id: workflowInstances.id,
@@ -127,6 +159,7 @@ export async function listWorkflowSummaries(
       propertyId: properties.id,
       propertyTitle: properties.title,
       commune: properties.commune,
+      region: properties.region,
       auctionAt: properties.auctionAt,
       openTaskCount: sql<number>`(SELECT COUNT(*) FROM task_instances ti
         WHERE ti.workflow_instance_id = ${workflowInstances.id}
@@ -139,7 +172,7 @@ export async function listWorkflowSummaries(
     })
     .from(workflowInstances)
     .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
-    .where(visibility)
+    .where(filters)
     .orderBy(
       sql`${properties.auctionAt} IS NULL`,
       asc(properties.auctionAt),
@@ -150,8 +183,46 @@ export async function listWorkflowSummaries(
   const [totalRow] = await executor
     .select({ total: count() })
     .from(workflowInstances)
-    .where(visibility);
+    .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
+    .where(filters);
   return { rows, total: totalRow?.total ?? 0 };
+}
+
+export async function listWorkflowFilterOptions(
+  executor: DatabaseExecutor,
+  visibleToUserId: number | null,
+) {
+  const visibility =
+    visibleToUserId === null
+      ? undefined
+      : sql`(EXISTS (SELECT 1 FROM workflow_participants wp
+                      WHERE wp.workflow_instance_id = ${workflowInstances.id}
+                        AND wp.user_id = ${visibleToUserId} AND wp.valid_to IS NULL)
+             OR EXISTS (SELECT 1 FROM task_instances ti
+                         WHERE ti.workflow_instance_id = ${workflowInstances.id}
+                           AND (ti.assigned_user_id = ${visibleToUserId}
+                                OR ti.backup_user_id = ${visibleToUserId})))`;
+  const [locations, responsibles] = await Promise.all([
+    executor
+      .selectDistinct({ commune: properties.commune, region: properties.region })
+      .from(workflowInstances)
+      .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
+      .where(visibility),
+    executor
+      .selectDistinct({ id: users.id, name: users.name })
+      .from(users)
+      .innerJoin(
+        taskInstances,
+        or(eq(taskInstances.assignedUserId, users.id), eq(taskInstances.backupUserId, users.id)),
+      )
+      .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))
+      .where(and(visibility, inArray(taskInstances.status, ['READY', 'IN_PROGRESS']))),
+  ]);
+  return {
+    communes: [...new Set(locations.map(({ commune }) => commune).filter((value) => value !== null))].sort(),
+    regions: [...new Set(locations.map(({ region }) => region).filter((value) => value !== null))].sort(),
+    responsibles: responsibles.sort((left, right) => left.name.localeCompare(right.name, 'es')),
+  };
 }
 
 export async function listPropertiesWithWorkflow(

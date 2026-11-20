@@ -2,8 +2,29 @@
 .week-selector { display: flex; align-items: center; gap: 8px; }
 .week-selector button { width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 1.5rem; cursor: pointer; }
 .week-selector strong { min-width: 180px; color: var(--muted); font-size: .8125rem; text-align: center; }
-.property-link, .row-action { border: 0; background: transparent; cursor: pointer; }
-.property-link { padding: 8px 0; font-weight: 750; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+.status-filters { display: grid; grid-template-columns: repeat(5, minmax(100px, 1fr)); gap: 10px; padding: 14px 16px 0; }
+.status-filters button { min-height: 48px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--slate-soft); color: var(--slate); font-weight: 750; cursor: pointer; }
+.status-filters button.good { background: var(--green-soft); color: var(--green); }
+.status-filters button.paused { background: #f1ecfb; color: #6b3fb5; }
+.status-filters button.cancelled { background: #e5e5e4; color: #494948; }
+.status-filters button.active { box-shadow: inset 0 0 0 2px currentColor; }
+.workflow-filters { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)) auto; gap: 12px; align-items: end; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.workflow-filters label { display: grid; gap: 5px; color: var(--muted); font-size: .75rem; font-weight: 650; }
+.workflow-filters input, .workflow-filters select { width: 100%; min-height: 42px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.filter-actions { display: flex; gap: 8px; }
+.table-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 12px 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: .75rem; }
+.table-pagination label, .table-pagination > div { display: flex; align-items: center; gap: 8px; }
+.table-pagination select { min-height: 40px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.page-numbers button { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-weight: 700; cursor: pointer; }
+.page-numbers button:hover { background: var(--hover); }
+.page-numbers button.active { border-color: var(--navy); background: var(--navy); color: #fff; }
+.page-numbers button:disabled { cursor: wait; opacity: .6; }
+.page-gap { min-width: 18px; text-align: center; }
+.workflow-row { cursor: pointer; }
+.workflow-row:hover { background: var(--hover); }
+.workflow-row:focus-visible { position: relative; z-index: 1; }
+.property-link, .row-action { border: 0; background: transparent; }
+.property-link { display: inline-block; padding: 8px 0; font-weight: 750; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
 .row-action { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; gap: 8px; font-size: 1.5rem; }
 .detail-backdrop { position: fixed; z-index: 30; inset: 0; border: 0; background: rgb(17 17 16 / 28%); }
 .detail-panel { position: fixed; z-index: 31; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); overflow: auto; border-left: 1px solid var(--line); background: var(--surface); box-shadow: -18px 0 50px rgb(25 25 24 / 18%); }
@@ -38,4 +59,13 @@
   .card-header { align-items: flex-start; flex-direction: column; }
   .week-selector { width: 100%; justify-content: space-between; }
   .week-selector strong { min-width: 0; }
+  .workflow-filters { grid-template-columns: 1fr; }
+  .status-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filter-actions .button { flex: 1; }
+  .table-pagination { align-items: stretch; flex-direction: column; }
+  .page-numbers { flex-wrap: wrap; }
+}
+
+@media (min-width: 641px) and (max-width: 1100px) {
+  .workflow-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

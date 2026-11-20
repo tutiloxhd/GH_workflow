@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal, type OnIn
 import { Router, RouterLink } from '@angular/router';
 import { problemMessage, toApiProblem } from '../../core/api/api-problem';
 import { AuthService } from '../../core/auth/auth.service';
-import { formatDateTime } from '../../core/time/santiago-time';
+import { formatDateTime, santiagoLocalToIso } from '../../core/time/santiago-time';
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
 import {
   PARTICIPANT_LABELS,
@@ -11,6 +11,8 @@ import {
   type ParticipantType,
   type PropertyRow,
   type WorkflowDetail,
+  type WorkflowFilterOptions,
+  type WorkflowStatus,
   type WorkflowSummary,
 } from '../../core/workflow/workflow.model';
 
@@ -29,6 +31,8 @@ const mondayFor = (dateKey: string): Date => {
 };
 const keyFromDate = (date: Date): string => date.toISOString().slice(0, 10);
 const PARTICIPANT_ORDER: readonly ParticipantType[] = ['MANAGER', 'BIDDER', 'LEGAL_REVIEWER'];
+const PAGE_SIZES = [10, 20, 50, 100] as const;
+const EMPTY_FILTER_OPTIONS: WorkflowFilterOptions = { communes: [], regions: [], responsibles: [] };
 
 // Tablero inicial: remates con workflow y, para ADMIN, propiedades que aún no lo tienen.
 @Component({
@@ -46,22 +50,39 @@ export class HomePage implements OnInit {
   protected readonly user = this.auth.currentUser;
   protected readonly isAdmin = this.auth.hasRole('ADMIN');
   protected readonly workflows = signal<readonly WorkflowSummary[]>([]);
+  protected readonly totalWorkflows = signal(0);
+  protected readonly filterOptions = signal<WorkflowFilterOptions>(EMPTY_FILTER_OPTIONS);
   protected readonly properties = signal<readonly PropertyRow[]>([]);
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly startingPropertyId = signal<number | null>(null);
   protected readonly selectedWeekStart = signal(keyFromDate(mondayFor(localDateKey(new Date()))));
   protected readonly selectedWorkflow = signal<WorkflowDetail | null>(null);
-
-  protected readonly visibleWorkflows = computed(() => {
-    const start = dateFromKey(this.selectedWeekStart());
-    const end = shiftDate(start, 7);
-    return this.workflows().filter((workflow) => {
-      if (!workflow.auctionAt) return false;
-      const auctionDate = dateFromKey(localDateKey(new Date(workflow.auctionAt)));
-      return auctionDate >= start && auctionDate < end;
-    });
+  protected readonly statusFilter = signal<WorkflowStatus | ''>('');
+  protected readonly responsibleFilter = signal<number | null>(null);
+  protected readonly communeFilter = signal('');
+  protected readonly regionFilter = signal('');
+  protected readonly pageSize = signal(10);
+  protected readonly offset = signal(0);
+  protected readonly pageSizes = PAGE_SIZES;
+  protected readonly currentPage = computed(() => Math.floor(this.offset() / this.pageSize()) + 1);
+  protected readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalWorkflows() / this.pageSize())));
+  protected readonly paginationPages = computed(() => {
+    const current = this.currentPage();
+    const total = this.totalPages();
+    return [...new Set([1, current - 2, current - 1, current, current + 1, current + 2, total])]
+      .filter((page) => page >= 1 && page <= total)
+      .sort((left, right) => left - right);
   });
+  protected readonly hasFilters = computed(
+    () =>
+      Boolean(this.statusFilter()) ||
+      this.responsibleFilter() !== null ||
+      Boolean(this.communeFilter().trim()) ||
+      Boolean(this.regionFilter().trim()),
+  );
+
+  protected readonly visibleWorkflows = this.workflows;
   protected readonly weekLabel = computed(() => {
     const start = dateFromKey(this.selectedWeekStart());
     const end = shiftDate(start, 6);
@@ -81,10 +102,21 @@ export class HomePage implements OnInit {
     this.errorMessage.set(null);
     try {
       const [workflowPage, properties] = await Promise.all([
-        this.api.listWorkflows(),
+        this.api.listWorkflows({
+          status: this.statusFilter() || undefined,
+          responsibleUserId: this.responsibleFilter() ?? undefined,
+          commune: this.communeFilter().trim() || undefined,
+          region: this.regionFilter().trim() || undefined,
+          auctionFrom: santiagoLocalToIso(`${this.selectedWeekStart()}T00:00`),
+          auctionTo: santiagoLocalToIso(`${keyFromDate(shiftDate(dateFromKey(this.selectedWeekStart()), 7))}T00:00`),
+          limit: this.pageSize(),
+          offset: this.offset(),
+        }),
         this.isAdmin ? this.api.listPropertiesWithoutWorkflow() : Promise.resolve([]),
       ]);
       this.workflows.set(workflowPage.workflows);
+      this.totalWorkflows.set(workflowPage.total);
+      this.filterOptions.set(workflowPage.filterOptions);
       this.properties.set(properties);
     } catch (error) {
       this.errorMessage.set(problemMessage(toApiProblem(error)));
@@ -108,7 +140,41 @@ export class HomePage implements OnInit {
 
   protected changeWeek(offset: number): void {
     this.selectedWeekStart.set(keyFromDate(shiftDate(dateFromKey(this.selectedWeekStart()), offset * 7)));
+    this.offset.set(0);
     this.closeDetail();
+    void this.load();
+  }
+
+  protected applyFilters(): void {
+    this.offset.set(0);
+    this.closeDetail();
+    void this.load();
+  }
+
+  protected clearFilters(): void {
+    this.statusFilter.set('');
+    this.responsibleFilter.set(null);
+    this.communeFilter.set('');
+    this.regionFilter.set('');
+    this.applyFilters();
+  }
+
+  protected setStatusFilter(value: string): void {
+    this.statusFilter.set(value as WorkflowStatus | '');
+    this.applyFilters();
+  }
+
+  protected setPageSize(value: string): void {
+    this.pageSize.set(Number(value));
+    this.offset.set(0);
+    void this.load();
+  }
+
+  protected goToPage(page: number): void {
+    if (page === this.currentPage() || page < 1 || page > this.totalPages()) return;
+    this.offset.set((page - 1) * this.pageSize());
+    this.closeDetail();
+    void this.load();
   }
 
   protected async openDetail(workflowId: number): Promise<void> {

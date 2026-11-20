@@ -26,6 +26,7 @@ import {
 } from '../application/workflow-queries.js';
 import { DUE_REFERENCES } from '../domain/due-date.js';
 import { PARTICIPANT_TYPES } from '../domain/participants.js';
+import { WORKFLOW_STATUSES } from '../domain/statuses.js';
 import type { Actor } from '../domain/task-rules.js';
 import { EVIDENCE_PROBLEMS, WORKFLOW_PROBLEMS } from './workflow-problems.js';
 
@@ -67,7 +68,15 @@ const pageFields = {
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
   offset: z.coerce.number().int().min(0).default(0),
 };
-const pageQuery = z.strictObject(pageFields);
+const workflowsQuery = z.strictObject({
+  ...pageFields,
+  status: z.enum(WORKFLOW_STATUSES).optional(),
+  responsibleUserId: positiveId.optional(),
+  commune: z.string().trim().min(1).max(100).optional(),
+  region: z.string().trim().min(1).max(100).optional(),
+  auctionFrom: instant.optional(),
+  auctionTo: instant.optional(),
+});
 const propertiesQuery = z.strictObject({
   ...pageFields,
   withoutWorkflow: z.enum(['true', 'false']).optional(),
@@ -138,7 +147,7 @@ export function createWorkflowRouter(
   );
 
   router.get('/workflows', async (request, response) => {
-    const query = parse(pageQuery, request.query, response);
+    const query = parse(workflowsQuery, request.query, response);
     if (!query) return;
     response.json(await listWorkflows(workflow, actorOf(response), query));
   });

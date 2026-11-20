@@ -9,7 +9,9 @@ import type {
   PropertyRow,
   WorkflowDetail,
   WorkflowEvent,
+  WorkflowFilterOptions,
   WorkflowSummary,
+  WorkflowStatus,
 } from './workflow.model';
 
 interface WorkflowEnvelope {
@@ -22,8 +24,6 @@ export interface ParticipantAssignment {
   readonly backupUserId: number | null;
 }
 
-const PAGE_SIZE = 100;
-
 @Injectable({ providedIn: 'root' })
 export class WorkflowApiService {
   private readonly http = inject(HttpClient);
@@ -34,15 +34,38 @@ export class WorkflowApiService {
     return workflow;
   }
 
-  async listWorkflows(): Promise<{ workflows: readonly WorkflowSummary[]; total: number }> {
-    const params = new HttpParams().set('limit', PAGE_SIZE);
+  async listWorkflows(filters: {
+    readonly status?: WorkflowStatus;
+    readonly responsibleUserId?: number;
+    readonly commune?: string;
+    readonly region?: string;
+    readonly auctionFrom?: string;
+    readonly auctionTo?: string;
+    readonly limit: number;
+    readonly offset: number;
+  }): Promise<{
+    workflows: readonly WorkflowSummary[];
+    total: number;
+    filterOptions: WorkflowFilterOptions;
+  }> {
+    let params = new HttpParams().set('limit', filters.limit).set('offset', filters.offset);
+    if (filters.status) params = params.set('status', filters.status);
+    if (filters.responsibleUserId) params = params.set('responsibleUserId', filters.responsibleUserId);
+    if (filters.commune) params = params.set('commune', filters.commune);
+    if (filters.region) params = params.set('region', filters.region);
+    if (filters.auctionFrom) params = params.set('auctionFrom', filters.auctionFrom);
+    if (filters.auctionTo) params = params.set('auctionTo', filters.auctionTo);
     return firstValueFrom(
-      this.http.get<{ workflows: WorkflowSummary[]; total: number }>('/api/workflows', { params }),
+      this.http.get<{
+        workflows: WorkflowSummary[];
+        total: number;
+        filterOptions: WorkflowFilterOptions;
+      }>('/api/workflows', { params }),
     );
   }
 
   async listPropertiesWithoutWorkflow(): Promise<readonly PropertyRow[]> {
-    const params = new HttpParams().set('limit', PAGE_SIZE).set('withoutWorkflow', 'true');
+    const params = new HttpParams().set('limit', 100).set('withoutWorkflow', 'true');
     const { properties } = await firstValueFrom(
       this.http.get<{ properties: PropertyRow[] }>('/api/properties', { params }),
     );
