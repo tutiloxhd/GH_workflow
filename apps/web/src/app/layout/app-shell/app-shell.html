@@ -58,6 +58,11 @@
                     type="button"
                     class="notification-entry"
                     [class.unread]="!notification.readAt"
+                    [class.notice-info]="notification.trigger === 'TASK_ASSIGNED' || notification.trigger === 'TASK_COMPLETED' || notification.trigger === 'WORKFLOW_RESUMED'"
+                    [class.notice-warning]="notification.trigger === 'TASK_REMINDER' || notification.trigger === 'TASK_ESCALATION' || notification.trigger === 'WORKFLOW_REPROGRAMMED'"
+                    [class.notice-danger]="notification.trigger === 'TASK_OVERDUE'"
+                    [class.notice-paused]="notification.trigger === 'WORKFLOW_SUSPENDED'"
+                    [class.notice-closed]="notification.trigger === 'WORKFLOW_CANCELLED'"
                     (click)="
                       openNotification(
                         notification.id,

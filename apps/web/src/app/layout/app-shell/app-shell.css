@@ -214,12 +214,24 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+  border-left: 4px solid transparent;
 }
 
 .notification-entry.unread {
-  border-left: 4px solid var(--navy);
   background: #f5f7fb;
 }
+
+.notification-entry.notice-info { border-left-color: #2563a6; }
+.notification-entry.notice-warning { border-left-color: #c07700; }
+.notification-entry.notice-danger { border-left-color: #c62828; }
+.notification-entry.notice-paused { border-left-color: #7356bd; }
+.notification-entry.notice-closed { border-left-color: #4b5563; }
+
+.notification-entry.notice-info strong { color: #20558a; }
+.notification-entry.notice-warning strong { color: #925800; }
+.notification-entry.notice-danger strong { color: #a51f1f; }
+.notification-entry.notice-paused strong { color: #6045a1; }
+.notification-entry.notice-closed strong { color: #374151; }
 
 .notification-entry span {
   color: var(--muted);
