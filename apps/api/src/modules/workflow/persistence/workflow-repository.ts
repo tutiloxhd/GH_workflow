@@ -739,8 +739,24 @@ export async function insertAppliedReprogramming(
 
 // ───────────── Bandeja ─────────────
 
-export async function findTasksOfUser(executor: DatabaseExecutor, userId: number) {
-  return executor
+export async function findTasksOfUser(
+  executor: DatabaseExecutor,
+  userId: number,
+  page: {
+    limit: number;
+    offset: number;
+    now: Date;
+    todayStart: Date;
+    tomorrowStart: Date;
+    weekEnd: Date;
+  },
+) {
+  const filter = and(
+    or(eq(taskInstances.assignedUserId, userId), eq(taskInstances.backupUserId, userId)),
+    inArray(taskInstances.status, ['READY', 'IN_PROGRESS']),
+    eq(workflowInstances.status, 'ACTIVE'),
+  );
+  const rows = await executor
     .select({
       id: taskInstances.id,
       workflowId: taskInstances.workflowInstanceId,
@@ -761,12 +777,27 @@ export async function findTasksOfUser(executor: DatabaseExecutor, userId: number
     .innerJoin(taskDefinitions, eq(taskDefinitions.id, taskInstances.taskDefinitionId))
     .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))
     .innerJoin(properties, eq(properties.id, workflowInstances.propertyId))
-    .where(
-      and(
-        or(eq(taskInstances.assignedUserId, userId), eq(taskInstances.backupUserId, userId)),
-        inArray(taskInstances.status, ['READY', 'IN_PROGRESS']),
-        eq(workflowInstances.status, 'ACTIVE'),
-      ),
-    )
-    .orderBy(sql`${taskInstances.dueAt} IS NULL`, asc(taskInstances.dueAt), asc(taskInstances.id));
+    .where(filter)
+    .orderBy(sql`${taskInstances.dueAt} IS NULL`, asc(taskInstances.dueAt), asc(taskInstances.id))
+    .limit(page.limit)
+    .offset(page.offset);
+  const [summary] = await executor
+    .select({
+      total: count(),
+      overdue: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} < ${page.now} THEN 1 ELSE 0 END)`.mapWith(Number),
+      today: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.todayStart} AND ${taskInstances.dueAt} < ${page.tomorrowStart} THEN 1 ELSE 0 END)`.mapWith(Number),
+      thisWeek: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.tomorrowStart} AND ${taskInstances.dueAt} < ${page.weekEnd} THEN 1 ELSE 0 END)`.mapWith(Number),
+    })
+    .from(taskInstances)
+    .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))
+    .where(filter);
+  return {
+    rows,
+    total: summary?.total ?? 0,
+    metrics: {
+      overdue: summary?.overdue ?? 0,
+      today: summary?.today ?? 0,
+      thisWeek: summary?.thisWeek ?? 0,
+    },
+  };
 }

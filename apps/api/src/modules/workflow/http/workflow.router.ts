@@ -68,6 +68,7 @@ const pageFields = {
   limit: z.coerce.number().int().min(1).max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
   offset: z.coerce.number().int().min(0).default(0),
 };
+const pageQuery = z.strictObject(pageFields);
 const workflowsQuery = z.strictObject({
   ...pageFields,
   status: z.enum(WORKFLOW_STATUSES).optional(),
@@ -228,8 +229,10 @@ export function createWorkflowRouter(
     );
   });
 
-  router.get('/tasks/mine', async (_request, response) => {
-    response.json({ tasks: await listMyTasks(workflow, actorOf(response)) });
+  router.get('/tasks/mine', async (request, response) => {
+    const query = parse(pageQuery, request.query, response);
+    if (!query) return;
+    response.json(await listMyTasks(workflow, actorOf(response), query));
   });
 
   router.post('/tasks/:taskId/start', async (request, response) => {

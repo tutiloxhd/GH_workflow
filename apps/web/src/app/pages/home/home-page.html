@@ -115,30 +115,14 @@
           </tbody>
         </table>
       </div>
-      <div class="table-pagination" aria-label="Paginación de remates">
-        <label>
-          Mostrar
-          <select #size [value]="pageSize()" (change)="setPageSize(size.value)">
-            @for (value of pageSizes; track value) { <option [value]="value">{{ value }}</option> }
-          </select>
-        </label>
-        <span>Página {{ currentPage() }} de {{ totalPages() }}</span>
-        <div class="page-numbers">
-          @for (page of paginationPages(); track page; let index = $index) {
-            @if (index > 0 && page - paginationPages()[index - 1] > 1) {
-              <span class="page-gap" aria-hidden="true">…</span>
-            }
-            <button
-              type="button"
-              [class.active]="page === currentPage()"
-              [attr.aria-current]="page === currentPage() ? 'page' : null"
-              [attr.aria-label]="'Ir a la página ' + page"
-              [disabled]="isLoading()"
-              (click)="goToPage(page)"
-            >{{ page }}</button>
-          }
-        </div>
-      </div>
+      <app-list-pagination
+        [total]="totalWorkflows()"
+        [pageSize]="pageSize()"
+        [offset]="offset()"
+        [isLoading]="isLoading()"
+        (offsetChange)="setWorkflowOffset($event)"
+        (pageSizeChange)="setPageSize($event)"
+      />
     }
   </section>
 
@@ -146,7 +130,7 @@
     <section class="card" aria-labelledby="properties-title">
       <div class="card-header">
         <h2 id="properties-title">Propiedades sin workflow</h2>
-        <span class="muted">{{ properties().length }}</span>
+        <span class="muted">{{ totalProperties() }}</span>
       </div>
       @if (properties().length === 0) {
         <p class="empty-state">Todas las propiedades cargadas tienen workflow.</p>
@@ -182,6 +166,14 @@
             </tbody>
           </table>
         </div>
+        <app-list-pagination
+          [total]="totalProperties()"
+          [pageSize]="propertyPageSize()"
+          [offset]="propertyOffset()"
+          [isLoading]="isLoading()"
+          (offsetChange)="setPropertyOffset($event)"
+          (pageSizeChange)="setPropertyPageSize($event)"
+        />
       }
     </section>
   }

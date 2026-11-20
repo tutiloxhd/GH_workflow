@@ -4,6 +4,7 @@ import { problemMessage, toApiProblem } from '../../core/api/api-problem';
 import { AuthService } from '../../core/auth/auth.service';
 import { formatDateTime, santiagoLocalToIso } from '../../core/time/santiago-time';
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
+import { ListPagination } from '../../shared/pagination/list-pagination';
 import {
   PARTICIPANT_LABELS,
   WORKFLOW_STATUS_LABELS,
@@ -31,13 +32,12 @@ const mondayFor = (dateKey: string): Date => {
 };
 const keyFromDate = (date: Date): string => date.toISOString().slice(0, 10);
 const PARTICIPANT_ORDER: readonly ParticipantType[] = ['MANAGER', 'BIDDER', 'LEGAL_REVIEWER'];
-const PAGE_SIZES = [10, 20, 50, 100] as const;
 const EMPTY_FILTER_OPTIONS: WorkflowFilterOptions = { communes: [], regions: [], responsibles: [] };
 
 // Tablero inicial: remates con workflow y, para ADMIN, propiedades que aún no lo tienen.
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink],
+  imports: [RouterLink, ListPagination],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home-page.html',
   styleUrl: './home-page.css',
@@ -53,6 +53,7 @@ export class HomePage implements OnInit {
   protected readonly totalWorkflows = signal(0);
   protected readonly filterOptions = signal<WorkflowFilterOptions>(EMPTY_FILTER_OPTIONS);
   protected readonly properties = signal<readonly PropertyRow[]>([]);
+  protected readonly totalProperties = signal(0);
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly startingPropertyId = signal<number | null>(null);
@@ -64,16 +65,8 @@ export class HomePage implements OnInit {
   protected readonly regionFilter = signal('');
   protected readonly pageSize = signal(10);
   protected readonly offset = signal(0);
-  protected readonly pageSizes = PAGE_SIZES;
-  protected readonly currentPage = computed(() => Math.floor(this.offset() / this.pageSize()) + 1);
-  protected readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalWorkflows() / this.pageSize())));
-  protected readonly paginationPages = computed(() => {
-    const current = this.currentPage();
-    const total = this.totalPages();
-    return [...new Set([1, current - 2, current - 1, current, current + 1, current + 2, total])]
-      .filter((page) => page >= 1 && page <= total)
-      .sort((left, right) => left - right);
-  });
+  protected readonly propertyPageSize = signal(10);
+  protected readonly propertyOffset = signal(0);
   protected readonly hasFilters = computed(
     () =>
       Boolean(this.statusFilter()) ||
@@ -112,12 +105,15 @@ export class HomePage implements OnInit {
           limit: this.pageSize(),
           offset: this.offset(),
         }),
-        this.isAdmin ? this.api.listPropertiesWithoutWorkflow() : Promise.resolve([]),
+        this.isAdmin
+          ? this.api.listPropertiesWithoutWorkflow(this.propertyPageSize(), this.propertyOffset())
+          : Promise.resolve({ properties: [], total: 0 }),
       ]);
       this.workflows.set(workflowPage.workflows);
       this.totalWorkflows.set(workflowPage.total);
       this.filterOptions.set(workflowPage.filterOptions);
-      this.properties.set(properties);
+      this.properties.set(properties.properties);
+      this.totalProperties.set(properties.total);
     } catch (error) {
       this.errorMessage.set(problemMessage(toApiProblem(error)));
     } finally {
@@ -164,16 +160,26 @@ export class HomePage implements OnInit {
     this.applyFilters();
   }
 
-  protected setPageSize(value: string): void {
-    this.pageSize.set(Number(value));
+  protected setPageSize(value: number): void {
+    this.pageSize.set(value);
     this.offset.set(0);
     void this.load();
   }
 
-  protected goToPage(page: number): void {
-    if (page === this.currentPage() || page < 1 || page > this.totalPages()) return;
-    this.offset.set((page - 1) * this.pageSize());
+  protected setWorkflowOffset(offset: number): void {
+    this.offset.set(offset);
     this.closeDetail();
+    void this.load();
+  }
+
+  protected setPropertyPageSize(pageSize: number): void {
+    this.propertyPageSize.set(pageSize);
+    this.propertyOffset.set(0);
+    void this.load();
+  }
+
+  protected setPropertyOffset(offset: number): void {
+    this.propertyOffset.set(offset);
     void this.load();
   }
 

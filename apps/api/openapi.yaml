@@ -515,6 +515,9 @@ paths:
       operationId: listMyTasks
       summary: Tareas abiertas donde el usuario es titular o suplente
       tags: [tasks]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
           description: Bandeja, ordenada por vencimiento (sin vencimiento al final)
@@ -522,11 +525,21 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [tasks]
+                required: [tasks, total, limit, offset, metrics]
                 properties:
                   tasks:
                     type: array
                     items: { $ref: '#/components/schemas/MyTask' }
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  metrics:
+                    type: object
+                    required: [overdue, today, thisWeek]
+                    properties:
+                      overdue: { type: integer }
+                      today: { type: integer }
+                      thisWeek: { type: integer }
 
   /api/tasks/{taskId}/start:
     post:

@@ -64,12 +64,17 @@ export class WorkflowApiService {
     );
   }
 
-  async listPropertiesWithoutWorkflow(): Promise<readonly PropertyRow[]> {
-    const params = new HttpParams().set('limit', 100).set('withoutWorkflow', 'true');
-    const { properties } = await firstValueFrom(
-      this.http.get<{ properties: PropertyRow[] }>('/api/properties', { params }),
+  listPropertiesWithoutWorkflow(limit: number, offset: number): Promise<{
+    properties: readonly PropertyRow[];
+    total: number;
+  }> {
+    const params = new HttpParams()
+      .set('limit', limit)
+      .set('offset', offset)
+      .set('withoutWorkflow', 'true');
+    return firstValueFrom(
+      this.http.get<{ properties: PropertyRow[]; total: number }>('/api/properties', { params }),
     );
-    return properties;
   }
 
   startWorkflow(propertyId: number): Promise<WorkflowDetail> {
@@ -90,9 +95,17 @@ export class WorkflowApiService {
     return events;
   }
 
-  async listMyTasks(): Promise<readonly MyTask[]> {
-    const { tasks } = await firstValueFrom(this.http.get<{ tasks: MyTask[] }>('/api/tasks/mine'));
-    return tasks;
+  listMyTasks(limit: number, offset: number): Promise<{
+    tasks: readonly MyTask[];
+    total: number;
+    metrics: { overdue: number; today: number; thisWeek: number };
+  }> {
+    const params = new HttpParams().set('limit', limit).set('offset', offset);
+    return firstValueFrom(this.http.get<{
+      tasks: MyTask[];
+      total: number;
+      metrics: { overdue: number; today: number; thisWeek: number };
+    }>('/api/tasks/mine', { params }));
   }
 
   assignParticipants(
