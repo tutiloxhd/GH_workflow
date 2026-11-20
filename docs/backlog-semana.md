@@ -48,6 +48,7 @@ Motor:
 - Cada notificación tiene destinatario, tipo, mensaje, enlace a la tarea o al workflow, y fecha; se guarda en la base.
 - No duplica: el mismo hecho genera una sola notificación por destinatario, aunque el proceso se repita.
 - «Por vencer» y «vencida» se evalúan periódicamente en hora de Santiago; una tarea suspendida no vence.
+- Las notificaciones de una tarea se envían únicamente a su titular vigente. El suplente comienza a recibirlas solo después de que se confirme su reemplazo como titular.
 
 Centro:
 - Ícono con el número de no leídas en la barra; al abrirlo, la lista más reciente primero.
@@ -70,11 +71,10 @@ Basada en el tablero de la maqueta ([references/demoweb/](../references/demoweb/
 
 Lista:
 - Muestra solo las propiedades con workflow en curso (activo o suspendido).
-- Cada fila: miniatura, título, comuna, fecha y hora del remate, estado con su color, etapa actual.
-- La miniatura es un **placeholder** igual para todas: `admin_new` todavía no guarda fotos. Cuando las tenga, se reemplaza sin cambiar el diseño.
+- Cada fila: título, comuna, fecha y hora del remate, estado con su color y etapa actual. No muestra fotografía porque el sistema de origen no dispone de imágenes de la propiedad.
 
 Resumen (al hacer clic en una propiedad):
-- Panel de detalle como en la maqueta: miniatura, título, ubicación, fecha y hora, estado.
+- Panel de detalle como en la maqueta: título, ubicación, fecha y hora, comuna y estado.
 - Progreso del proceso: tareas completadas sobre el total (sin porcentaje) y la tarea actual con las vecinas.
 - Responsable actual, próxima acción y fecha límite.
 - Botón «Ver flujo completo →».
@@ -82,7 +82,7 @@ Resumen (al hacer clic en una propiedad):
 Vista aérea («Ver flujo completo»):
 - Diagrama de todas las tareas de la plantilla en orden, con el estado de cada una (completada, en curso, pendiente, bloqueada, suspendida) y su responsable.
 - Horizontal en escritorio y línea de tiempo vertical en tablet y teléfono, como la maqueta.
-- Solo lectura en esta historia: para actuar sobre una tarea se abre el detalle del workflow existente.
+- Los nodos abren el detalle de la tarea en modo solo lectura; las acciones operativas se realizan desde las vistas habilitadas para ello.
 
 Reglas:
 - Los datos vienen de la API; el frontend no calcula estados ni etapas.

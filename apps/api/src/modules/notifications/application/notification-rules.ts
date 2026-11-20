@@ -8,6 +8,7 @@ import {
   workflowNotificationRuleSets,
 } from '../../../platform/database/schema/notification.schema.js';
 import { workflowTemplates } from '../../../platform/database/schema/workflow.schema.js';
+import { users } from '../../../platform/database/schema/identity.schema.js';
 import { rebuildNotificationsForRuleSet } from './notification-processor.js';
 
 export interface NotificationRuleInput {
@@ -19,6 +20,8 @@ export interface NotificationRuleInput {
 export interface NotificationRuleSetView {
   readonly id: number;
   readonly version: number;
+  readonly createdAt: string;
+  readonly createdBy: { readonly id: number; readonly name: string } | null;
   readonly workflowTemplate: {
     readonly id: number;
     readonly code: string;
@@ -35,6 +38,9 @@ export async function listPublishedNotificationRuleSets(
     .select({
       id: notificationRuleSets.id,
       version: notificationRuleSets.version,
+      createdAt: notificationRuleSets.createdAt,
+      createdById: notificationRuleSets.createdBy,
+      createdByName: users.name,
       templateId: workflowTemplates.id,
       templateCode: workflowTemplates.code,
       templateName: workflowTemplates.name,
@@ -42,6 +48,7 @@ export async function listPublishedNotificationRuleSets(
     })
     .from(notificationRuleSets)
     .innerJoin(workflowTemplates, eq(workflowTemplates.id, notificationRuleSets.workflowTemplateId))
+    .leftJoin(users, eq(users.id, notificationRuleSets.createdBy))
     .where(eq(notificationRuleSets.isPublished, 1))
     .orderBy(asc(workflowTemplates.code), asc(workflowTemplates.version));
 
@@ -67,6 +74,11 @@ export async function listPublishedNotificationRuleSets(
   return sets.map((set) => ({
     id: set.id,
     version: set.version,
+    createdAt: set.createdAt.toISOString(),
+    createdBy:
+      set.createdById === null || set.createdByName === null
+        ? null
+        : { id: set.createdById, name: set.createdByName },
     workflowTemplate: {
       id: set.templateId,
       code: set.templateCode,
@@ -86,6 +98,7 @@ export async function listPublishedNotificationRuleSets(
 export async function publishNotificationRuleSet(
   dependencies: IdentityDependencies,
   currentRuleSetId: number,
+  actorUserId: number,
   rules: readonly NotificationRuleInput[],
 ): Promise<NotificationRuleSetView | undefined> {
   const newRuleSetId = await dependencies.database.db.transaction(async (transaction) => {
@@ -112,6 +125,7 @@ export async function publishNotificationRuleSet(
         workflowTemplateId: current.workflowTemplateId,
         version: current.version + 1,
         isPublished: 1,
+        createdBy: actorUserId,
       })
       .$returningId();
     if (!created) throw new Error('No se pudo crear la versión de reglas de notificación');

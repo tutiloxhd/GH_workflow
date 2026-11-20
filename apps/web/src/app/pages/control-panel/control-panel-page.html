@@ -40,6 +40,10 @@
         <span>{{ ruleSet.workflowTemplate.name }}</span><span class="status-pill inactive"
           >Reglas v{{ ruleSet.version }}</span
         >
+        <small>
+          Publicada por {{ ruleSet.createdBy?.name ?? 'autor no registrado' }} ·
+          {{ formatDateTime(ruleSet.createdAt) }}
+        </small>
       </div>
       <div class="rule-list">
         @for (rule of draftRules(); track rule.eventType) {

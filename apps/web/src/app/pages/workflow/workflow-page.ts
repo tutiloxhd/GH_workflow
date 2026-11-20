@@ -6,9 +6,12 @@ import {
   input,
   numberAttribute,
   signal,
+  type OnDestroy,
   type OnInit,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { NotificationService } from '../../core/notifications/notification.service';
+import { Subscription } from 'rxjs';
 import { problemMessage, toApiProblem } from '../../core/api/api-problem';
 import { AuthService } from '../../core/auth/auth.service';
 import { formatDateTime } from '../../core/time/santiago-time';
@@ -40,10 +43,13 @@ const PARTICIPANT_ORDER: readonly ParticipantType[] = ['MANAGER', 'BIDDER', 'LEG
   templateUrl: './workflow-page.html',
   styleUrl: './workflow-page.css',
 })
-export class WorkflowPage implements OnInit {
+export class WorkflowPage implements OnInit, OnDestroy {
   private readonly api = inject(WorkflowApiService);
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
+  private readonly notificationService = inject(NotificationService);
+  private workflowChangesSubscription: Subscription | null = null;
+  private isRefreshingFromStream = false;
 
   // Parámetro de ruta (withComponentInputBinding).
   readonly workflowId = input.required({ transform: numberAttribute });
@@ -94,6 +100,24 @@ export class WorkflowPage implements OnInit {
 
   ngOnInit(): void {
     void this.load();
+    this.notificationService.watchWorkflow(this.workflowId());
+    this.workflowChangesSubscription = this.notificationService.workflowChanged.subscribe(
+      (workflowId) => {
+        if (workflowId !== this.workflowId()) return;
+        if (!this.isRefreshingFromStream) {
+          this.isRefreshingFromStream = true;
+          void this.load().finally(() => {
+            this.isRefreshingFromStream = false;
+          });
+        }
+      },
+    );
+    this.notificationService.refreshNotifications();
+  }
+
+  ngOnDestroy(): void {
+    this.workflowChangesSubscription?.unsubscribe();
+    this.notificationService.stopWatchingWorkflow();
   }
 
   protected async load(): Promise<void> {

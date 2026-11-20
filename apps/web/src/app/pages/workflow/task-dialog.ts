@@ -39,6 +39,7 @@ export class TaskDialog implements OnInit {
 
   readonly workflowId = input.required<number>();
   readonly taskId = input.required<number>();
+  readonly isReadOnly = input(false);
   readonly changed = output<WorkflowDetail>();
   readonly closed = output();
 
@@ -70,6 +71,7 @@ export class TaskDialog implements OnInit {
   protected readonly canWork = computed(() => {
     const task = this.task();
     return (
+      !this.isReadOnly() &&
       task !== null &&
       this.workflow()?.status === 'ACTIVE' &&
       isTaskWorkable(task.status) &&

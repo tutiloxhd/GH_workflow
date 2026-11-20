@@ -39,6 +39,7 @@ export const notificationRuleSets = mysqlTable(
     workflowTemplateId: referenceId('workflow_template_id').notNull(),
     version: int('version', { unsigned: true }).notNull(),
     isPublished: int('is_published', { unsigned: true }).notNull().default(0),
+    createdBy: referenceId('created_by'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -50,6 +51,11 @@ export const notificationRuleSets = mysqlTable(
       name: 'fk_notification_rule_sets_template',
       columns: [table.workflowTemplateId],
       foreignColumns: [workflowTemplates.id],
+    }),
+    foreignKey({
+      name: 'fk_notification_rule_sets_creator',
+      columns: [table.createdBy],
+      foreignColumns: [users.id],
     }),
     check('chk_notification_rule_sets_published', sql`${table.isPublished} IN (0, 1)`),
   ],

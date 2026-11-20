@@ -196,6 +196,8 @@ export const EVENT_LABELS: Readonly<Record<string, string>> = {
   TASK_CANCELLED: 'Tarea cancelada',
   TASK_DEADLINE_CHANGED: 'Plazo modificado',
   TASK_DUE_DATE_RECALCULATED: 'Vencimiento recalculado',
+  TASK_DUE_SOON: 'Tarea por vencer',
+  TASK_OVERDUE: 'Tarea vencida',
 };
 
 // Clase CSS de la etiqueta de estado (colores de la maqueta; ver styles.css).

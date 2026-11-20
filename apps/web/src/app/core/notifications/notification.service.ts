@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, Subject } from 'rxjs';
 import type { UserNotification } from './notification.model';
 
 const FALLBACK_POLL_MILLISECONDS = 60_000;
@@ -12,10 +12,36 @@ export class NotificationService {
   private readonly count = signal(0);
   private eventSource: EventSource | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private workflowEventSource: EventSource | null = null;
+  private workflowPollTimer: ReturnType<typeof setInterval> | null = null;
+  private activeWorkflowId: number | null = null;
+  private readonly workflowChanges = new Subject<number>();
 
   readonly notifications = this.notificationList.asReadonly();
   readonly unreadCount = this.count.asReadonly();
   readonly hasUnread = computed(() => this.count() > 0);
+  readonly workflowChanged = this.workflowChanges.asObservable();
+
+  watchWorkflow(workflowId: number): void {
+    if (this.activeWorkflowId === workflowId) return;
+    this.stopWatchingWorkflow();
+    this.activeWorkflowId = workflowId;
+    this.workflowEventSource = new EventSource(
+      `/api/notifications/stream?workflowId=${workflowId}`,
+    );
+    this.workflowEventSource.addEventListener('workflow', () =>
+      this.workflowChanges.next(workflowId),
+    );
+    this.workflowPollTimer = setInterval(() => this.workflowChanges.next(workflowId), 30_000);
+  }
+
+  stopWatchingWorkflow(): void {
+    this.workflowEventSource?.close();
+    this.workflowEventSource = null;
+    if (this.workflowPollTimer) clearInterval(this.workflowPollTimer);
+    this.workflowPollTimer = null;
+    this.activeWorkflowId = null;
+  }
 
   async start(): Promise<void> {
     await this.refresh();
@@ -32,7 +58,12 @@ export class NotificationService {
     this.pollTimer ??= setInterval(() => void this.refresh(), FALLBACK_POLL_MILLISECONDS);
   }
 
+  refreshNotifications(): void {
+    void this.refresh();
+  }
+
   stop(): void {
+    this.stopWatchingWorkflow();
     this.eventSource?.close();
     this.eventSource = null;
     if (this.pollTimer) clearInterval(this.pollTimer);

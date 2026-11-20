@@ -18,6 +18,8 @@ export interface NotificationRule {
 export interface NotificationRuleSet {
   readonly id: number;
   readonly version: number;
+  readonly createdAt: string;
+  readonly createdBy: { readonly id: number; readonly name: string } | null;
   readonly workflowTemplate: {
     readonly id: number;
     readonly code: string;

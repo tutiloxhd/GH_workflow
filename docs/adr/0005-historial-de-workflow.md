@@ -14,9 +14,10 @@ El modelo MVP original tenía `task_events`, con `task_instance_id` obligatorio.
 - `event_source` indica el origen: `USER`, `SYSTEM` o `SYNC`.
 - El motivo de una suspensión o cancelación se guarda en `details`.
 - La tabla es append-only: no se actualizan ni borran filas.
+- `occurrence_key` evita duplicar hechos periódicos aunque el scheduler los procese nuevamente.
 - `workflow_instances` agrega `suspended_at`, `cancelled_at` y `completed_at`.
 
-Eventos de instancia iniciales: `WORKFLOW_CREATED`, `WORKFLOW_SUSPENDED`, `WORKFLOW_RESUMED`, `WORKFLOW_CANCELLED`, `WORKFLOW_COMPLETED`, `WORKFLOW_REPROGRAMMED`. Los de tarea son los del modelo MVP.
+Eventos de instancia iniciales: `WORKFLOW_CREATED`, `WORKFLOW_SUSPENDED`, `WORKFLOW_RESUMED`, `WORKFLOW_CANCELLED`, `WORKFLOW_COMPLETED`, `WORKFLOW_REPROGRAMMED`. Los eventos periódicos `TASK_DUE_SOON` y `TASK_OVERDUE` se registran con origen `SYSTEM`, independientemente de que su notificación esté habilitada.
 
 ## Alternativas consideradas
 
@@ -25,6 +26,5 @@ Eventos de instancia iniciales: `WORKFLOW_CREATED`, `WORKFLOW_SUSPENDED`, `WORKF
 
 ## Consecuencias
 
-- El modelo sigue teniendo 17 tablas y coincide en este punto con `sql/schema.sql`.
 - El historial completo de un remate se obtiene con una sola consulta por instancia.
 - `event_type` no tiene restricción CHECK: los tipos válidos se definen en el dominio.

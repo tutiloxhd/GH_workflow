@@ -78,8 +78,8 @@ Usar el reloj fijo de las pruebas automáticas para los vencimientos; en la inte
 
 | ID | Caso | Preparación y acción | Resultado esperado |
 | --- | --- | --- | --- |
-| HU09-01 | Tarea asignada | Se activa una tarea con titular y suplente. | Ambos reciben una notificación «tarea asignada» con enlace a la tarea. |
-| HU09-02 | Por vencer | Tarea que entra en la ventana de anticipación configurada. | Una notificación «por vencer» al titular y al suplente. |
+| HU09-01 | Tarea asignada | Se activa una tarea con titular y suplente. | Solo el titular recibe una notificación «tarea asignada» con enlace a la tarea. |
+| HU09-02 | Por vencer | Tarea que entra en la ventana de anticipación configurada. | Solo el titular vigente recibe una notificación «por vencer». Si se confirma su reemplazo por el suplente, las notificaciones siguientes se dirigen al nuevo titular. |
 | HU09-03 | Vencida | Tarea que pasa su `due_at`. | Una notificación «vencida». |
 | HU09-04 | Borde de día | Vencimientos a las 23:59 y a las 00:00 del día siguiente, hora de Santiago, incluida una fecha de cambio de horario (prueba automática). | Cada una se notifica en el momento correcto según Santiago. |
 | HU09-05 | Eventos del workflow | Suspender, reanudar, cancelar y reprogramar un workflow. | Los participantes reciben una notificación por cada hecho. |
@@ -116,14 +116,14 @@ Comparar contra la maqueta abriendo `references/demoweb/index.html` en el navega
 | ID | Caso | Preparación y acción | Resultado esperado |
 | --- | --- | --- | --- |
 | HU12-01 | Solo propiedades en flujo | Tener workflows activos, suspendidos, completados y cancelados, y propiedades sin workflow. | Solo aparecen los activos y suspendidos. |
-| HU12-02 | Datos de la fila | Revisar una fila. | Miniatura, título, comuna, fecha y hora del remate en Santiago, estado con su color y etapa actual. |
-| HU12-03 | Miniatura placeholder | Revisar varias propiedades. | Todas muestran la misma miniatura de reemplazo, con texto alternativo; ninguna imagen rota ni externa. |
+| HU12-02 | Datos de la fila | Revisar una fila. | Título, comuna, fecha y hora del remate en Santiago, estado con su color y etapa actual. |
+| HU12-03 | Sin fotografías | Revisar varias propiedades. | El listado no reserva espacio ni intenta cargar fotografías inexistentes. |
 | HU12-04 | Resumen | Hacer clic en una propiedad. | Se abre el panel: estado, ubicación, fecha, tareas completadas sobre el total (sin porcentaje), tarea actual, responsable, próxima acción y fecha límite. |
 | HU12-05 | Coincide con el detalle | Comparar el resumen con el detalle del workflow. | Los mismos estados, responsable y vencimiento. |
 | HU12-06 | Workflow suspendido | Abrir el resumen de uno suspendido. | Se ve como suspendido y la tarea actual aparece detenida. |
 | HU12-07 | Vista aérea | «Ver flujo completo →». | Diagrama con todas las tareas de la plantilla en orden, estado y responsable de cada una. |
 | HU12-08 | Estados en el diagrama | Workflow con tareas completadas, en curso, pendientes y bloqueadas. | Cada estado se distingue también sin color (ícono o texto). |
-| HU12-09 | Solo lectura | Intentar actuar desde el diagrama. | No cambia estados; ofrece ir al detalle del workflow. |
+| HU12-09 | Detalle desde el diagrama | Abrir un nodo del diagrama. | Muestra el detalle de la tarea en modo solo lectura y no permite cambiar su estado ni evidencia. |
 | HU12-10 | Responsive | 375 px, 768 px y 1280 px. | Lista y panel se adaptan; el diagrama es horizontal en escritorio y vertical hasta 1000 px; sin scroll horizontal de la página. |
 | HU12-11 | Teclado | Recorrer lista, panel y diagrama solo con teclado. | Foco visible, orden lógico, Escape cierra la vista aérea y devuelve el foco. |
 | HU12-12 | Permisos | Entrar como gestor, postor y legal. | No ven esta pantalla como principal; la API de la vista no les entrega datos ajenos. |

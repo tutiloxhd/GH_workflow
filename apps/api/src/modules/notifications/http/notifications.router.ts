@@ -8,6 +8,10 @@ import {
   NOTIFICATION_TRIGGERS,
 } from '../../../platform/database/schema/notification.schema.js';
 import {
+  workflowEvents,
+  workflowParticipants,
+} from '../../../platform/database/schema/workflow.schema.js';
+import {
   PROBLEMS,
   sendProblem,
   sendValidationProblem,
@@ -35,6 +39,7 @@ const listQuery = z.strictObject({
   offset: z.coerce.number().int().min(0).default(0),
   unread: z.enum(['true', 'false']).optional(),
 });
+const streamQuery = z.strictObject({ workflowId: z.coerce.number().int().positive().optional() });
 
 export function createNotificationsRouter(identity: IdentityDependencies): Router {
   const router = Router();
@@ -62,6 +67,7 @@ export function createNotificationsRouter(identity: IdentityDependencies): Route
     const ruleSet = await publishNotificationRuleSet(
       identity,
       parsedParams.data.ruleSetId,
+      getCurrentUser(response).id,
       parsedBody.data.rules,
     );
     if (!ruleSet) {
@@ -147,12 +153,37 @@ export function createNotificationsRouter(identity: IdentityDependencies): Route
 
   router.get('/notifications/stream', async (request, response) => {
     const userId = getCurrentUser(response).id;
+    const parsed = streamQuery.safeParse(request.query);
+    if (!parsed.success) {
+      sendValidationProblem(response, parsed.error);
+      return;
+    }
+    const workflowId = parsed.data.workflowId;
+    if (workflowId !== undefined) {
+      const [participant] = await identity.database.db
+        .select({ id: workflowParticipants.id })
+        .from(workflowParticipants)
+        .where(
+          and(
+            eq(workflowParticipants.workflowInstanceId, workflowId),
+            eq(workflowParticipants.userId, userId),
+            isNull(workflowParticipants.validTo),
+          ),
+        )
+        .limit(1);
+      const isAdmin = getCurrentUser(response).roles.includes('ADMIN');
+      if (!participant && !isAdmin) {
+        sendProblem(response, PROBLEMS.notFound);
+        return;
+      }
+    }
     response.setHeader('Content-Type', 'text/event-stream');
     response.setHeader('Cache-Control', 'no-cache, no-transform');
     response.setHeader('Connection', 'keep-alive');
     response.flushHeaders();
 
     let lastCount = -1;
+    let lastWorkflowEventId = 0;
     const publishCount = async () => {
       const [result] = await identity.database.db
         .select({ total: count() })
@@ -163,9 +194,40 @@ export function createNotificationsRouter(identity: IdentityDependencies): Route
       lastCount = current;
       response.write(`event: notifications\ndata: ${JSON.stringify({ unreadCount: current })}\n\n`);
     };
-    await publishCount();
+    const publishWorkflowChanges = async () => {
+      if (workflowId === undefined) return;
+      const [rows] = await identity.database.pool.execute<
+        Array<{ id: number } & import('mysql2/promise').RowDataPacket>
+      >(
+        `SELECT id FROM workflow_events
+          WHERE workflow_instance_id = ? AND id > ?
+          ORDER BY id DESC LIMIT 1`,
+        [workflowId, lastWorkflowEventId],
+      );
+      const latestEventId = rows[0]?.id;
+      if (latestEventId === undefined || latestEventId <= lastWorkflowEventId) return;
+      lastWorkflowEventId = latestEventId;
+      response.write(
+        `event: workflow\ndata: ${JSON.stringify({ workflowId, eventId: latestEventId })}\n\n`,
+      );
+    };
+    const publish = async () => {
+      if (response.writableEnded) return;
+      await Promise.all([publishCount(), publishWorkflowChanges()]);
+      response.write(': keep-alive\n\n');
+    };
+    if (workflowId !== undefined) {
+      const [latest] = await identity.database.db
+        .select({ id: workflowEvents.id })
+        .from(workflowEvents)
+        .where(eq(workflowEvents.workflowInstanceId, workflowId))
+        .orderBy(desc(workflowEvents.id))
+        .limit(1);
+      lastWorkflowEventId = latest?.id ?? 0;
+    }
+    await publish();
     const timer = setInterval(() => {
-      void publishCount().catch(() => response.end());
+      void publish().catch(() => response.end());
     }, 15_000);
     request.once('close', () => {
       clearInterval(timer);

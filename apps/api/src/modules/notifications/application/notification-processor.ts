@@ -166,6 +166,35 @@ async function cancelPendingJobs(database: Database, taskId: number): Promise<vo
   );
 }
 
+async function recordTaskTimingEvent(
+  database: Database,
+  task: TaskRow,
+  notificationTrigger: 'TASK_REMINDER' | 'TASK_OVERDUE',
+  occurredAt: Date,
+): Promise<void> {
+  const eventType = notificationTrigger === 'TASK_REMINDER' ? 'TASK_DUE_SOON' : 'TASK_OVERDUE';
+  const occurrenceKey = deduplicationKey(
+    'workflow-event',
+    task.id,
+    eventType,
+    task.due_at?.toISOString() ?? 'without-due-date',
+  );
+  await database.pool.execute(
+    `INSERT IGNORE INTO workflow_events
+       (workflow_instance_id, task_instance_id, actor_user_id, event_type, occurrence_key,
+        event_source, details, occurred_at)
+     VALUES (?, ?, NULL, ?, ?, 'SYSTEM', ?, ?)`,
+    [
+      task.workflow_instance_id,
+      task.id,
+      eventType,
+      occurrenceKey,
+      JSON.stringify({ dueAt: task.due_at?.toISOString() ?? null }),
+      occurredAt,
+    ],
+  );
+}
+
 async function scheduleTaskNotifications(
   database: Database,
   task: TaskRow,
@@ -185,8 +214,12 @@ async function scheduleTaskNotifications(
   const jobs: Array<{ trigger: string; userId: number; scheduledAt: Date }> = [];
   const reminderRule = ruleMap.get('TASK_REMINDER');
   const reminderAt = new Date(dueAt - (reminderRule?.offset_minutes ?? 0) * 60_000);
-  if (reminderRule?.is_enabled === 1 && reminderAt > now) {
-    jobs.push({ trigger: 'TASK_REMINDER', userId: task.assigned_user_id, scheduledAt: reminderAt });
+  if (reminderRule) {
+    jobs.push({
+      trigger: 'TASK_REMINDER',
+      userId: task.assigned_user_id,
+      scheduledAt: new Date(Math.max(reminderAt.getTime(), now.getTime())),
+    });
   }
   const escalationRule = ruleMap.get('TASK_ESCALATION');
   const escalationAt = new Date(dueAt - (escalationRule?.offset_minutes ?? 0) * 60_000);
@@ -195,13 +228,11 @@ async function scheduleTaskNotifications(
       jobs.push({ trigger: 'TASK_ESCALATION', userId, scheduledAt: escalationAt });
     }
   }
-  if (ruleMap.get('TASK_OVERDUE')?.is_enabled === 1) {
-    jobs.push({
-      trigger: 'TASK_OVERDUE',
-      userId: task.assigned_user_id,
-      scheduledAt: new Date(Math.max(dueAt, now.getTime())),
-    });
-  }
+  jobs.push({
+    trigger: 'TASK_OVERDUE',
+    userId: task.assigned_user_id,
+    scheduledAt: new Date(Math.max(dueAt, now.getTime())),
+  });
 
   for (const job of jobs) {
     await database.pool.execute(
@@ -457,14 +488,19 @@ export async function processDueNotificationJobs(
         );
         continue;
       }
-      await createNotification(dependencies.database, {
-        userId: job.user_id,
-        trigger: job.event_type,
-        workflowId: task.workflow_instance_id,
-        taskId: task.id,
-        body: task.name,
-        occurrence: job.occurrence_key,
-      });
+      if (job.event_type === 'TASK_REMINDER' || job.event_type === 'TASK_OVERDUE') {
+        await recordTaskTimingEvent(dependencies.database, task, job.event_type, now);
+      }
+      if (await isRuleEnabled(dependencies.database, task.workflow_instance_id, job.event_type)) {
+        await createNotification(dependencies.database, {
+          userId: job.user_id,
+          trigger: job.event_type,
+          workflowId: task.workflow_instance_id,
+          taskId: task.id,
+          body: task.name,
+          occurrence: job.occurrence_key,
+        });
+      }
       await dependencies.database.pool.execute(
         `UPDATE notification_jobs
             SET status = 'COMPLETED', completed_at = ?, locked_by = NULL, locked_until = NULL

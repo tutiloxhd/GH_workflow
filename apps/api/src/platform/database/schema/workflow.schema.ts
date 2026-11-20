@@ -367,6 +367,7 @@ export const workflowEvents = mysqlTable(
     taskInstanceId: referenceId('task_instance_id'),
     actorUserId: referenceId('actor_user_id'),
     eventType: varchar('event_type', { length: 60 }).notNull(),
+    occurrenceKey: varchar('occurrence_key', { length: 190 }),
     eventSource: varchar('event_source', { length: 20, enum: EVENT_SOURCES }).notNull(),
     details: json('details'),
     occurredAt: createdAt('occurred_at'),
@@ -375,6 +376,7 @@ export const workflowEvents = mysqlTable(
     index('idx_workflow_events_instance').on(table.workflowInstanceId, table.occurredAt),
     index('idx_workflow_events_task').on(table.taskInstanceId, table.occurredAt),
     index('idx_workflow_events_actor').on(table.actorUserId, table.occurredAt),
+    uniqueIndex('uq_workflow_events_occurrence').on(table.occurrenceKey),
     foreignKey({
       name: 'fk_workflow_events_instance',
       columns: [table.workflowInstanceId],

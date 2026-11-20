@@ -19,6 +19,8 @@ export const WORKFLOW_EVENT_TYPES = [
   'TASK_CANCELLED',
   'TASK_DEADLINE_CHANGED',
   'TASK_DUE_DATE_RECALCULATED',
+  'TASK_DUE_SOON',
+  'TASK_OVERDUE',
 ] as const;
 
 export type WorkflowEventType = (typeof WORKFLOW_EVENT_TYPES)[number];

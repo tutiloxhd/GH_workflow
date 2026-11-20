@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal, type OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  ElementRef,
+  HostListener,
+  inject,
+  signal,
+  viewChild,
+  type OnInit,
+} from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { problemMessage, toApiProblem } from '../../core/api/api-problem';
 import { AuthService } from '../../core/auth/auth.service';
@@ -19,10 +29,15 @@ import {
 } from '../../core/workflow/workflow.model';
 
 const SANTIAGO_DATE_PARTS = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit',
+  timeZone: 'America/Santiago',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
 });
 const DATE_LABEL = new Intl.DateTimeFormat('es-CL', {
-  day: 'numeric', month: 'short', timeZone: 'UTC',
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
 });
 const localDateKey = (value: Date): string => SANTIAGO_DATE_PARTS.format(value);
 const dateFromKey = (key: string): Date => new Date(`${key}T00:00:00Z`);
@@ -47,6 +62,8 @@ export class HomePage implements OnInit {
   private readonly api = inject(WorkflowApiService);
   private readonly router = inject(Router);
   private readonly auth = inject(AuthService);
+  private readonly detailPanel = viewChild<ElementRef<HTMLElement>>('detailPanel');
+  private detailTrigger: HTMLElement | null = null;
 
   protected readonly user = this.auth.currentUser;
   protected readonly isAdmin = this.auth.hasRole('ADMIN');
@@ -108,7 +125,9 @@ export class HomePage implements OnInit {
           commune: this.communeFilter().trim() || undefined,
           region: this.regionFilter().trim() || undefined,
           auctionFrom: santiagoLocalToIso(`${this.selectedWeekStart()}T00:00`),
-          auctionTo: santiagoLocalToIso(`${keyFromDate(shiftDate(dateFromKey(this.selectedWeekStart()), 7))}T00:00`),
+          auctionTo: santiagoLocalToIso(
+            `${keyFromDate(shiftDate(dateFromKey(this.selectedWeekStart()), 7))}T00:00`,
+          ),
           limit: this.pageSize(),
           offset: this.offset(),
         }),
@@ -142,7 +161,9 @@ export class HomePage implements OnInit {
   }
 
   protected changeWeek(offset: number): void {
-    this.selectedWeekStart.set(keyFromDate(shiftDate(dateFromKey(this.selectedWeekStart()), offset * 7)));
+    this.selectedWeekStart.set(
+      keyFromDate(shiftDate(dateFromKey(this.selectedWeekStart()), offset * 7)),
+    );
     this.offset.set(0);
     this.closeDetail();
     void this.load();
@@ -198,10 +219,12 @@ export class HomePage implements OnInit {
     void this.load();
   }
 
-  protected async openDetail(workflowId: number): Promise<void> {
+  protected async openDetail(workflowId: number, trigger?: EventTarget | null): Promise<void> {
     this.errorMessage.set(null);
+    this.detailTrigger = trigger instanceof HTMLElement ? trigger : null;
     try {
       this.selectedWorkflow.set(await this.api.getWorkflow(workflowId));
+      queueMicrotask(() => this.detailPanel()?.nativeElement.focus());
     } catch (error) {
       this.errorMessage.set(problemMessage(toApiProblem(error)));
     }
@@ -209,6 +232,20 @@ export class HomePage implements OnInit {
 
   protected closeDetail(): void {
     this.selectedWorkflow.set(null);
+    queueMicrotask(() => this.detailTrigger?.focus());
+  }
+
+  @HostListener('document:keydown.escape')
+  protected closeDetailWithEscape(): void {
+    if (this.selectedWorkflow()) this.closeDetail();
+  }
+
+  protected currentTask(workflow: WorkflowDetail) {
+    return (
+      workflow.tasks.find((task) => task.status === 'IN_PROGRESS') ??
+      workflow.tasks.find((task) => task.status === 'READY') ??
+      null
+    );
   }
 
   protected completedTaskCount(workflow: WorkflowDetail): number {

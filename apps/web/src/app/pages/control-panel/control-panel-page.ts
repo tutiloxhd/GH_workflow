@@ -7,6 +7,7 @@ import {
   type NotificationRuleSet,
 } from '../../core/notifications/notification-rules.model';
 import { NotificationRulesApiService } from '../../core/notifications/notification-rules-api.service';
+import { formatDateTime } from '../../core/time/santiago-time';
 
 @Component({
   selector: 'app-control-panel-page',
@@ -25,6 +26,7 @@ export class ControlPanelPage {
   protected readonly successMessage = signal<string | null>(null);
   protected readonly labels = NOTIFICATION_EVENT_LABELS;
   protected readonly descriptions = NOTIFICATION_EVENT_DESCRIPTIONS;
+  protected readonly formatDateTime = formatDateTime;
   protected readonly selectedRuleSet = computed(() =>
     this.ruleSets().find((ruleSet) => ruleSet.id === this.selectedId()),
   );

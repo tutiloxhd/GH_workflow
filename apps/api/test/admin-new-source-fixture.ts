@@ -1,4 +1,4 @@
-import type { Pool, ResultSetHeader } from 'mysql2/promise';
+import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { parseEnv } from '../src/config/env.js';
 import {
   connectAdminNewSource,
@@ -99,7 +99,9 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
     [databaseName],
   );
   if (auctionModeColumns.length === 0) {
-    await adminPool.query(`ALTER TABLE ${databaseName}.datos_lremate ADD COLUMN tipo_remate VARCHAR(100)`);
+    await adminPool.query(
+      `ALTER TABLE ${databaseName}.datos_lremate ADD COLUMN tipo_remate VARCHAR(100)`,
+    );
   }
 
   const source = connectAdminNewSource({
@@ -152,7 +154,11 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
       if (property.horaRemate !== null) {
         const [auction] = await adminPool.query<ResultSetHeader>(
           `INSERT INTO ${table('datos_lremate')} (idp, hora_remate, tipo_remate) VALUES (?, ?, ?)`,
-          [String(property.id), property.horaRemate ?? '10:30', property.auctionMode ?? 'Presencial'],
+          [
+            String(property.id),
+            property.horaRemate ?? '10:30',
+            property.auctionMode ?? 'Presencial',
+          ],
         );
         if (property.bidder !== undefined || property.payer !== undefined) {
           await adminPool.query(

@@ -242,8 +242,12 @@ export async function listWorkflowFilterOptions(
       .where(and(visibility, inArray(taskInstances.status, ['READY', 'IN_PROGRESS']))),
   ]);
   return {
-    communes: [...new Set(locations.map(({ commune }) => commune).filter((value) => value !== null))].sort(),
-    regions: [...new Set(locations.map(({ region }) => region).filter((value) => value !== null))].sort(),
+    communes: [
+      ...new Set(locations.map(({ commune }) => commune).filter((value) => value !== null)),
+    ].sort(),
+    regions: [
+      ...new Set(locations.map(({ region }) => region).filter((value) => value !== null)),
+    ].sort(),
     responsibles: responsibles.sort((left, right) => left.name.localeCompare(right.name, 'es')),
   };
 }
@@ -679,6 +683,7 @@ export interface NewWorkflowEvent {
   readonly actorUserId: number | null;
   readonly eventSource?: 'USER' | 'SYSTEM' | 'SYNC';
   readonly eventType: WorkflowEventType;
+  readonly occurrenceKey?: string;
   readonly details?: Record<string, unknown>;
 }
 
@@ -696,6 +701,7 @@ export async function insertEvents(
         taskInstanceId: event.taskId ?? null,
         actorUserId: event.actorUserId,
         eventType: event.eventType,
+        occurrenceKey: event.occurrenceKey ?? null,
         eventSource:
           event.eventSource ??
           (event.actorUserId === null ? ('SYSTEM' as const) : ('USER' as const)),
@@ -807,9 +813,18 @@ export async function findTasksOfUser(
   const [summary] = await executor
     .select({
       total: count(),
-      overdue: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} < ${page.now} THEN 1 ELSE 0 END)`.mapWith(Number),
-      today: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.todayStart} AND ${taskInstances.dueAt} < ${page.tomorrowStart} THEN 1 ELSE 0 END)`.mapWith(Number),
-      thisWeek: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.tomorrowStart} AND ${taskInstances.dueAt} < ${page.weekEnd} THEN 1 ELSE 0 END)`.mapWith(Number),
+      overdue:
+        sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} < ${page.now} THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
+      today:
+        sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.todayStart} AND ${taskInstances.dueAt} < ${page.tomorrowStart} THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
+      thisWeek:
+        sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.tomorrowStart} AND ${taskInstances.dueAt} < ${page.weekEnd} THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
     })
     .from(taskInstances)
     .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))

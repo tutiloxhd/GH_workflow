@@ -71,6 +71,20 @@
       "when": 1795183850000,
       "tag": "0009_agent_region_assignment",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795196400000,
+      "tag": "0010_domain_activity_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795200000000,
+      "tag": "0011_notification_rule_author",
+      "breakpoints": true
     }
   ]
 }

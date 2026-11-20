@@ -108,8 +108,8 @@ describe('sincronización con admin_new', () => {
     };
     const source = {
       ...fixture.source,
-      readAgentUsers: async () => [sourceUser],
-      close: async () => undefined,
+      readAgentUsers: () => Promise.resolve([sourceUser]),
+      close: () => Promise.resolve(),
     };
 
     const summary = await importAdminNewAgentUsers(

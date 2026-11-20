@@ -47,6 +47,8 @@ const workflowWith = (task: WorkflowTask): WorkflowDetail => ({
     tribunal: null,
     auctionBidderName: null,
     auctionPayerName: null,
+    assignmentRegion: null,
+    auctionMode: null,
   },
   auctionAt: '2026-12-07T13:00:00.000Z',
   participants: [],
@@ -119,6 +121,16 @@ describe('TaskDialog', () => {
     expect(element.querySelectorAll('app-evidence-form input')).toHaveLength(3);
     expect(button('Completar')?.disabled).toBe(true);
     expect(element.textContent).toContain('primero guarda su evidencia');
+  });
+
+  it('oculta todas las acciones cuando se abre en modo solo lectura', async () => {
+    fixture.componentRef.setInput('isReadOnly', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(element.querySelector('app-evidence-form')).toBeNull();
+    expect(button('Marcar en curso')).toBeUndefined();
+    expect(button('Completar')).toBeUndefined();
   });
 
   it('valida en el navegador antes de enviar y manda los montos como número', async () => {

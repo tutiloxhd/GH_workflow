@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { RowDataPacket } from 'mysql2/promise';
 import {
   processDueNotificationJobs,
   processNotificationOutbox,
@@ -60,9 +61,21 @@ describe('notificaciones internas', () => {
       body: { rules: current?.rules },
     });
     expect(published.status).toBe(200);
-    expect((published.body as { ruleSet: { id: number; version: number } }).ruleSet).toMatchObject({
+    const publishedRuleSet = (
+      published.body as {
+        ruleSet: {
+          id: number;
+          version: number;
+          createdAt: string;
+          createdBy: { id: number; name: string };
+        };
+      }
+    ).ruleSet;
+    expect(publishedRuleSet).toMatchObject({
       version: (current?.version ?? 0) + 1,
+      createdBy: { id: cast.admin.id, name: cast.admin.name },
     });
+    expect(typeof publishedRuleSet.createdAt).toBe('string');
   });
 
   it('materializa una sola asignación para el titular y permite marcarla como leída', async () => {
@@ -112,5 +125,26 @@ describe('notificaciones internas', () => {
       listed.body as { notifications: Array<{ trigger: string }> }
     ).notifications.map((notification) => notification.trigger);
     expect(triggers).toContain('TASK_OVERDUE');
+
+    const [events] = await context.database.pool.execute<
+      (RowDataPacket & { event_type: string; event_source: string })[]
+    >(
+      `SELECT event_type, event_source
+         FROM workflow_events
+        WHERE event_type IN ('TASK_DUE_SOON', 'TASK_OVERDUE')
+        ORDER BY event_type`,
+    );
+    expect(events).toEqual([
+      expect.objectContaining({ event_type: 'TASK_DUE_SOON', event_source: 'SYSTEM' }),
+      expect.objectContaining({ event_type: 'TASK_OVERDUE', event_source: 'SYSTEM' }),
+    ]);
+
+    await processDueNotificationJobs(dependencies, 'test-scheduler');
+    const [eventCount] = await context.database.pool.execute<(RowDataPacket & { total: number })[]>(
+      `SELECT COUNT(*) AS total
+         FROM workflow_events
+        WHERE event_type IN ('TASK_DUE_SOON', 'TASK_OVERDUE')`,
+    );
+    expect(eventCount[0]?.total).toBe(2);
   });
 });
