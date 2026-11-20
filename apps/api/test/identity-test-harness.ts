@@ -133,7 +133,7 @@ export async function resetIdentityTables(context: IdentityTestContext): Promise
 
 export async function givenUser(
   context: IdentityTestContext,
-  user: { email: string; roles: RoleCode[]; name?: string },
+  user: { email: string; roles: RoleCode[]; name?: string; adminNewRegion?: string | null },
 ): Promise<UserAccount> {
   const outcome = await createUser(context.dependencies, null, {
     name: user.name ?? 'Usuario Sintético',
@@ -142,6 +142,19 @@ export async function givenUser(
     roles: user.roles,
   });
   if (!outcome.isSuccess) throw new Error(`No se pudo crear el usuario de prueba`);
+  const hasAgentRole = user.roles.some((role) => role === 'MANAGER' || role === 'BIDDER');
+  const adminNewRegion =
+    user.adminNewRegion === undefined
+      ? hasAgentRole
+        ? 'Región Metropolitana'
+        : null
+      : user.adminNewRegion;
+  if (adminNewRegion !== null) {
+    await context.database.pool.query('UPDATE users SET admin_new_region = ? WHERE id = ?', [
+      adminNewRegion,
+      outcome.value.id,
+    ]);
+  }
   return outcome.value;
 }
 

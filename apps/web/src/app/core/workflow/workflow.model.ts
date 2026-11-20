@@ -78,6 +78,8 @@ export interface WorkflowDetail {
     readonly tribunal: string | null;
     readonly auctionBidderName: string | null;
     readonly auctionPayerName: string | null;
+    readonly assignmentRegion: string | null;
+    readonly auctionMode: string | null;
   } | null;
   readonly auctionAt: string | null;
   readonly participants: readonly WorkflowParticipant[];

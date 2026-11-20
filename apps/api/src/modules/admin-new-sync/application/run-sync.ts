@@ -5,6 +5,7 @@ import { findActiveUserIdsByExactNameAndRole } from '../../identity/persistence/
 import { startWorkflow } from '../../workflow/application/start-workflow.js';
 import { synchronizeSourceParticipants } from '../../workflow/application/synchronize-source-participants.js';
 import { businessDayKey } from '../../workflow/domain/due-date.js';
+import { isParticipantRegionEligible } from '../../workflow/domain/participant-eligibility.js';
 import {
   REFERENCE_DATE_FIELDS,
   SYNTHETIC_ADMIN_NEW_ID_FLOOR,
@@ -207,12 +208,21 @@ class SyncRun {
     // Una propiedad sin workflow lo recibe en cuanto es elegible (p. ej., se le asignó una fecha
     // de remate futura, o falló el inicio en una ejecución anterior).
     if (existing.workflowId === null) {
-      await this.startWorkflowIfEligible(existing.id, auctionAt, source.auctionState, sourceChanged);
+      await this.startWorkflowIfEligible(
+        existing.id,
+        auctionAt,
+        source.auctionState,
+        sourceChanged,
+        existing.assignmentRegion,
+        existing.auctionMode,
+      );
     } else if (existing.workflowStatus === 'ACTIVE' && source.auctionState !== null) {
       const assignments = await this.resolveSourceParticipants(
         source.adminNewId,
         source.auctionState,
         sourceChanged,
+        existing.assignmentRegion,
+        existing.auctionMode,
       );
       await synchronizeSourceParticipants(this.dependencies, existing.workflowId, assignments);
     }
@@ -245,6 +255,8 @@ class SyncRun {
       normalized.snapshot.auctionAt,
       sourceParticipants,
       true,
+      normalized.snapshot.assignmentRegion,
+      normalized.snapshot.auctionMode,
     );
     await insertSourceChange(this.db, {
       propertyId,
@@ -338,6 +350,8 @@ class SyncRun {
     auctionAt: Date | null,
     sourceParticipants: { bidder: string | null; payer: string | null } | null,
     reportUnmatched: boolean,
+    assignmentRegion: string | null,
+    auctionMode: string | null,
   ): Promise<{ workflowId: number | null; reason: string | null }> {
     const today = businessDayKey(this.dependencies.clock.now());
     if (auctionAt && businessDayKey(auctionAt) < today) {
@@ -347,6 +361,8 @@ class SyncRun {
       propertyId,
       sourceParticipants,
       reportUnmatched,
+      assignmentRegion,
+      auctionMode,
     );
     const outcome = await startWorkflow(this.dependencies, null, propertyId, { assignedParticipants });
     if (!outcome.isSuccess) {
@@ -360,6 +376,8 @@ class SyncRun {
     adminNewId: number,
     sourceParticipants: { bidder: string | null; payer: string | null } | null,
     reportUnmatched: boolean,
+    assignmentRegion: string | null,
+    auctionMode: string | null,
   ) {
     if (!sourceParticipants) return [];
     const candidates = [
@@ -377,16 +395,28 @@ class SyncRun {
         candidate.sourceName,
         candidate.participantType,
       );
-      const matchedUserId = matches.length === 1 ? matches[0] : undefined;
-      if (matchedUserId !== undefined) {
+      const eligibleMatches = matches.filter((user) =>
+        isParticipantRegionEligible(
+          candidate.participantType,
+          user.region,
+          assignmentRegion,
+          auctionMode,
+        ),
+      );
+      const matchedUser = eligibleMatches.length === 1 ? eligibleMatches[0] : undefined;
+      if (matchedUser !== undefined) {
         assignedParticipants.push({
           participantType: candidate.participantType,
-          userId: matchedUserId,
+          userId: matchedUser.id,
         });
         continue;
       }
       if (reportUnmatched) {
-        this.reportUnmatchedParticipant(adminNewId, candidate.participantType, matches.length > 1);
+        this.reportUnmatchedParticipant(
+          adminNewId,
+          candidate.participantType,
+          eligibleMatches.length > 1,
+        );
       }
     }
     return assignedParticipants;

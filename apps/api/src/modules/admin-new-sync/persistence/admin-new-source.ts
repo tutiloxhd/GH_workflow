@@ -24,6 +24,14 @@ const CONNECTION_LIMIT = 2;
 // así que se comparan como texto para evitar conversiones de cada fila en MySQL.
 const ID_BATCH_SIZE = 500;
 
+function normalizeLabel(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('es-CL');
+}
+
 function chunks<Item>(items: readonly Item[], size: number): Item[][] {
   const result: Item[][] = [];
   for (let start = 0; start < items.length; start += size) {
@@ -87,6 +95,7 @@ const toDetail = (raw: RowDataPacket): SourceDetail => ({
 const toAuction = (raw: RowDataPacket): SourceAuction => ({
   rowId: Number(raw.id_dr),
   auctionTime: nullableText(raw.hora_remate),
+  auctionMode: nullableText(raw.tipo_remate),
 });
 
 const toAuctionState = (raw: RowDataPacket): SourceAuctionState => ({
@@ -132,6 +141,7 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
                   )
                 ) AS agent_name,
                 agent.rut AS agent_rut,
+                agent.region AS agent_region,
                 source_user.correo AS email,
                 source_user.pass AS legacy_password,
                 source_user.id_gh_area AS area_id,
@@ -157,6 +167,7 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
         legacyPassword: nullableText(row.legacy_password),
         adminNewAreaId: Number(row.area_id),
         adminNewAreaName: nullableText(row.area_name),
+        adminNewRegion: nullableText(row.agent_region)?.trim() || null,
       }));
     },
 
@@ -169,6 +180,20 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
         [ACCEPTED_CLASSIFICATION_ID],
       );
       if (propertyRows.length === 0) return [];
+
+      const [communeRows] = await pool.query<RowDataPacket[]>(
+        'SELECT comuna, region FROM gh_comuna_region',
+      );
+      const regionsByCommune = new Map<string, Set<string>>();
+      for (const row of communeRows) {
+        const commune = nullableText(row.comuna);
+        const region = nullableText(row.region)?.trim();
+        if (!commune || !region) continue;
+        const key = normalizeLabel(commune);
+        const regions = regionsByCommune.get(key) ?? new Set<string>();
+        regions.add(region);
+        regionsByCommune.set(key, regions);
+      }
 
       const textIds = propertyRows.map((row) => String(row.id_propiedad));
       const details = latestByProperty(
@@ -185,7 +210,7 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
       );
       const auctions = latestByProperty(
         await selectByIds(
-          `SELECT id_dr, idp, hora_remate FROM datos_lremate WHERE idp IN (?)`,
+          `SELECT id_dr, idp, hora_remate, tipo_remate FROM datos_lremate WHERE idp IN (?)`,
           textIds,
         ),
         'idp',
@@ -218,12 +243,15 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
         const adminNewId = Number(row.id_propiedad);
         const detail = details.get(adminNewId);
         const auction = auctions.get(adminNewId);
+        const commune = nullableText(row.comuna);
+        const communeRegions = commune ? regionsByCommune.get(normalizeLabel(commune)) : undefined;
         return {
           adminNewId,
           name: nullableText(row.nombre),
           location: nullableText(row.ubicacion),
-          commune: nullableText(row.comuna),
+          commune,
           region: nullableText(row.region),
+          assignmentRegion: communeRegions?.size === 1 ? [...communeRegions][0] ?? null : null,
           detail: detail?.row ?? null,
           detailRowCount: detail?.count ?? 0,
           auction: auction?.row ?? null,

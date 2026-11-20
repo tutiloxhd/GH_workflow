@@ -79,6 +79,10 @@ export async function givenProperty(
      VALUES (9000000000 + FLOOR(RAND() * 1000000), 'Propiedad sintética', ?, UTC_TIMESTAMP(6))`,
     [auctionAt === null ? null : new Date(auctionAt)],
   );
+  await context.database.pool.query(
+    "UPDATE properties SET assignment_region = 'Región Metropolitana', auction_mode = 'Presencial' WHERE id = ?",
+    [result.insertId],
+  );
   return result.insertId;
 }
 

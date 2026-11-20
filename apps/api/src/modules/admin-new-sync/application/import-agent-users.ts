@@ -11,8 +11,10 @@ import {
 } from '../../identity/persistence/roles-repository.js';
 import {
   findExistingEmails,
+  findAdminNewUserRegions,
   findUserIdsByAdminNewUserIds,
   insertUser,
+  updateAdminNewUserRegion,
 } from '../../identity/persistence/users-repository.js';
 import type { AdminNewSource } from '../persistence/admin-new-source.js';
 import type { SourceAgentUser } from '../domain/source-agent-user.js';
@@ -40,6 +42,8 @@ export interface AgentUserImportSummary {
   readonly alreadyImported: number;
   readonly emailConflicts: number;
   readonly imported: number;
+  readonly regionsUpdated: number;
+  readonly usersWithoutRegion: number;
   readonly legalReviewerRolesAdded: number;
   readonly bcryptPasswords: number;
   readonly plaintextPasswords: number;
@@ -163,12 +167,13 @@ export async function importAdminNewAgentUsers(
   }
 
   let imported = 0;
+  let regionsUpdated = 0;
   let legalReviewerRolesAdded = 0;
   let alreadyImported = existingSourceIds.size;
   let emailConflicts = notImported.length - readyToImport.length;
   const legalReviewerUsers = candidateUsers.filter(needsLegalReviewerRole).length;
 
-  if (shouldApply && (readyToImport.length > 0 || legalReviewerUsers > 0)) {
+  if (shouldApply && candidateUsers.length > 0) {
     const preparedUsers = await Promise.all(
       readyToImport.map(async (user) => ({
         ...user,
@@ -178,6 +183,10 @@ export async function importAdminNewAgentUsers(
 
     await dependencies.database.db.transaction(async (transaction) => {
       const currentUsersBySourceId = await findUserIdsByAdminNewUserIds(
+        transaction,
+        candidateSourceIds,
+      );
+      const currentRegionsBySourceId = await findAdminNewUserRegions(
         transaction,
         candidateSourceIds,
       );
@@ -197,6 +206,15 @@ export async function importAdminNewAgentUsers(
         return id;
       };
       const assignedAt = dependencies.clock.now();
+
+      for (const user of candidateUsers) {
+        const current = currentRegionsBySourceId.get(user.source.adminNewUserId);
+        const sourceRegion = user.source.adminNewRegion;
+        if (current && sourceRegion && current.region !== sourceRegion) {
+          await updateAdminNewUserRegion(transaction, current.userId, sourceRegion);
+          regionsUpdated += 1;
+        }
+      }
 
       for (const user of candidateUsers.filter(needsLegalReviewerRole)) {
         const userId = currentUsersBySourceId.get(user.source.adminNewUserId);
@@ -218,6 +236,7 @@ export async function importAdminNewAgentUsers(
           adminNewUserId: user.source.adminNewUserId,
           adminNewAreaId: user.source.adminNewAreaId,
           adminNewAreaName: user.source.adminNewAreaName,
+          adminNewRegion: user.source.adminNewRegion,
         });
         await replaceUserRoleIds(transaction, {
           userId,
@@ -243,6 +262,8 @@ export async function importAdminNewAgentUsers(
     alreadyImported,
     emailConflicts,
     imported,
+    regionsUpdated,
+    usersWithoutRegion: candidateUsers.filter((user) => !user.source.adminNewRegion).length,
     legalReviewerRolesAdded,
     bcryptPasswords,
     plaintextPasswords,

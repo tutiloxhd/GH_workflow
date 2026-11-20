@@ -1188,6 +1188,8 @@ components:
             tribunal: { type: [string, 'null'] }
             auctionBidderName: { type: [string, 'null'] }
             auctionPayerName: { type: [string, 'null'] }
+            assignmentRegion: { type: [string, 'null'] }
+            auctionMode: { type: [string, 'null'] }
         auctionAt: { type: [string, 'null'], format: date-time }
         participants:
           type: array
@@ -1236,7 +1238,7 @@ components:
     User:
       type: object
       additionalProperties: false
-      required: [id, name, email, rut, adminNewAreaId, adminNewAreaName, status, roles, createdAt]
+      required: [id, name, email, rut, adminNewAreaId, adminNewAreaName, adminNewRegion, status, roles, createdAt]
       properties:
         id: { type: integer }
         name: { type: string }
@@ -1244,6 +1246,7 @@ components:
         rut: { type: [string, 'null'] }
         adminNewAreaId: { type: [integer, 'null'] }
         adminNewAreaName: { type: [string, 'null'] }
+        adminNewRegion: { type: [string, 'null'] }
         status: { type: string, enum: [ACTIVE, INACTIVE, BLOCKED] }
         roles:
           type: array

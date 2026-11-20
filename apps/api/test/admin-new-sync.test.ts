@@ -5,6 +5,7 @@ import {
   type SyncDependencies,
   type SyncOutcome,
 } from '../src/modules/admin-new-sync/application/run-sync.js';
+import { importAdminNewAgentUsers } from '../src/modules/admin-new-sync/application/import-agent-users.js';
 import type { AdminNewSource } from '../src/modules/admin-new-sync/persistence/admin-new-source.js';
 import { insertSourceChange } from '../src/modules/admin-new-sync/persistence/sync-repository.js';
 import { startSourceFixture, type SourceFixture } from './admin-new-source-fixture.js';
@@ -85,6 +86,46 @@ describe('sincronización con admin_new', () => {
         executionId,
       ])
     ).map((row) => row.code as string);
+
+  it('actualiza la región de agentes ya importados desde gh_agente_zona', async () => {
+    const user = await givenUser(context, {
+      email: 'agente-region@example.test',
+      roles: ['MANAGER'],
+    });
+    await context.database.pool.query(
+      'UPDATE users SET admin_new_user_id = ?, admin_new_region = NULL WHERE id = ?',
+      [71001, user.id],
+    );
+    const sourceUser = {
+      adminNewUserId: 71001,
+      name: user.name,
+      rut: '12345678-5',
+      email: user.email,
+      legacyPassword: 'clave-sintetica',
+      adminNewAreaId: 3,
+      adminNewAreaName: 'Operaciones',
+      adminNewRegion: 'Coquimbo',
+    };
+    const source = {
+      ...fixture.source,
+      readAgentUsers: async () => [sourceUser],
+      close: async () => undefined,
+    };
+
+    const summary = await importAdminNewAgentUsers(
+      {
+        database: context.database,
+        source,
+        clock: context.clock,
+        passwordHasher: context.dependencies.passwordHasher,
+      },
+      true,
+    );
+
+    const [row] = await rows('SELECT admin_new_region FROM users WHERE id = ?', [user.id]);
+    expect(summary).toMatchObject({ alreadyImported: 1, imported: 0, regionsUpdated: 1 });
+    expect(row?.admin_new_region).toBe('Coquimbo');
+  });
 
   describe('propiedades nuevas', () => {
     it('una propiedad aceptada genera su workflow sola', async () => {

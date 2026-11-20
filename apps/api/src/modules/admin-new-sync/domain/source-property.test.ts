@@ -29,9 +29,10 @@ const baseSource: SourceProperty = {
   location: 'Calle Sintética 123',
   commune: 'Ñuñoa',
   region: 'Región Metropolitana',
+  assignmentRegion: 'Región Metropolitana',
   detail: baseDetail,
   detailRowCount: 1,
-  auction: { rowId: 501, auctionTime: '10:30' },
+  auction: { rowId: 501, auctionTime: '10:30', auctionMode: 'Presencial' },
   auctionRowCount: 1,
   auctionState: null,
 };
@@ -105,7 +106,10 @@ describe('normalización de una propiedad', () => {
   });
 
   it('sin hora de remate usa 00:00 y lo advierte', () => {
-    const source = { ...baseSource, auction: { rowId: 501, auctionTime: '  ' } };
+    const source = {
+      ...baseSource,
+      auction: { rowId: 501, auctionTime: '  ', auctionMode: 'Presencial' },
+    };
     const { snapshot, issues } = normalizeSourceProperty(source);
 
     expect(snapshot.auctionAt?.toISOString()).toBe('2026-12-07T03:00:00.000Z');

@@ -9,6 +9,7 @@ export interface SourceProperty {
   readonly location: string | null; // propiedad.ubicacion
   readonly commune: string | null;
   readonly region: string | null;
+  readonly assignmentRegion: string | null;
   readonly detail: SourceDetail | null; // dato_propiedad
   readonly detailRowCount: number;
   readonly auction: SourceAuction | null; // datos_lremate
@@ -33,6 +34,7 @@ export interface SourceDetail {
 export interface SourceAuction {
   readonly rowId: number; // id_dr
   readonly auctionTime: string | null; // hora_remate
+  readonly auctionMode: string | null;
 }
 
 export interface SourceAuctionState {
@@ -47,6 +49,8 @@ export interface PropertySnapshot {
   readonly address: string | null;
   readonly commune: string | null;
   readonly region: string | null;
+  readonly assignmentRegion: string | null;
+  readonly auctionMode: string | null;
   readonly court: string | null;
   readonly tribunal: string | null;
   readonly caseReference: string | null;
@@ -71,6 +75,7 @@ export const SOURCE_ISSUE_CODES = [
   'INVALID_TIME',
   'INVALID_AMOUNT',
   'VALUE_TRUNCATED',
+  'UNMAPPED_ASSIGNMENT_REGION',
 ] as const;
 export type SourceIssueCode = (typeof SOURCE_ISSUE_CODES)[number];
 
@@ -215,12 +220,18 @@ export function normalizeSourceProperty(source: SourceProperty): NormalizedPrope
   const guaranteePaymentDate = date(detail?.guaranteePaymentDate ?? null, 'r3');
   const guaranteeReturnDate = date(detail?.guaranteeReturnDate ?? null, 'r4');
   const balancePaymentDate = date(detail?.balancePaymentDate ?? null, 'r5');
+  const assignmentRegion = clean(source.assignmentRegion);
+  if (!assignmentRegion) {
+    report('UNMAPPED_ASSIGNMENT_REGION', 'No se pudo determinar la región de la propiedad desde su comuna');
+  }
 
   const snapshot: PropertySnapshot = {
     title: text(source.name, 'title', 'nombre'),
     address: text(source.location, 'address', 'ubicacion'),
     commune: text(source.commune, 'commune', 'comuna'),
     region: text(source.region, 'region', 'region'),
+    assignmentRegion,
+    auctionMode: clean(auction?.auctionMode ?? null),
     court: text(detail?.court ?? null, 'court', 'corte'),
     tribunal: text(detail?.tribunal ?? null, 'tribunal', 'tribunal'),
     caseReference: text(detail?.caseReference ?? null, 'caseReference', 'rol_normalizado'),
@@ -256,6 +267,7 @@ function hashSource(source: SourceProperty): string {
     source.location,
     source.commune,
     source.region,
+    source.assignmentRegion,
     detail?.rowId ?? null,
     detail?.court ?? null,
     detail?.tribunal ?? null,
@@ -269,6 +281,7 @@ function hashSource(source: SourceProperty): string {
     detail?.guaranteeWindowEnd ?? null,
     auction?.rowId ?? null,
     auction?.auctionTime ?? null,
+    auction?.auctionMode ?? null,
     source.auctionState?.rowId ?? null,
     source.auctionState?.bidder ?? null,
     source.auctionState?.payer ?? null,
@@ -299,6 +312,8 @@ const SNAPSHOT_FIELDS: readonly (keyof PropertySnapshot)[] = [
   'address',
   'commune',
   'region',
+  'assignmentRegion',
+  'auctionMode',
   'court',
   'tribunal',
   'caseReference',

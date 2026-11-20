@@ -12,6 +12,7 @@ export interface UserAccount {
   readonly rut: string | null;
   readonly adminNewAreaId: number | null;
   readonly adminNewAreaName: string | null;
+  readonly adminNewRegion: string | null;
   readonly status: UserStatus;
   readonly roles: readonly RoleCode[];
   readonly createdAt: Date;
@@ -30,6 +31,7 @@ const userColumns = {
   rut: users.rut,
   adminNewAreaId: users.adminNewAreaId,
   adminNewAreaName: users.adminNewAreaName,
+  adminNewRegion: users.adminNewRegion,
   status: users.status,
   createdAt: users.createdAt,
 };
@@ -122,6 +124,36 @@ export async function findUserIdsByAdminNewUserIds(
   );
 }
 
+export async function findAdminNewUserRegions(
+  executor: DatabaseExecutor,
+  adminNewUserIds: readonly number[],
+): Promise<Map<number, { userId: number; region: string | null }>> {
+  if (adminNewUserIds.length === 0) return new Map();
+  const rows = await executor
+    .select({
+      userId: users.id,
+      adminNewUserId: users.adminNewUserId,
+      region: users.adminNewRegion,
+    })
+    .from(users)
+    .where(inArray(users.adminNewUserId, adminNewUserIds));
+  return new Map(
+    rows.flatMap((row) =>
+      row.adminNewUserId === null
+        ? []
+        : [[row.adminNewUserId, { userId: row.userId, region: row.region }] as const],
+    ),
+  );
+}
+
+export async function updateAdminNewUserRegion(
+  executor: DatabaseExecutor,
+  userId: number,
+  region: string,
+): Promise<void> {
+  await executor.update(users).set({ adminNewRegion: region }).where(eq(users.id, userId));
+}
+
 export async function findExistingEmails(
   executor: DatabaseExecutor,
   emails: readonly string[],
@@ -144,6 +176,7 @@ export async function insertUser(
     adminNewUserId?: number | null;
     adminNewAreaId?: number | null;
     adminNewAreaName?: string | null;
+    adminNewRegion?: string | null;
   },
 ): Promise<number> {
   const [inserted] = await executor.insert(users).values(user).$returningId();
@@ -200,14 +233,14 @@ export async function findActiveUserIdsByExactNameAndRole(
   executor: DatabaseExecutor,
   name: string,
   role: RoleCode,
-): Promise<number[]> {
+): Promise<{ id: number; region: string | null }[]> {
   const rows = await executor
-    .select({ id: users.id, name: users.name })
+    .select({ id: users.id, name: users.name, region: users.adminNewRegion })
     .from(users)
     .innerJoin(userRoles, eq(userRoles.userId, users.id))
     .innerJoin(roles, eq(roles.id, userRoles.roleId))
     .where(and(eq(roles.code, role), eq(users.status, 'ACTIVE'), eq(users.name, name)));
-  return rows.filter((user) => user.name === name).map((user) => user.id);
+  return rows.filter((user) => user.name === name).map(({ id, region }) => ({ id, region }));
 }
 
 export async function findUserNames(

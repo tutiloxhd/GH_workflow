@@ -59,7 +59,7 @@ interface Selection {
               Titular
               <select [name]="type + '-primary'" [(ngModel)]="selections[type].primaryUserId">
                 <option [ngValue]="null">Sin cambios</option>
-                @for (user of candidates()[type]; track user.id) {
+                @for (user of candidatesFor(type); track user.id) {
                   <option [ngValue]="user.id">
                     {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
                   </option>
@@ -70,7 +70,7 @@ interface Selection {
               Suplente
               <select [name]="type + '-backup'" [(ngModel)]="selections[type].backupUserId">
                 <option [ngValue]="null">Sin suplente</option>
-                @for (user of candidates()[type]; track user.id) {
+                @for (user of candidatesFor(type); track user.id) {
                   <option [ngValue]="user.id">
                     {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
                   </option>
@@ -124,6 +124,17 @@ export class ParticipantsDialog implements OnInit {
     return null;
   }
 
+  protected candidatesFor(type: ParticipantType): readonly User[] {
+    const candidates = this.candidates()[type];
+    if (type === 'LEGAL_REVIEWER') return candidates;
+
+    const property = this.workflow().property;
+    if (type === 'BIDDER' && isVideoCall(property?.auctionMode ?? null)) return candidates;
+    const assignmentRegion = property?.assignmentRegion;
+    if (!assignmentRegion) return [];
+    return candidates.filter((user) => sameRegion(user.adminNewRegion, assignmentRegion));
+  }
+
   ngOnInit(): void {
     for (const participant of this.workflow().participants) {
       const selection = this.selections[participant.participantType];
@@ -134,7 +145,7 @@ export class ParticipantsDialog implements OnInit {
     void this.loadCandidates();
   }
 
-  // Solo usuarios activos con el rol del puesto: la API rechaza cualquier otro.
+  // El servidor valida además la regla de región y modalidad antes de guardar la selección.
   private async loadCandidates(): Promise<void> {
     try {
       const pages = await Promise.all(
@@ -180,4 +191,20 @@ export class ParticipantsDialog implements OnInit {
       this.isSaving.set(false);
     }
   }
+}
+
+function normalizeLabel(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('es-CL');
+}
+
+function sameRegion(userRegion: string | null, propertyRegion: string): boolean {
+  return userRegion !== null && normalizeLabel(userRegion) === normalizeLabel(propertyRegion);
+}
+
+function isVideoCall(mode: string | null): boolean {
+  return mode !== null && normalizeLabel(mode) === 'videollamada';
 }

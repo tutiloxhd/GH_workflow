@@ -3,6 +3,7 @@ import { findUserAccountById } from '../../identity/persistence/users-repository
 import type { DeadlineRule } from '../domain/due-date.js';
 import { computeDeadline } from '../domain/due-date.js';
 import type { ParticipantType } from '../domain/participants.js';
+import { isParticipantRegionEligible } from '../domain/participant-eligibility.js';
 import { isTaskClosed, isTaskWorkable, isWorkflowClosed } from '../domain/statuses.js';
 import { canChangeWorkflowLifecycle, isAdmin, type Actor } from '../domain/task-rules.js';
 import {
@@ -36,7 +37,16 @@ async function isEligibleParticipant(
   participantType: ParticipantType,
 ): Promise<boolean> {
   const user = await findUserAccountById(context.executor, userId);
-  return user?.status === 'ACTIVE' && user.roles.includes(participantType);
+  return (
+    user?.status === 'ACTIVE' &&
+    user.roles.includes(participantType) &&
+    isParticipantRegionEligible(
+      participantType,
+      user.adminNewRegion,
+      context.assignmentRegion,
+      context.auctionMode,
+    )
+  );
 }
 
 export function assignParticipants(

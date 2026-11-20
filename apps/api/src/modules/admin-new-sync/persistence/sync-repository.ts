@@ -210,6 +210,8 @@ const snapshotColumns = {
   address: properties.address,
   commune: properties.commune,
   region: properties.region,
+  assignmentRegion: properties.assignmentRegion,
+  auctionMode: properties.auctionMode,
   court: properties.court,
   tribunal: properties.tribunal,
   caseReference: properties.caseReference,

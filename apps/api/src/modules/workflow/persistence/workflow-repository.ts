@@ -64,6 +64,8 @@ export async function findTaskRequirements(
 
 export interface PropertyDates extends BusinessDates {
   readonly propertyId: number;
+  readonly assignmentRegion: string | null;
+  readonly auctionMode: string | null;
 }
 
 export async function findPropertyDates(
@@ -77,6 +79,8 @@ export async function findPropertyDates(
       guaranteePaymentAt: properties.guaranteePaymentAt,
       guaranteeReturnAt: properties.guaranteeReturnAt,
       balancePaymentAt: properties.balancePaymentAt,
+      assignmentRegion: properties.assignmentRegion,
+      auctionMode: properties.auctionMode,
     })
     .from(properties)
     .where(eq(properties.id, propertyId));
@@ -94,6 +98,8 @@ export async function findPropertySummary(executor: DatabaseExecutor, propertyId
       tribunal: properties.tribunal,
       auctionBidderName: properties.auctionBidderName,
       auctionPayerName: properties.auctionPayerName,
+      assignmentRegion: properties.assignmentRegion,
+      auctionMode: properties.auctionMode,
     })
     .from(properties)
     .where(eq(properties.id, propertyId));

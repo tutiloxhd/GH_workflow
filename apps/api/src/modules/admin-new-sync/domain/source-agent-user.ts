@@ -6,4 +6,5 @@ export interface SourceAgentUser {
   readonly legacyPassword: string | null;
   readonly adminNewAreaId: number;
   readonly adminNewAreaName: string | null;
+  readonly adminNewRegion: string | null;
 }

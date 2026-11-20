@@ -8,6 +8,7 @@ export const toUserResponse = (user: UserAccount) => ({
   rut: user.rut,
   adminNewAreaId: user.adminNewAreaId,
   adminNewAreaName: user.adminNewAreaName,
+  adminNewRegion: user.adminNewRegion,
   status: user.status,
   roles: user.roles,
   createdAt: user.createdAt.toISOString(),

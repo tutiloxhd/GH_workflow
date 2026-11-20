@@ -42,6 +42,8 @@ export const properties = mysqlTable(
     address: varchar('address', { length: 255 }),
     commune: varchar('commune', { length: 100 }),
     region: varchar('region', { length: 100 }),
+    assignmentRegion: varchar('assignment_region', { length: 100 }),
+    auctionMode: varchar('auction_mode', { length: 100 }),
     court: varchar('court', { length: 150 }),
     tribunal: varchar('tribunal', { length: 150 }),
     caseReference: varchar('case_reference', { length: 100 }),

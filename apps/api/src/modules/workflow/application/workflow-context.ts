@@ -12,6 +12,7 @@ import { areAllTasksCompleted, findTasksReadyToActivate } from '../domain/task-g
 import {
   findCurrentParticipants,
   findPropertyDates,
+  type PropertyDates,
   findTaskRequirements,
   findWorkflowTasks,
   insertEvents,
@@ -33,7 +34,7 @@ export class WorkflowContext {
   private constructor(
     readonly executor: DatabaseExecutor,
     readonly workflow: WorkflowRecord,
-    private dates: BusinessDates,
+    private dates: PropertyDates,
     tasks: TaskRecord[],
     private readonly requirements: ReadonlyMap<number, readonly number[]>,
     private participantList: CurrentParticipant[],
@@ -79,6 +80,14 @@ export class WorkflowContext {
 
   get businessDates(): BusinessDates {
     return this.dates;
+  }
+
+  get assignmentRegion(): string | null {
+    return this.dates.assignmentRegion;
+  }
+
+  get auctionMode(): string | null {
+    return this.dates.auctionMode;
   }
 
   findTask(taskId: number): TaskRecord | undefined {

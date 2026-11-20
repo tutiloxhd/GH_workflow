@@ -26,6 +26,7 @@ export const users = mysqlTable(
     adminNewUserId: int('admin_new_user_id', { unsigned: true }),
     adminNewAreaId: int('admin_new_area_id', { unsigned: true }),
     adminNewAreaName: varchar('admin_new_area_name', { length: 50 }),
+    adminNewRegion: varchar('admin_new_region', { length: 100 }),
     status: varchar('status', { length: 20, enum: USER_STATUSES }).notNull().default('ACTIVE'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

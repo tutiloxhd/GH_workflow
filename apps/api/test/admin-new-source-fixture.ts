@@ -14,6 +14,11 @@ const SOURCE_TABLES = [
      nombre TEXT, ubicacion TEXT, comuna TEXT, region TEXT,
      id_clasif INT, KEY idx_clasif (id_clasif)
    ) ENGINE=InnoDB`,
+  `CREATE TABLE IF NOT EXISTS gh_comuna_region (
+     id_gh_comuna_region INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+     comuna VARCHAR(100) NOT NULL UNIQUE,
+     region VARCHAR(100) NOT NULL
+   ) ENGINE=InnoDB`,
   `CREATE TABLE IF NOT EXISTS dato_propiedad (
      id_dato INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
      id_p TEXT, corte TEXT, tribunal TEXT, rol_normalizado VARCHAR(100),
@@ -23,7 +28,7 @@ const SOURCE_TABLES = [
    ) ENGINE=InnoDB`,
   `CREATE TABLE IF NOT EXISTS datos_lremate (
      id_dr INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-     idp TEXT, hora_remate TEXT
+     idp TEXT, hora_remate TEXT, tipo_remate VARCHAR(100)
    ) ENGINE=MyISAM`,
   `CREATE TABLE IF NOT EXISTS estado_remate (
      id_er INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -67,6 +72,8 @@ export interface SourcePropertyInput extends SourceDetailInput {
   readonly id: number;
   readonly name?: string;
   readonly commune?: string;
+  readonly assignmentRegion?: string;
+  readonly auctionMode?: string;
   readonly classificationId?: number;
   readonly bidder?: string | null;
   readonly payer?: string | null;
@@ -85,6 +92,14 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
   );
   for (const statement of SOURCE_TABLES) {
     await adminPool.query(statement.replace('IF NOT EXISTS ', `IF NOT EXISTS ${databaseName}.`));
+  }
+  const [auctionModeColumns] = await adminPool.query<RowDataPacket[]>(
+    `SELECT COLUMN_NAME FROM information_schema.columns
+      WHERE table_schema = ? AND table_name = 'datos_lremate' AND column_name = 'tipo_remate'`,
+    [databaseName],
+  );
+  if (auctionModeColumns.length === 0) {
+    await adminPool.query(`ALTER TABLE ${databaseName}.datos_lremate ADD COLUMN tipo_remate VARCHAR(100)`);
   }
 
   const source = connectAdminNewSource({
@@ -128,11 +143,16 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
           property.classificationId ?? 7,
         ],
       );
+      await adminPool.query(
+        `INSERT INTO ${table('gh_comuna_region')} (comuna, region) VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE region = VALUES(region)`,
+        [property.commune ?? 'Ñuñoa', property.assignmentRegion ?? 'Región Metropolitana'],
+      );
       await addDetailRow(property.id, property);
       if (property.horaRemate !== null) {
         const [auction] = await adminPool.query<ResultSetHeader>(
-          `INSERT INTO ${table('datos_lremate')} (idp, hora_remate) VALUES (?, ?)`,
-          [String(property.id), property.horaRemate ?? '10:30'],
+          `INSERT INTO ${table('datos_lremate')} (idp, hora_remate, tipo_remate) VALUES (?, ?, ?)`,
+          [String(property.id), property.horaRemate ?? '10:30', property.auctionMode ?? 'Presencial'],
         );
         if (property.bidder !== undefined || property.payer !== undefined) {
           await adminPool.query(
@@ -179,7 +199,13 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
       ]);
     },
     async reset() {
-      for (const name of ['propiedad', 'dato_propiedad', 'datos_lremate', 'estado_remate']) {
+      for (const name of [
+        'propiedad',
+        'gh_comuna_region',
+        'dato_propiedad',
+        'datos_lremate',
+        'estado_remate',
+      ]) {
         await adminPool.query(`DELETE FROM ${table(name)}`);
       }
     },
