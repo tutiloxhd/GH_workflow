@@ -64,6 +64,13 @@
       "when": 1795019000000,
       "tag": "0008_notification_workflow_events",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1795183850000,
+      "tag": "0009_agent_region_assignment",
+      "breakpoints": true
     }
   ]
 }
