@@ -250,6 +250,35 @@ dialog.modal::backdrop {
   margin-top: 6px;
 }
 
+dialog.participants-dialog {
+  width: min(560px, calc(100vw - 32px));
+  overflow-x: hidden;
+}
+
+.participants-dialog .modal-form,
+.participants-dialog .checkbox-list {
+  min-width: 0;
+}
+
+.participants-dialog .checkbox-list label.field {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+}
+
+.participants-dialog .field select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
+.participants-dialog .muted {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
 @media (max-width: 760px) {
   dialog.modal {
     width: 100vw;

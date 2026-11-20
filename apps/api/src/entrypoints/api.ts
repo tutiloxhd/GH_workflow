@@ -3,19 +3,21 @@ import {
   identityDependenciesFromEnv,
   usesSecureCookies,
 } from '../composition/identity-dependencies-from-env.js';
-import { toDatabaseSettings } from '../config/database-settings.js';
+import { toAdminNewDatabaseSettings, toDatabaseSettings } from '../config/database-settings.js';
 import { parseEnv } from '../config/env.js';
+import { connectAdminNewSource } from '../modules/admin-new-sync/persistence/admin-new-source.js';
 import { connectDatabase } from '../platform/database/database.js';
 import { logger } from '../platform/logging/logger.js';
 
 function start(): void {
   const env = parseEnv(process.env);
   const database = connectDatabase(toDatabaseSettings(env));
+  const adminNewSource = connectAdminNewSource(toAdminNewDatabaseSettings(env));
 
   const app = buildApiApp(identityDependenciesFromEnv(env, database), {
     allowedOrigin: env.WEB_ORIGIN,
     isSecureCookie: usesSecureCookies(env),
-  });
+  }, adminNewSource);
 
   const server = app.listen(env.PORT, () => {
     logger.info('api.started', { port: env.PORT, environment: env.NODE_ENV });
@@ -24,8 +26,8 @@ function start(): void {
   const shutDown = (signal: string) => {
     logger.info('api.stopping', { signal });
     server.close(() => {
-      database.close().catch((error: unknown) => {
-        logger.error('api.database_close_failed', error);
+      Promise.all([database.close(), adminNewSource.close()]).catch((error: unknown) => {
+        logger.error('api.connection_close_failed', error);
       });
     });
   };

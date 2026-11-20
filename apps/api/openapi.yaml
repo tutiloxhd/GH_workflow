@@ -419,12 +419,46 @@ paths:
       responses:
         '200': { $ref: '#/components/responses/WorkflowChanged' }
         '400':
-          description: '`VALIDATION_FAILED` o `INVALID_PARTICIPANT` (usuario inactivo o sin el rol)'
+          description: '`VALIDATION_FAILED` o `INVALID_PARTICIPANT` (usuario inactivo, sin el rol o sin tipo de agente permitido para la modalidad)'
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '403': { $ref: '#/components/responses/Problem' }
         '409': { $ref: '#/components/responses/Problem' }
+
+  /api/workflows/{workflowId}/participant-candidates:
+    get:
+      operationId: listParticipantCandidates
+      summary: Lista participantes disponibles con tipos de agente de admin_new (ADMIN)
+      description: Devuelve usuarios activos del workflow que correspondan a agentes activos en admin_new.
+      tags: [workflows]
+      parameters: [{ $ref: '#/components/parameters/WorkflowId' }]
+      responses:
+        '200':
+          description: Candidatos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, rut, roles, agentTypes]
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        rut: { type: [string, 'null'] }
+                        roles:
+                          type: array
+                          items: { $ref: '#/components/schemas/RoleCode' }
+                        agentTypes:
+                          type: array
+                          items: { type: string }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
 
   /api/workflows/{workflowId}/suspend:
     post:

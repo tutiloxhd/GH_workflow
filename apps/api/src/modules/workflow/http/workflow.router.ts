@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { z, type ZodType } from 'zod';
 import { sendProblem, sendValidationProblem } from '../../../platform/http/problem-details.js';
 import type { Result } from '../../../platform/result.js';
+import type { AdminNewSource } from '../../admin-new-sync/persistence/admin-new-source.js';
 import type { IdentityDependencies } from '../../identity/application/identity-dependencies.js';
 import { getCurrentUser, requireRole, requireSession } from '../../identity/http/authorization.js';
 import { startWorkflow } from '../application/start-workflow.js';
@@ -24,6 +25,7 @@ import {
   listProperties,
   listWorkflows,
 } from '../application/workflow-queries.js';
+import { listParticipantCandidates } from '../application/list-participant-candidates.js';
 import { DUE_REFERENCES } from '../domain/due-date.js';
 import { PARTICIPANT_TYPES } from '../domain/participants.js';
 import { WORKFLOW_STATUSES } from '../domain/statuses.js';
@@ -109,6 +111,7 @@ const actorOf = (response: Response): Actor => {
 export function createWorkflowRouter(
   workflow: WorkflowDependencies,
   identity: IdentityDependencies,
+  source: Pick<AdminNewSource, 'readActiveAgentTypes'>,
 ): Router {
   const router = Router();
   router.use(requireSession(identity));
@@ -187,15 +190,40 @@ export function createWorkflowRouter(
     response.json({ events: events.value });
   });
 
-  router.put('/workflows/:workflowId/participants', async (request, response) => {
-    const params = parse(workflowParams, request.params, response);
-    const body = params && parse(participantsBody, request.body, response);
-    if (!params || !body) return;
-    await respond(
-      response,
-      await assignParticipants(workflow, actorOf(response), params.workflowId, body.assignments),
-    );
-  });
+  router.get(
+    '/workflows/:workflowId/participant-candidates',
+    requireRole('ADMIN'),
+    async (request, response) => {
+      const params = parse(workflowParams, request.params, response);
+      if (!params) return;
+      const detail = await getWorkflowDetail(workflow, actorOf(response), params.workflowId);
+      if (!detail.isSuccess) {
+        sendProblem(response, WORKFLOW_PROBLEMS[detail.failure]);
+        return;
+      }
+      response.json({ candidates: await listParticipantCandidates(workflow.database, source) });
+    },
+  );
+
+  router.put(
+    '/workflows/:workflowId/participants',
+    requireRole('ADMIN'),
+    async (request, response) => {
+      const params = parse(workflowParams, request.params, response);
+      const body = params && parse(participantsBody, request.body, response);
+      if (!params || !body) return;
+      await respond(
+        response,
+        await assignParticipants(
+          workflow,
+          source,
+          actorOf(response),
+          params.workflowId,
+          body.assignments,
+        ),
+      );
+    },
+  );
 
   const lifecycleRoute = (
     path: string,

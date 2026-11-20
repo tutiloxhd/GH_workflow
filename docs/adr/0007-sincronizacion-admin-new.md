@@ -1,6 +1,6 @@
 # ADR 0007: Sincronización con admin_new (fase 1)
 
-- **Estado:** aceptado (2026-11-13); implementado en el sprint 4. Las reglas marcadas como provisorias esperan confirmación de negocio.
+- **Estado:** aceptado (2026-11-13); actualizado para HU-08 (2026-11-20). Las reglas marcadas como provisorias esperan confirmación de negocio.
 - **Ámbito:** `apps/api/src/modules/admin-new-sync`, `apps/api/src/entrypoints/sync.ts`
 
 ## Contexto
@@ -38,7 +38,7 @@ Solo una propiedad aceptada tenía dos filas en `dato_propiedad`, ambas con la m
 
 **Inicio del workflow (provisorio).** Una propiedad aceptada sin workflow lo recibe cuando su remate es hoy o después, o cuando la fecha se desconoce. Un remate ya ocurrido se copia, pero no abre un flujo con todas sus tareas vencidas: el cambio queda `IGNORED` y un administrador puede iniciarlo desde «Propiedades sin workflow». Si después la fecha pasa a ser futura, la siguiente ejecución inicia el workflow. No hay duplicados: `properties.admin_new_id` y `workflow_instances.property_id` son únicos, y el inicio es idempotente.
 
-**Asignación inicial desde `estado_remate`.** `pagador` (gestor) se vincula con un usuario interno activo de rol `MANAGER`, y `postor` con uno de rol `BIDDER`, por coincidencia exacta y única del nombre. Cada participante que tenga coincidencia se asigna al workflow activo aunque falte el otro. Si ambos se vinculan, se crean sus puestos primarios en el workflow antes de activar tareas y se completa automáticamente `ASSIGN_MANAGER_AND_BIDDER`; la tarea conserva su responsable interno y la auditoría identifica `ADMIN_NEW` como origen. Si un nombre no tiene coincidencia única, se registra una advertencia; la tarea continúa abierta hasta que ambos roles estén asignados desde el origen o manualmente.
+**Asignación inicial y cambios desde `estado_remate` (HU-08).** `pagador` (gestor) se vincula con un usuario interno activo de rol `MANAGER`, y `postor` con uno de rol `BIDDER`, por coincidencia exacta y única del nombre y elegibilidad regional. Cada participante que tenga coincidencia se asigna al workflow aunque falte el otro. Si ambos se vinculan, se crean sus puestos primarios antes de activar tareas y se completa automáticamente `ASSIGN_MANAGER_AND_BIDDER`; esa tarea conserva su responsable interno. Si `admin_new` cambia el gestor o el postor de un workflow activo o suspendido, se cierra la asignación primaria vigente y se crea la nueva; las tareas abiertas ya activadas de ese rol se asignan al usuario nuevo, mientras las completadas o canceladas permanecen intactas. Las tareas bloqueadas se asignan al activarse usando el titular vigente. El historial usa origen `SYNC` e incluye responsable anterior y nuevo. Si no hay una coincidencia única y elegible, se registra una advertencia y no se reemplaza la asignación vigente. Repetir la sincronización sin cambios no genera otra reasignación ni advertencia.
 
 **Nombres de las partes del remate.** Los valores originales de `postor` y `pagador` se conservan en la copia de `properties` y se muestran en el detalle del workflow junto a los responsables internos. No se usan como cuentas ni como responsables de tareas. Los nombres se actualizan con cada sincronización y no se incluyen en el historial JSON de cambios de propiedad.
 

@@ -108,8 +108,8 @@ describe('sincronización con admin_new', () => {
     };
     const source = {
       ...fixture.source,
-      readAgentUsers: async () => [sourceUser],
-      close: async () => undefined,
+      readAgentUsers: () => Promise.resolve([sourceUser]),
+      close: () => Promise.resolve(),
     };
 
     const summary = await importAdminNewAgentUsers(
@@ -363,6 +363,218 @@ describe('sincronización con admin_new', () => {
       });
     });
 
+    it('reasigna las tareas abiertas cuando admin_new cambia al gestor y audita el cambio una sola vez', async () => {
+      await givenUser(context, {
+        email: 'reassignment-admin@example.test',
+        name: 'Administrador de reasignación',
+        roles: ['ADMIN'],
+      });
+      const previousManager = await givenUser(context, {
+        email: 'previous-manager@example.test',
+        name: 'Gestor anterior',
+        roles: ['MANAGER'],
+      });
+      const newManager = await givenUser(context, {
+        email: 'new-manager@example.test',
+        name: 'Gestor nuevo',
+        roles: ['MANAGER'],
+      });
+      const bidder = await givenUser(context, {
+        email: 'reassignment-bidder@example.test',
+        name: 'Postor vigente',
+        roles: ['BIDDER'],
+      });
+      await fixture.givenAccepted({
+        id: 13914,
+        r1: FUTURE_AUCTION,
+        payer: previousManager.name,
+        bidder: bidder.name,
+      });
+      await completedSync();
+
+      const [workflow] = await workflowsOf(13914);
+      const managerTasks = await rows(
+        `SELECT ti.id, ti.status FROM task_instances ti
+           JOIN task_definitions td ON td.id = ti.task_definition_id
+          WHERE ti.workflow_instance_id = ? AND td.responsible_role = 'MANAGER'
+          ORDER BY ti.id LIMIT 2`,
+        [workflow?.id],
+      );
+      const openTaskId = Number(managerTasks[0]?.id);
+      const completedTaskId = Number(managerTasks[1]?.id);
+      expect(managerTasks).toHaveLength(2);
+      await context.database.pool.query(
+        `UPDATE task_instances SET status = 'READY', assigned_user_id = ? WHERE id = ?`,
+        [previousManager.id, openTaskId],
+      );
+      await context.database.pool.query(
+        `UPDATE task_instances SET status = 'COMPLETED', assigned_user_id = ? WHERE id = ?`,
+        [previousManager.id, completedTaskId],
+      );
+      await fixture.setAuctionParticipants(13914, bidder.name, newManager.name);
+
+      const outcome = await completedSync();
+      const taskRows = await rows(
+        `SELECT id, status, assigned_user_id AS assignedUserId FROM task_instances
+          WHERE id IN (?, ?) ORDER BY id`,
+        [openTaskId, completedTaskId],
+      );
+      const currentManagers = await rows(
+        `SELECT user_id AS userId FROM workflow_participants
+          WHERE workflow_instance_id = ? AND participant_type = 'MANAGER' AND valid_to IS NULL`,
+        [workflow?.id],
+      );
+      const history = await rows(
+        `SELECT event_type AS eventType, event_source AS eventSource, details
+           FROM workflow_events WHERE workflow_instance_id = ? AND event_type = 'TASK_ASSIGNED'
+          ORDER BY id`,
+        [workflow?.id],
+      );
+
+      expect(taskRows).toEqual([
+        { id: openTaskId, status: 'READY', assignedUserId: newManager.id },
+        { id: completedTaskId, status: 'COMPLETED', assignedUserId: previousManager.id },
+      ]);
+      expect(currentManagers).toEqual([{ userId: newManager.id }]);
+      const reassignmentEvent = history.find((event) => {
+        const details = event.details as Record<string, unknown> | null;
+        return details?.previousUserId === previousManager.id;
+      });
+      expect(reassignmentEvent?.eventSource).toBe('SYNC');
+      expect(reassignmentEvent?.details).toMatchObject({
+        previousUserId: previousManager.id,
+        newUserId: newManager.id,
+      });
+
+      await completedSync();
+      const syncAssignments = await rows(
+        `SELECT details FROM workflow_events
+          WHERE workflow_instance_id = ? AND event_type = 'TASK_ASSIGNED' AND event_source = 'SYNC'`,
+        [workflow?.id],
+      );
+      const reassignmentEvents = syncAssignments.filter((event) => {
+        const details = event.details as Record<string, unknown> | null;
+        return details?.previousUserId === previousManager.id;
+      });
+      expect(reassignmentEvents).toHaveLength(1);
+      expect(outcome.status).toBe('SUCCEEDED');
+    });
+
+    it('reasigna solo tareas abiertas cuando admin_new cambia al postor', async () => {
+      const manager = await givenUser(context, {
+        email: 'bidder-reassignment-manager@example.test',
+        name: 'Gestor para cambio de postor',
+        roles: ['MANAGER'],
+      });
+      const previousBidder = await givenUser(context, {
+        email: 'previous-bidder@example.test',
+        name: 'Postor anterior',
+        roles: ['BIDDER'],
+      });
+      const newBidder = await givenUser(context, {
+        email: 'new-bidder@example.test',
+        name: 'Postor nuevo',
+        roles: ['BIDDER'],
+      });
+      await fixture.givenAccepted({
+        id: 13916,
+        r1: FUTURE_AUCTION,
+        payer: manager.name,
+        bidder: previousBidder.name,
+      });
+      await completedSync();
+
+      const [workflow] = await workflowsOf(13916);
+      const bidderTasks = await rows(
+        `SELECT ti.id, ti.status FROM task_instances ti
+           JOIN task_definitions td ON td.id = ti.task_definition_id
+          WHERE ti.workflow_instance_id = ? AND td.responsible_role = 'BIDDER'
+          ORDER BY ti.id LIMIT 2`,
+        [workflow?.id],
+      );
+      const openTaskId = Number(bidderTasks[0]?.id);
+      const completedTaskId = Number(bidderTasks[1]?.id);
+      expect(bidderTasks).toHaveLength(2);
+      await context.database.pool.query(
+        `UPDATE task_instances SET status = 'READY', assigned_user_id = ? WHERE id = ?`,
+        [previousBidder.id, openTaskId],
+      );
+      await context.database.pool.query(
+        `UPDATE task_instances SET status = 'COMPLETED', assigned_user_id = ? WHERE id = ?`,
+        [previousBidder.id, completedTaskId],
+      );
+      await fixture.setAuctionParticipants(13916, newBidder.name, manager.name);
+
+      const outcome = await completedSync();
+      const taskRows = await rows(
+        `SELECT id, status, assigned_user_id AS assignedUserId FROM task_instances
+          WHERE id IN (?, ?) ORDER BY id`,
+        [openTaskId, completedTaskId],
+      );
+      const currentBidders = await rows(
+        `SELECT user_id AS userId FROM workflow_participants
+          WHERE workflow_instance_id = ? AND participant_type = 'BIDDER' AND valid_to IS NULL`,
+        [workflow?.id],
+      );
+
+      expect(taskRows).toEqual([
+        { id: openTaskId, status: 'READY', assignedUserId: newBidder.id },
+        { id: completedTaskId, status: 'COMPLETED', assignedUserId: previousBidder.id },
+      ]);
+      expect(currentBidders).toEqual([{ userId: newBidder.id }]);
+
+      await completedSync();
+      const syncAssignments = await rows(
+        `SELECT details FROM workflow_events
+          WHERE workflow_instance_id = ? AND event_type = 'TASK_ASSIGNED' AND event_source = 'SYNC'`,
+        [workflow?.id],
+      );
+      const reassignmentEvents = syncAssignments.filter((event) => {
+        const details = event.details as Record<string, unknown> | null;
+        return details?.previousUserId === previousBidder.id;
+      });
+      expect(reassignmentEvents).toHaveLength(1);
+      expect(reassignmentEvents[0]?.details).toMatchObject({
+        previousUserId: previousBidder.id,
+        newUserId: newBidder.id,
+      });
+      expect(outcome.status).toBe('SUCCEEDED');
+    });
+
+    it('advierte si el nuevo gestor no tiene usuario y conserva la asignación vigente', async () => {
+      const previousManager = await givenUser(context, {
+        email: 'unmatched-previous-manager@example.test',
+        name: 'Gestor vigente',
+        roles: ['MANAGER'],
+      });
+      const bidder = await givenUser(context, {
+        email: 'unmatched-reassignment-bidder@example.test',
+        name: 'Postor vigente para aviso',
+        roles: ['BIDDER'],
+      });
+      await fixture.givenAccepted({
+        id: 13915,
+        r1: FUTURE_AUCTION,
+        payer: previousManager.name,
+        bidder: bidder.name,
+      });
+      await completedSync();
+      await fixture.setAuctionParticipants(13915, bidder.name, 'Gestor sin usuario');
+
+      const outcome = await completedSync();
+      const [workflow] = await workflowsOf(13915);
+      const manager = await rows(
+        `SELECT user_id AS userId FROM workflow_participants
+          WHERE workflow_instance_id = ? AND participant_type = 'MANAGER' AND valid_to IS NULL`,
+        [workflow?.id],
+      );
+      expect(manager).toEqual([{ userId: previousManager.id }]);
+      expect(await issueCodes(outcome.executionId)).toEqual(['SOURCE_PARTICIPANT_NOT_MATCHED']);
+
+      const repeated = await completedSync();
+      expect(await issueCodes(repeated.executionId)).toEqual([]);
+    });
+
     it('un remate de hoy sí inicia workflow', async () => {
       await fixture.givenAccepted({ id: 104, r1: '2026-11-12', horaRemate: '08:00' });
 
@@ -414,6 +626,7 @@ describe('sincronización con admin_new', () => {
     it('si admin_new no responde, la ejecución queda FAILED y la siguiente funciona', async () => {
       const brokenSource: AdminNewSource = {
         readAgentUsers: () => Promise.reject(new Error('Conexión rechazada')),
+        readActiveAgentTypes: () => Promise.reject(new Error('Conexión rechazada')),
         readAcceptedProperties: () => Promise.reject(new Error('Conexión rechazada')),
         readClassifications: () => Promise.resolve(new Map()),
         close: () => Promise.resolve(),

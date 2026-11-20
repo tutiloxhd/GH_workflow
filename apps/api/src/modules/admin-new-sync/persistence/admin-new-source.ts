@@ -8,12 +8,14 @@ import {
   type SourceProperty,
 } from '../domain/source-property.js';
 import type { SourceAgentUser } from '../domain/source-agent-user.js';
+import type { SourceAgentTypeAssignment } from '../domain/source-agent-type.js';
 
 // Lectura de admin_new. Es un sistema externo: aquí solo hay SELECT, y la sesión se declara de
 // solo lectura para que MySQL rechace cualquier escritura aunque el usuario tuviera permisos.
 export interface AdminNewSource {
   readAcceptedProperties(): Promise<SourceProperty[]>;
   readAgentUsers(): Promise<SourceAgentUser[]>;
+  readActiveAgentTypes(): Promise<SourceAgentTypeAssignment[]>;
   // Clasificación actual de las propiedades indicadas; las que ya no existen no aparecen.
   readClassifications(adminNewIds: readonly number[]): Promise<Map<number, number | null>>;
   close(): Promise<void>;
@@ -171,6 +173,28 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
       }));
     },
 
+    async readActiveAgentTypes() {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        `SELECT id_user, LOWER(TRIM(tipo)) AS agent_type
+           FROM gh_agente_zona
+          WHERE activo = 1
+          ORDER BY id_user, agent_type`,
+      );
+      const typesByUserId = new Map<number, Set<string>>();
+      for (const row of rows) {
+        const adminNewUserId = Number(row.id_user);
+        const agentType = nullableText(row.agent_type)?.trim().toLocaleLowerCase('es-CL');
+        if (!Number.isSafeInteger(adminNewUserId) || !agentType) continue;
+        const agentTypes = typesByUserId.get(adminNewUserId) ?? new Set<string>();
+        agentTypes.add(agentType);
+        typesByUserId.set(adminNewUserId, agentTypes);
+      }
+      return [...typesByUserId].map(([adminNewUserId, agentTypes]) => ({
+        adminNewUserId,
+        agentTypes: [...agentTypes],
+      }));
+    },
+
     async readAcceptedProperties() {
       const [propertyRows] = await pool.query<RowDataPacket[]>(
         `SELECT id_propiedad, nombre, ubicacion, comuna, region
@@ -251,7 +275,7 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
           location: nullableText(row.ubicacion),
           commune,
           region: nullableText(row.region),
-          assignmentRegion: communeRegions?.size === 1 ? [...communeRegions][0] ?? null : null,
+          assignmentRegion: communeRegions?.size === 1 ? ([...communeRegions][0] ?? null) : null,
           detail: detail?.row ?? null,
           detailRowCount: detail?.count ?? 0,
           auction: auction?.row ?? null,

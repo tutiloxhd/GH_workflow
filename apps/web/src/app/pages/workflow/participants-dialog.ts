@@ -14,6 +14,7 @@ import type { User } from '../../core/users/user.model';
 import { UsersApiService } from '../../core/users/users-api.service';
 import {
   WorkflowApiService,
+  type ParticipantCandidate,
   type ParticipantAssignment,
 } from '../../core/workflow/workflow-api.service';
 import {
@@ -37,7 +38,12 @@ interface Selection {
   imports: [ModalDialog, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <dialog appModalDialog aria-labelledby="participants-title" (closed)="closed.emit()">
+    <dialog
+      appModalDialog
+      class="participants-dialog"
+      aria-labelledby="participants-title"
+      (closed)="closed.emit()"
+    >
       <form class="modal-form" (ngSubmit)="save()">
         <h2 id="participants-title">Participantes del remate</h2>
         <p class="muted">
@@ -60,8 +66,8 @@ interface Selection {
               <select [name]="type + '-primary'" [(ngModel)]="selections[type].primaryUserId">
                 <option [ngValue]="null">Sin cambios</option>
                 @for (user of candidatesFor(type); track user.id) {
-                  <option [ngValue]="user.id">
-                    {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
+                  <option [ngValue]="user.id" [disabled]="!isCandidateEligible(type, user)">
+                    {{ candidateLabel(type, user) }}
                   </option>
                 }
               </select>
@@ -71,12 +77,18 @@ interface Selection {
               <select [name]="type + '-backup'" [(ngModel)]="selections[type].backupUserId">
                 <option [ngValue]="null">Sin suplente</option>
                 @for (user of candidatesFor(type); track user.id) {
-                  <option [ngValue]="user.id">
-                    {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
+                  <option [ngValue]="user.id" [disabled]="!isCandidateEligible(type, user)">
+                    {{ candidateLabel(type, user) }}
                   </option>
                 }
               </select>
             </label>
+            @if (participantEligibilityMessage(type); as message) {
+              <p class="muted" role="status">{{ message }}</p>
+            }
+            @if (emptyCandidatesMessage(type); as message) {
+              <p class="muted" role="status">{{ message }}</p>
+            }
           </fieldset>
         }
         <div class="modal-actions">
@@ -100,7 +112,9 @@ export class ParticipantsDialog implements OnInit {
 
   protected readonly participantTypes = PARTICIPANT_TYPES;
   protected readonly labels = PARTICIPANT_LABELS;
-  protected readonly candidates = signal<Record<ParticipantType, readonly User[]>>({
+  protected readonly candidates = signal<
+    Record<ParticipantType, readonly (User | ParticipantCandidate)[]>
+  >({
     MANAGER: [],
     BIDDER: [],
     LEGAL_REVIEWER: [],
@@ -111,6 +125,7 @@ export class ParticipantsDialog implements OnInit {
     LEGAL_REVIEWER: { primaryUserId: null, backupUserId: null },
   };
   protected readonly isSaving = signal(false);
+  protected readonly isLoadingCandidates = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
 
   protected isAuctionParticipant(type: ParticipantType): boolean {
@@ -124,15 +139,44 @@ export class ParticipantsDialog implements OnInit {
     return null;
   }
 
-  protected candidatesFor(type: ParticipantType): readonly User[] {
-    const candidates = this.candidates()[type];
-    if (type === 'LEGAL_REVIEWER') return candidates;
+  protected candidatesFor(type: ParticipantType): readonly (User | ParticipantCandidate)[] {
+    return this.candidates()[type];
+  }
 
-    const property = this.workflow().property;
-    if (type === 'BIDDER' && isVideoCall(property?.auctionMode ?? null)) return candidates;
-    const assignmentRegion = property?.assignmentRegion;
-    if (!assignmentRegion) return [];
-    return candidates.filter((user) => sameRegion(user.adminNewRegion, assignmentRegion));
+  protected isCandidateEligible(type: ParticipantType, user: User | ParticipantCandidate): boolean {
+    if (type === 'LEGAL_REVIEWER') return true;
+    if (!('agentTypes' in user)) return false;
+    if (type === 'MANAGER') {
+      return (
+        user.agentTypes.includes('region') &&
+        (!isInPersonAuction(this.workflow().property?.auctionMode ?? null) ||
+          (user.agentTypes.includes('oficina') && user.roles.includes('BIDDER')))
+      );
+    }
+    return user.agentTypes.includes('oficina');
+  }
+
+  protected candidateLabel(type: ParticipantType, user: User | ParticipantCandidate): string {
+    const name = `${user.name}${user.rut ? ' · ' + user.rut : ''}`;
+    if (this.isCandidateEligible(type, user) || type === 'LEGAL_REVIEWER') return name;
+    return `${name} · Tipo no elegible`;
+  }
+
+  protected participantEligibilityMessage(type: ParticipantType): string | null {
+    if (type === 'LEGAL_REVIEWER') return null;
+    if (type === 'MANAGER') {
+      return isInPersonAuction(this.workflow().property?.auctionMode ?? null)
+        ? 'En modalidad presencial, el gestor también será postor y debe ser agente de tipo oficina y tener el rol Postor.'
+        : 'Solo puedes asignar agentes de tipo región.';
+    }
+    return 'El postor debe ser un agente de tipo oficina.';
+  }
+
+  protected emptyCandidatesMessage(type: ParticipantType): string | null {
+    if (this.isLoadingCandidates() || this.errorMessage() || this.candidatesFor(type).length > 0) {
+      return null;
+    }
+    return `No hay usuarios activos disponibles para ${this.labels[type]}.`;
   }
 
   ngOnInit(): void {
@@ -147,36 +191,89 @@ export class ParticipantsDialog implements OnInit {
 
   // El servidor valida además la regla de región y modalidad antes de guardar la selección.
   private async loadCandidates(): Promise<void> {
-    try {
-      const pages = await Promise.all(
-        PARTICIPANT_TYPES.map((role) =>
-          this.usersApi.list({ search: '', limit: MAX_CANDIDATES, offset: 0, role }),
-        ),
+    this.isLoadingCandidates.set(true);
+    this.errorMessage.set(null);
+    const results = await Promise.allSettled([
+      this.workflowApi.listParticipantCandidates(this.workflow().id),
+      this.usersApi.list({ search: '', limit: MAX_CANDIDATES, offset: 0, role: 'LEGAL_REVIEWER' }),
+    ]);
+    const candidates = { ...this.candidates() };
+    const [agentResult, legalResult] = results;
+    const failedRoles: ParticipantType[] = [];
+    if (agentResult?.status === 'fulfilled') {
+      const sorted = [...agentResult.value].sort(
+        (first, second) =>
+          first.name.localeCompare(second.name, 'es-CL', { sensitivity: 'base' }) ||
+          first.id - second.id,
       );
-      const [managers, bidders, legalReviewers] = pages.map((page) =>
-        page.users.filter((user) => user.status === 'ACTIVE'),
+      candidates.MANAGER = sorted.filter((candidate) => candidate.roles.includes('MANAGER'));
+      candidates.BIDDER = sorted.filter((candidate) => candidate.roles.includes('BIDDER'));
+    } else {
+      failedRoles.push('MANAGER', 'BIDDER');
+    }
+    if (legalResult?.status === 'fulfilled') {
+      candidates.LEGAL_REVIEWER = legalResult.value.users
+        .filter((user) => user.status === 'ACTIVE')
+        .sort(
+          (first, second) =>
+            first.name.localeCompare(second.name, 'es-CL', { sensitivity: 'base' }) ||
+            first.id - second.id,
+        );
+    } else {
+      failedRoles.push('LEGAL_REVIEWER');
+    }
+    this.candidates.set(candidates);
+    this.isLoadingCandidates.set(false);
+    if (failedRoles.length > 0) {
+      this.errorMessage.set(
+        `No se pudo cargar la lista de: ${failedRoles.map((role) => this.labels[role]).join(', ')}.`,
       );
-      this.candidates.set({
-        MANAGER: managers ?? [],
-        BIDDER: bidders ?? [],
-        LEGAL_REVIEWER: legalReviewers ?? [],
-      });
-    } catch (error) {
-      this.errorMessage.set(problemMessage(toApiProblem(error)));
     }
   }
 
   protected async save(): Promise<void> {
     const assignments: ParticipantAssignment[] = PARTICIPANT_TYPES.flatMap((participantType) => {
       const { primaryUserId, backupUserId } = this.selections[participantType];
+      const currentPrimary =
+        this.workflow().participants.find(
+          (participant) =>
+            participant.participantType === participantType &&
+            participant.assignmentType === 'PRIMARY',
+        )?.user?.id ?? null;
+      const currentBackup =
+        this.workflow().participants.find(
+          (participant) =>
+            participant.participantType === participantType &&
+            participant.assignmentType === 'BACKUP',
+        )?.user?.id ?? null;
+      if (primaryUserId === currentPrimary && backupUserId === currentBackup) return [];
       return primaryUserId === null ? [] : [{ participantType, primaryUserId, backupUserId }];
     });
+    const hasCurrentBidder = this.workflow().participants.some(
+      (participant) =>
+        participant.participantType === 'BIDDER' && participant.assignmentType === 'PRIMARY',
+    );
+    const managerAssignment = assignments.find(
+      (assignment) => assignment.participantType === 'MANAGER',
+    );
+    const managerUserId = managerAssignment?.primaryUserId ?? this.selections.MANAGER.primaryUserId;
+    if (
+      isInPersonAuction(this.workflow().property?.auctionMode ?? null) &&
+      !hasCurrentBidder &&
+      managerUserId !== null
+    ) {
+      assignments.push({
+        participantType: 'BIDDER',
+        primaryUserId: managerUserId,
+        backupUserId: null,
+      });
+    }
     if (assignments.some((assignment) => assignment.primaryUserId === assignment.backupUserId)) {
       this.errorMessage.set('El titular y el suplente deben ser personas distintas.');
       return;
     }
     if (assignments.length === 0) {
-      this.errorMessage.set('Elige al menos un titular.');
+      this.errorMessage.set('No hay cambios para guardar.');
       return;
     }
 
@@ -201,10 +298,10 @@ function normalizeLabel(value: string): string {
     .toLocaleLowerCase('es-CL');
 }
 
-function sameRegion(userRegion: string | null, propertyRegion: string): boolean {
-  return userRegion !== null && normalizeLabel(userRegion) === normalizeLabel(propertyRegion);
-}
-
 function isVideoCall(mode: string | null): boolean {
   return mode !== null && normalizeLabel(mode) === 'videollamada';
+}
+
+function isInPersonAuction(mode: string | null): boolean {
+  return mode !== null && normalizeLabel(mode) === 'presencial';
 }

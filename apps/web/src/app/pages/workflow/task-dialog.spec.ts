@@ -47,6 +47,8 @@ const workflowWith = (task: WorkflowTask): WorkflowDetail => ({
     tribunal: null,
     auctionBidderName: null,
     auctionPayerName: null,
+    assignmentRegion: null,
+    auctionMode: null,
   },
   auctionAt: '2026-12-07T13:00:00.000Z',
   participants: [],

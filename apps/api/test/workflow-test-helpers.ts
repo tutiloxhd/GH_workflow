@@ -52,6 +52,14 @@ export async function givenCast(context: IdentityTestContext): Promise<WorkflowC
     email: 'legal@example.test',
     roles: ['LEGAL_REVIEWER'],
   });
+  for (const agent of [manager, backupManager, bidder]) {
+    const adminNewUserId = 700_000_000 + agent.id;
+    await context.database.pool.query('UPDATE users SET admin_new_user_id = ? WHERE id = ?', [
+      adminNewUserId,
+      agent.id,
+    ]);
+    context.adminNewAgentTypes.set(adminNewUserId, ['region']);
+  }
 
   return {
     admin,

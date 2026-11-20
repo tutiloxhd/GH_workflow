@@ -1,9 +1,9 @@
 import { fail, succeed, type Result } from '../../../platform/result.js';
+import type { AdminNewSource } from '../../admin-new-sync/persistence/admin-new-source.js';
 import { findUserAccountById } from '../../identity/persistence/users-repository.js';
 import type { DeadlineRule } from '../domain/due-date.js';
 import { computeDeadline } from '../domain/due-date.js';
-import type { ParticipantType } from '../domain/participants.js';
-import { isParticipantRegionEligible } from '../domain/participant-eligibility.js';
+import { currentHolder, type ParticipantType } from '../domain/participants.js';
 import { isTaskClosed, isTaskWorkable, isWorkflowClosed } from '../domain/statuses.js';
 import { canChangeWorkflowLifecycle, isAdmin, type Actor } from '../domain/task-rules.js';
 import {
@@ -35,26 +35,33 @@ async function isEligibleParticipant(
   context: WorkflowContext,
   userId: number,
   participantType: ParticipantType,
+  agentTypesBySourceId: ReadonlyMap<number, readonly string[]>,
+  enforceAgentType: boolean,
 ): Promise<boolean> {
   const user = await findUserAccountById(context.executor, userId);
-  return (
-    user?.status === 'ACTIVE' &&
-    user.roles.includes(participantType) &&
-    isParticipantRegionEligible(
-      participantType,
-      user.adminNewRegion,
-      context.assignmentRegion,
-      context.auctionMode,
-    )
-  );
+  if (user?.status !== 'ACTIVE' || !user.roles.includes(participantType)) return false;
+  if (participantType === 'LEGAL_REVIEWER') return true;
+  if (!enforceAgentType) return true;
+  if (user.adminNewUserId === null) return false;
+  const agentTypes = agentTypesBySourceId.get(user.adminNewUserId) ?? [];
+  if (participantType === 'MANAGER') return agentTypes.includes('region');
+  return agentTypes.includes('oficina');
 }
 
-export function assignParticipants(
+export async function assignParticipants(
   dependencies: WorkflowDependencies,
+  source: Pick<AdminNewSource, 'readActiveAgentTypes'>,
   actor: Actor,
   workflowId: number,
   assignments: readonly ParticipantAssignment[],
 ): Promise<Result<WorkflowCommandResult, WorkflowFailure>> {
+  const sourceAssignments = await source.readActiveAgentTypes();
+  const agentTypesBySourceId = new Map(
+    sourceAssignments.map((sourceAssignment) => [
+      sourceAssignment.adminNewUserId,
+      sourceAssignment.agentTypes,
+    ]),
+  );
   return runWorkflowCommand(dependencies, workflowId, actor.id, async (context) => {
     if (!isAdmin(actor)) return fail('FORBIDDEN');
     if (isWorkflowClosed(context.workflow.status)) return fail('WORKFLOW_CLOSED');
@@ -65,7 +72,18 @@ export function assignParticipants(
       );
       if (assignment.primaryUserId === assignment.backupUserId) return fail('INVALID_PARTICIPANT');
       for (const userId of userIds) {
-        if (!(await isEligibleParticipant(context, userId, assignment.participantType))) {
+        const isCurrentAssignment =
+          userId === currentHolder(context.participants, assignment.participantType, 'PRIMARY') ||
+          userId === currentHolder(context.participants, assignment.participantType, 'BACKUP');
+        if (
+          !(await isEligibleParticipant(
+            context,
+            userId,
+            assignment.participantType,
+            agentTypesBySourceId,
+            !isCurrentAssignment,
+          ))
+        ) {
           return fail('INVALID_PARTICIPANT');
         }
       }

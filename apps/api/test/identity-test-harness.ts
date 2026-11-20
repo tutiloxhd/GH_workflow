@@ -88,6 +88,7 @@ export interface IdentityTestContext {
   readonly clock: FixedClock;
   readonly dependencies: IdentityDependencies;
   readonly auditEvents: string[];
+  readonly adminNewAgentTypes: Map<number, readonly string[]>;
   readonly server: RunningServer;
   close(): Promise<void>;
 }
@@ -99,6 +100,7 @@ export async function startIdentityTestContext(): Promise<IdentityTestContext> {
 
   const clock = new FixedClock(TEST_START_INSTANT);
   const auditEvents: string[] = [];
+  const adminNewAgentTypes = new Map<number, readonly string[]>();
   const dependencies: IdentityDependencies = {
     database,
     clock,
@@ -109,7 +111,17 @@ export async function startIdentityTestContext(): Promise<IdentityTestContext> {
     },
   };
   const server = await startServer(
-    buildApiApp(dependencies, { allowedOrigin: TEST_WEB_ORIGIN, isSecureCookie: false }),
+    buildApiApp(
+      dependencies,
+      { allowedOrigin: TEST_WEB_ORIGIN, isSecureCookie: false },
+      {
+        readActiveAgentTypes: async () =>
+          [...adminNewAgentTypes].map(([adminNewUserId, agentTypes]) => ({
+            adminNewUserId,
+            agentTypes,
+          })),
+      },
+    ),
   );
 
   return {
@@ -117,6 +129,7 @@ export async function startIdentityTestContext(): Promise<IdentityTestContext> {
     clock,
     dependencies,
     auditEvents,
+    adminNewAgentTypes,
     server,
     async close() {
       await server.close();
@@ -129,6 +142,7 @@ export async function resetIdentityTables(context: IdentityTestContext): Promise
   for (const table of MUTABLE_TABLES) await context.database.pool.query(`DELETE FROM ${table}`);
   context.clock.setTo(TEST_START_INSTANT);
   context.auditEvents.length = 0;
+  context.adminNewAgentTypes.clear();
 }
 
 export async function givenUser(

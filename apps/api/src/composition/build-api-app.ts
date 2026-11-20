@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import { createHealthRouter } from '../modules/health/health.router.js';
 import { createSyncRouter } from '../modules/admin-new-sync/http/sync.router.js';
+import type { AdminNewSource } from '../modules/admin-new-sync/persistence/admin-new-source.js';
 import type { IdentityDependencies } from '../modules/identity/application/identity-dependencies.js';
 import { createAuthRouter } from '../modules/identity/http/auth.router.js';
 import { createUsersRouter } from '../modules/identity/http/users.router.js';
@@ -16,7 +17,11 @@ export interface ApiAppSettings {
 
 // Raíz de composición: conecta los módulos con sus dependencias concretas.
 // El motor comparte base y reloj con identidad.
-export function buildApiApp(identity: IdentityDependencies, settings: ApiAppSettings): Express {
+export function buildApiApp(
+  identity: IdentityDependencies,
+  settings: ApiAppSettings,
+  source: Pick<AdminNewSource, 'readActiveAgentTypes'>,
+): Express {
   const workflow = { database: identity.database, clock: identity.clock };
   return createApp({
     allowedOrigin: settings.allowedOrigin,
@@ -29,7 +34,7 @@ export function buildApiApp(identity: IdentityDependencies, settings: ApiAppSett
       { path: '/users', router: createUsersRouter(identity) },
       { path: '', router: createNotificationsRouter(identity) },
       { path: '/sync', router: createSyncRouter(workflow, identity) },
-      { path: '', router: createWorkflowRouter(workflow, identity) },
+      { path: '', router: createWorkflowRouter(workflow, identity, source) },
     ],
     reportError: (error, context) => {
       logger.error('http.unexpected_error', error, context);

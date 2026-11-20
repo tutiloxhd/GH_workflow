@@ -216,7 +216,7 @@ class SyncRun {
         existing.assignmentRegion,
         existing.auctionMode,
       );
-    } else if (existing.workflowStatus === 'ACTIVE' && source.auctionState !== null) {
+    } else if (isOpenWorkflow(existing) && source.auctionState !== null) {
       const assignments = await this.resolveSourceParticipants(
         source.adminNewId,
         source.auctionState,
@@ -364,7 +364,9 @@ class SyncRun {
       assignmentRegion,
       auctionMode,
     );
-    const outcome = await startWorkflow(this.dependencies, null, propertyId, { assignedParticipants });
+    const outcome = await startWorkflow(this.dependencies, null, propertyId, {
+      assignedParticipants,
+    });
     if (!outcome.isSuccess) {
       throw new Error(`No se pudo iniciar el workflow: ${outcome.failure}`);
     }
@@ -387,7 +389,8 @@ class SyncRun {
     const assignedParticipants: { participantType: 'MANAGER' | 'BIDDER'; userId: number }[] = [];
     for (const candidate of candidates) {
       if (candidate.sourceName.length === 0) {
-        if (reportUnmatched) this.reportUnmatchedParticipant(adminNewId, candidate.participantType, false);
+        if (reportUnmatched)
+          this.reportUnmatchedParticipant(adminNewId, candidate.participantType, false);
         continue;
       }
       const matches = await findActiveUserIdsByExactNameAndRole(

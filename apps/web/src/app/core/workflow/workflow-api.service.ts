@@ -24,6 +24,14 @@ export interface ParticipantAssignment {
   readonly backupUserId: number | null;
 }
 
+export interface ParticipantCandidate {
+  readonly id: number;
+  readonly name: string;
+  readonly rut: string | null;
+  readonly roles: readonly string[];
+  readonly agentTypes: readonly string[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class WorkflowApiService {
   private readonly http = inject(HttpClient);
@@ -50,7 +58,8 @@ export class WorkflowApiService {
   }> {
     let params = new HttpParams().set('limit', filters.limit).set('offset', filters.offset);
     if (filters.status) params = params.set('status', filters.status);
-    if (filters.responsibleUserId) params = params.set('responsibleUserId', filters.responsibleUserId);
+    if (filters.responsibleUserId)
+      params = params.set('responsibleUserId', filters.responsibleUserId);
     if (filters.commune) params = params.set('commune', filters.commune);
     if (filters.region) params = params.set('region', filters.region);
     if (filters.auctionFrom) params = params.set('auctionFrom', filters.auctionFrom);
@@ -64,7 +73,10 @@ export class WorkflowApiService {
     );
   }
 
-  listPropertiesWithoutWorkflow(limit: number, offset: number): Promise<{
+  listPropertiesWithoutWorkflow(
+    limit: number,
+    offset: number,
+  ): Promise<{
     properties: readonly PropertyRow[];
     total: number;
   }> {
@@ -95,17 +107,22 @@ export class WorkflowApiService {
     return events;
   }
 
-  listMyTasks(limit: number, offset: number): Promise<{
+  listMyTasks(
+    limit: number,
+    offset: number,
+  ): Promise<{
     tasks: readonly MyTask[];
     total: number;
     metrics: { overdue: number; today: number; thisWeek: number };
   }> {
     const params = new HttpParams().set('limit', limit).set('offset', offset);
-    return firstValueFrom(this.http.get<{
-      tasks: MyTask[];
-      total: number;
-      metrics: { overdue: number; today: number; thisWeek: number };
-    }>('/api/tasks/mine', { params }));
+    return firstValueFrom(
+      this.http.get<{
+        tasks: MyTask[];
+        total: number;
+        metrics: { overdue: number; today: number; thisWeek: number };
+      }>('/api/tasks/mine', { params }),
+    );
   }
 
   assignParticipants(
@@ -115,6 +132,15 @@ export class WorkflowApiService {
     return this.command(
       this.http.put(`/api/workflows/${workflowId}/participants`, { assignments }),
     );
+  }
+
+  async listParticipantCandidates(workflowId: number): Promise<readonly ParticipantCandidate[]> {
+    const { candidates } = await firstValueFrom(
+      this.http.get<{ candidates: ParticipantCandidate[] }>(
+        `/api/workflows/${workflowId}/participant-candidates`,
+      ),
+    );
+    return candidates;
   }
 
   suspend(

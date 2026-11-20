@@ -10,6 +10,7 @@ export interface UserAccount {
   readonly name: string;
   readonly email: string;
   readonly rut: string | null;
+  readonly adminNewUserId: number | null;
   readonly adminNewAreaId: number | null;
   readonly adminNewAreaName: string | null;
   readonly adminNewRegion: string | null;
@@ -29,6 +30,7 @@ const userColumns = {
   name: users.name,
   email: users.email,
   rut: users.rut,
+  adminNewUserId: users.adminNewUserId,
   adminNewAreaId: users.adminNewAreaId,
   adminNewAreaName: users.adminNewAreaName,
   adminNewRegion: users.adminNewRegion,
@@ -81,6 +83,20 @@ export async function findUserAccountById(
   const userRows = await executor.select(userColumns).from(users).where(eq(users.id, userId));
   const [account] = await attachRoles(executor, userRows);
   return account;
+}
+
+export async function findActiveUsersByAdminNewUserIds(
+  executor: DatabaseExecutor,
+  adminNewUserIds: readonly number[],
+): Promise<UserAccount[]> {
+  const uniqueIds = [...new Set(adminNewUserIds)];
+  if (uniqueIds.length === 0) return [];
+  const userRows = await executor
+    .select(userColumns)
+    .from(users)
+    .where(and(inArray(users.adminNewUserId, uniqueIds), eq(users.status, 'ACTIVE')))
+    .orderBy(asc(users.name), asc(users.id));
+  return attachRoles(executor, userRows);
 }
 
 // Bloquea la fila del usuario hasta el fin de la transacción.
