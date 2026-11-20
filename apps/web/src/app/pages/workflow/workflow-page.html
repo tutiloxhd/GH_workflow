@@ -39,48 +39,112 @@
   </header>
 
   <div class="page-body workflow-layout">
-    <section class="card tasks-card" aria-labelledby="tasks-title">
+    <section class="card tasks-card process-card" aria-labelledby="tasks-title">
       <div class="card-header">
-        <h2 id="tasks-title">Tareas</h2>
+        <div>
+          <h2 id="tasks-title">Diagrama del proceso</h2>
+          <p class="muted">Selecciona un nodo para revisar o completar la tarea.</p>
+        </div>
         <span class="muted">{{ completedCount() }} de {{ current.tasks.length }} completadas</span>
       </div>
-      <ol class="workflow-tasks">
-        @for (task of current.tasks; track task.id) {
-          <li [class.is-open]="task.status === 'READY' || task.status === 'IN_PROGRESS'">
-            <button type="button" class="workflow-task" (click)="openTaskId.set(task.id)">
-              <span class="task-step">{{ task.displayOrder }}</span>
-              <span class="task-text">
-                <strong>{{ task.name }}</strong>
-                <small>
-                  {{ task.assignee?.name ?? roleLabels[task.responsibleRole] }}
-                  @if (task.dueAt) {
-                    · vence {{ formatDateTime(task.dueAt) }}
-                  }
-                  @if (task.requiresEvidence) {
-                    · {{ task.evidence ? 'evidencia guardada' : 'requiere evidencia' }}
-                  }
-                </small>
-              </span>
-              <span
-                class="status-pill"
-                [class]="task.isOverdue ? 'late' : taskStatusTones[task.status]"
-              >
-                {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
-              </span>
-            </button>
-            @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
-              <button
-                type="button"
-                class="button link"
-                [attr.aria-label]="'Cambiar plazo de ' + task.name"
-                (click)="taskEditingDeadline.set(task)"
-              >
-                Plazo
-              </button>
+      <div class="process-legend" aria-label="Leyenda del diagrama">
+        <span><i class="done"></i>Completada</span>
+        <span><i class="current"></i>En proceso</span>
+        <span><i class="late"></i>Vencida</span>
+        <span><i class="pending"></i>Pendiente</span>
+        <span><i class="suspended"></i>Suspendida</span>
+        <span><i class="cancelled"></i>Cancelada</span>
+      </div>
+      <div class="process-scroll">
+        <div class="process-map">
+          <ol class="process-row process-row-top">
+            @for (task of current.tasks.slice(0, 5); track task.id) {
+              <li [class.last-node]="$last">
+                <button
+                  type="button"
+                  class="process-node"
+                  [class.is-open]="task.status === 'READY' || task.status === 'IN_PROGRESS'"
+                  [class.is-completed]="task.status === 'COMPLETED'"
+                  [class.is-overdue]="task.isOverdue"
+                  [class.is-suspended]="task.status === 'SUSPENDED'"
+                  [class.is-cancelled]="task.status === 'CANCELLED'"
+                  (click)="openTaskId.set(task.id)"
+                >
+                  <span class="task-step">{{ task.status === 'COMPLETED' ? '✓' : task.displayOrder }}</span>
+                  <span class="task-text">
+                    <strong>{{ task.name }}</strong>
+                    <small>{{ task.assignee?.name ?? roleLabels[task.responsibleRole] }}</small>
+                  </span>
+                  <span class="status-pill" [class]="task.isOverdue ? 'late' : taskStatusTones[task.status]">
+                    {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
+                  </span>
+                </button>
+                @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
+                  <button type="button" class="node-deadline" (click)="taskEditingDeadline.set(task)" [attr.aria-label]="'Cambiar plazo de ' + task.name">Plazo</button>
+                }
+              </li>
             }
-          </li>
-        }
-      </ol>
+          </ol>
+          <div class="process-turn" aria-hidden="true"></div>
+          <ol class="process-row process-row-reverse" start="6">
+            @for (task of current.tasks.slice(5, 10); track task.id) {
+              <li [class.last-node]="$last">
+                <button
+                  type="button"
+                  class="process-node"
+                  [class.is-open]="task.status === 'READY' || task.status === 'IN_PROGRESS'"
+                  [class.is-completed]="task.status === 'COMPLETED'"
+                  [class.is-overdue]="task.isOverdue"
+                  [class.is-suspended]="task.status === 'SUSPENDED'"
+                  [class.is-cancelled]="task.status === 'CANCELLED'"
+                  (click)="openTaskId.set(task.id)"
+                >
+                  <span class="task-step">{{ task.status === 'COMPLETED' ? '✓' : task.displayOrder }}</span>
+                  <span class="task-text">
+                    <strong>{{ task.name }}</strong>
+                    <small>{{ task.assignee?.name ?? roleLabels[task.responsibleRole] }}</small>
+                  </span>
+                  <span class="status-pill" [class]="task.isOverdue ? 'late' : taskStatusTones[task.status]">
+                    {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
+                  </span>
+                </button>
+                @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
+                  <button type="button" class="node-deadline" (click)="taskEditingDeadline.set(task)" [attr.aria-label]="'Cambiar plazo de ' + task.name">Plazo</button>
+                }
+              </li>
+            }
+          </ol>
+          <div class="process-turn process-turn-left" aria-hidden="true"></div>
+          <ol class="process-row" start="11">
+            @for (task of current.tasks.slice(10, 15); track task.id) {
+              <li [class.last-node]="$last" [style.--node-index]="task.displayOrder">
+                <button
+                  type="button"
+                  class="process-node"
+                  [class.is-open]="task.status === 'READY' || task.status === 'IN_PROGRESS'"
+                  [class.is-completed]="task.status === 'COMPLETED'"
+                  [class.is-overdue]="task.isOverdue"
+                  [class.is-suspended]="task.status === 'SUSPENDED'"
+                  [class.is-cancelled]="task.status === 'CANCELLED'"
+                  (click)="openTaskId.set(task.id)"
+                >
+                  <span class="task-step">{{ task.status === 'COMPLETED' ? '✓' : task.displayOrder }}</span>
+                  <span class="task-text">
+                    <strong>{{ task.name }}</strong>
+                    <small>{{ task.assignee?.name ?? roleLabels[task.responsibleRole] }}</small>
+                  </span>
+                  <span class="status-pill" [class]="task.isOverdue ? 'late' : taskStatusTones[task.status]">
+                    {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
+                  </span>
+                </button>
+                @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
+                  <button type="button" class="node-deadline" (click)="taskEditingDeadline.set(task)" [attr.aria-label]="'Cambiar plazo de ' + task.name">Plazo</button>
+                }
+              </li>
+            }
+          </ol>
+        </div>
+      </div>
     </section>
 
     <div class="side-column">

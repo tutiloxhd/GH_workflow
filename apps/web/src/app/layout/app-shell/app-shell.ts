@@ -37,6 +37,7 @@ export class AppShell {
   private readonly router = inject(Router);
   protected readonly notificationService = inject(NotificationService);
   protected readonly isNotificationPanelOpen = signal(false);
+  protected readonly isAccountMenuOpen = signal(false);
 
   protected readonly user = this.auth.currentUser;
   protected readonly navigation = computed(() =>
@@ -50,13 +51,20 @@ export class AppShell {
   );
 
   protected async logOut(): Promise<void> {
+    this.isAccountMenuOpen.set(false);
     this.notificationService.stop();
     await this.auth.logOut();
     await this.router.navigateByUrl(LOGIN_PATH);
   }
 
   protected toggleNotifications(): void {
+    this.isAccountMenuOpen.set(false);
     this.isNotificationPanelOpen.update((isOpen) => !isOpen);
+  }
+
+  protected toggleAccountMenu(): void {
+    this.isNotificationPanelOpen.set(false);
+    this.isAccountMenuOpen.update((isOpen) => !isOpen);
   }
 
   protected async openNotification(
