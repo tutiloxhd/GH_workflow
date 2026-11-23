@@ -17,6 +17,7 @@ import { ROLE_LABELS } from '../../core/users/user.model';
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
 import {
   isTaskWorkable,
+  PARTICIPANT_LABELS,
   TASK_STATUS_LABELS,
   TASK_STATUS_TONES,
   type EvidenceData,
@@ -24,11 +25,15 @@ import {
 } from '../../core/workflow/workflow.model';
 import { ModalDialog } from '../../shared/modal/modal-dialog';
 import { EvidenceFormComponent } from './evidence-form';
+import { ParticipantsForm } from './participants-form';
+
+// La tarea «Asignar gestor y postor» se trabaja asignando participantes, no con evidencia.
+const ASSIGN_PARTICIPANTS_TASK_CODE = 'ASSIGN_MANAGER_AND_BIDDER';
 
 // Detalle de una tarea con sus acciones: en curso, evidencia y completar.
 @Component({
   selector: 'app-task-dialog',
-  imports: [ModalDialog, EvidenceFormComponent, RouterLink],
+  imports: [ModalDialog, EvidenceFormComponent, ParticipantsForm, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './task-dialog.html',
 })
@@ -55,6 +60,7 @@ export class TaskDialog implements OnInit {
 
   protected readonly statusLabels = TASK_STATUS_LABELS;
   protected readonly statusTones = TASK_STATUS_TONES;
+  protected readonly participantLabels = PARTICIPANT_LABELS;
   protected readonly roleLabels = ROLE_LABELS;
   protected readonly formatDateTime = formatDateTime;
 
@@ -82,6 +88,29 @@ export class TaskDialog implements OnInit {
   protected readonly isMissingEvidence = computed(() => {
     const task = this.task();
     return task !== null && task.requiresEvidence && task.evidence === null;
+  });
+
+  protected readonly isAssignParticipantsTask = computed(
+    () => this.task()?.code === ASSIGN_PARTICIPANTS_TASK_CODE,
+  );
+
+  // Solo administración puede asignar participantes (la API lo vuelve a validar).
+  protected readonly canAssignParticipants = computed(
+    () => this.isAssignParticipantsTask() && this.canWork() && this.auth.hasRole('ADMIN'),
+  );
+
+  // Igual que la API: hacen falta los titulares de gestor y postor para completar.
+  protected readonly isMissingParticipants = computed(() => {
+    if (!this.isAssignParticipantsTask()) return false;
+    const participants = this.workflow()?.participants ?? [];
+    const hasPrimary = (type: 'MANAGER' | 'BIDDER') =>
+      participants.some(
+        (participant) =>
+          participant.participantType === type &&
+          participant.assignmentType === 'PRIMARY' &&
+          participant.user !== null,
+      );
+    return !hasPrimary('MANAGER') || !hasPrimary('BIDDER');
   });
 
   ngOnInit(): void {
@@ -137,6 +166,13 @@ export class TaskDialog implements OnInit {
     } finally {
       this.isBusy.set(false);
     }
+  }
+
+  protected onParticipantsSaved(updated: WorkflowDetail): void {
+    this.workflow.set(updated);
+    this.changed.emit(updated);
+    this.errorMessage.set(null);
+    this.notice.set('Participantes guardados.');
   }
 
   protected async completeTask(): Promise<void> {

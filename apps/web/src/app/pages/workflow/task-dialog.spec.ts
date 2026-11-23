@@ -192,3 +192,93 @@ describe('TaskDialog', () => {
     });
   });
 });
+
+describe('TaskDialog · Asignar gestor y postor', () => {
+  const ADMIN_ID = 1;
+  const assignTask: WorkflowTask = {
+    ...collectValeVista,
+    id: 2,
+    code: 'ASSIGN_MANAGER_AND_BIDDER',
+    name: 'Asignar gestor y postor',
+    responsibleRole: 'ADMIN',
+    displayOrder: 2,
+    assignee: { id: ADMIN_ID, name: 'Admin Sintético' },
+    dependsOn: [],
+    requiresEvidence: false,
+    evidenceForm: null,
+  };
+
+  let fixture: ComponentFixture<TaskDialog>;
+  let http: HttpTestingController;
+  let element: HTMLElement;
+
+  const button = (text: string) =>
+    Array.from(element.querySelectorAll('button')).find((candidate) =>
+      candidate.textContent?.includes(text),
+    );
+
+  beforeEach(async () => {
+    HTMLDialogElement.prototype.showModal = vi.fn();
+    HTMLDialogElement.prototype.close = vi.fn();
+
+    TestBed.configureTestingModule({
+      imports: [TaskDialog],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
+    });
+    http = TestBed.inject(HttpTestingController);
+
+    const loading = TestBed.inject(AuthService).loadCurrentUser();
+    http.expectOne('/api/auth/me').flush({
+      user: {
+        id: ADMIN_ID,
+        name: 'Admin Sintético',
+        email: 'admin@example.test',
+        status: 'ACTIVE',
+        roles: ['ADMIN'],
+        createdAt: '2026-11-12T12:00:00.000Z',
+      },
+    });
+    await loading;
+
+    fixture = TestBed.createComponent(TaskDialog);
+    fixture.componentRef.setInput('workflowId', 5);
+    fixture.componentRef.setInput('taskId', assignTask.id);
+    element = fixture.nativeElement as HTMLElement;
+    fixture.detectChanges();
+    http.expectOne('/api/workflows/5').flush({ workflow: workflowWith(assignTask) });
+    await vi.waitFor(async () => {
+      await fixture.whenStable();
+      expect(element.querySelector('app-participants-form')).not.toBeNull();
+    });
+    for (const request of http.match((candidate) => candidate.url === '/api/users')) {
+      request.flush({ users: [], total: 0 });
+    }
+  });
+
+  afterEach(() => {
+    http.verify();
+  });
+
+  it('muestra el formulario de participantes dentro de la tarea y bloquea completar', () => {
+    expect(element.querySelector('app-evidence-form')).toBeNull();
+    expect(button('Guardar participantes')).toBeDefined();
+    expect(button('Completar')?.disabled).toBe(true);
+    expect(element.textContent).toContain('primero asigna el gestor y el postor');
+  });
+
+  it('habilita completar cuando el workflow tiene titulares de gestor y postor', async () => {
+    (
+      fixture.componentInstance as unknown as { workflow: { set(value: WorkflowDetail): void } }
+    ).workflow.set({
+      ...workflowWith(assignTask),
+      participants: [
+        { participantType: 'MANAGER', assignmentType: 'PRIMARY', user: { id: 7, name: 'G' } },
+        { participantType: 'BIDDER', assignmentType: 'PRIMARY', user: { id: 8, name: 'P' } },
+      ],
+    });
+    await fixture.whenStable();
+
+    expect(button('Completar')?.disabled).toBe(false);
+    expect(element.textContent).not.toContain('primero asigna el gestor y el postor');
+  });
+});

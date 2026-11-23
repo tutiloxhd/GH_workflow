@@ -47,6 +47,33 @@
         </p>
       }
 
+      @if (isAssignParticipantsTask()) {
+        <section aria-labelledby="task-participants-title">
+          <h3 id="task-participants-title">Participantes</h3>
+          @if (canAssignParticipants()) {
+            <p class="muted">
+              Asigna al menos el titular de gestor y de postor para poder completar la tarea.
+            </p>
+            <app-participants-form
+              [workflow]="workflow()!"
+              [isDisabled]="isBusy()"
+              (saved)="onParticipantsSaved($event)"
+            />
+          } @else {
+            <dl class="facts">
+              @for (participant of workflow()?.participants ?? []; track $index) {
+                @if (participant.assignmentType === 'PRIMARY') {
+                  <dt>{{ participantLabels[participant.participantType] }}</dt>
+                  <dd>{{ participant.user?.name ?? '—' }}</dd>
+                }
+              } @empty {
+                <dd class="muted">Sin participantes asignados.</dd>
+              }
+            </dl>
+          }
+        </section>
+      }
+
       @if (current.evidenceForm; as form) {
         <section aria-labelledby="evidence-title">
           <h3 id="evidence-title">Evidencia</h3>
@@ -92,8 +119,14 @@
             <button
               type="button"
               class="button primary"
-              [disabled]="isBusy() || isMissingEvidence()"
-              [title]="isMissingEvidence() ? 'Guarda la evidencia antes de completar' : ''"
+              [disabled]="isBusy() || isMissingEvidence() || isMissingParticipants()"
+              [title]="
+                isMissingParticipants()
+                  ? 'Asigna el gestor y el postor antes de completar'
+                  : isMissingEvidence()
+                    ? 'Guarda la evidencia antes de completar'
+                    : ''
+              "
               (click)="isConfirmingCompletion.set(true)"
             >
               Completar
@@ -103,6 +136,9 @@
       </div>
       @if (canWork() && isMissingEvidence()) {
         <p class="muted">Para completar esta tarea primero guarda su evidencia.</p>
+      }
+      @if (canWork() && isMissingParticipants()) {
+        <p class="muted">Para completar esta tarea primero asigna el gestor y el postor.</p>
       }
     } @else if (errorMessage(); as message) {
       <p class="form-error" role="alert">{{ message }}</p>
