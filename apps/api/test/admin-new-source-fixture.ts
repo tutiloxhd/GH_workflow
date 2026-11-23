@@ -32,7 +32,7 @@ const SOURCE_TABLES = [
    ) ENGINE=MyISAM`,
   `CREATE TABLE IF NOT EXISTS estado_remate (
      id_er INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-     id_r TEXT NOT NULL, postor TEXT, pagador TEXT,
+     id_r TEXT NOT NULL, postor TEXT, pagador TEXT, rut_postor TEXT, rut_pagador TEXT,
      KEY idx_er_idr (id_r(20))
    ) ENGINE=InnoDB`,
 ];
@@ -52,6 +52,8 @@ export interface SourceFixture {
     adminNewId: number,
     bidder: string | null,
     payer: string | null,
+    bidderRut?: string | null,
+    payerRut?: string | null,
   ): Promise<void>;
   setCommune(adminNewId: number, commune: string): Promise<void>;
   deleteProperty(adminNewId: number): Promise<void>;
@@ -77,6 +79,8 @@ export interface SourcePropertyInput extends SourceDetailInput {
   readonly classificationId?: number;
   readonly bidder?: string | null;
   readonly payer?: string | null;
+  readonly bidderRut?: string | null;
+  readonly payerRut?: string | null;
 }
 
 export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture> {
@@ -102,6 +106,18 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
     await adminPool.query(
       `ALTER TABLE ${databaseName}.datos_lremate ADD COLUMN tipo_remate VARCHAR(100)`,
     );
+  }
+  for (const columnName of ['rut_postor', 'rut_pagador']) {
+    const [rutColumns] = await adminPool.query<RowDataPacket[]>(
+      `SELECT COLUMN_NAME FROM information_schema.columns
+        WHERE table_schema = ? AND table_name = 'estado_remate' AND column_name = ?`,
+      [databaseName, columnName],
+    );
+    if (rutColumns.length === 0) {
+      await adminPool.query(
+        `ALTER TABLE ${databaseName}.estado_remate ADD COLUMN ${columnName} TEXT`,
+      );
+    }
   }
 
   const source = connectAdminNewSource({
@@ -162,8 +178,14 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
         );
         if (property.bidder !== undefined || property.payer !== undefined) {
           await adminPool.query(
-            `INSERT INTO ${table('estado_remate')} (id_r, postor, pagador) VALUES (?, ?, ?)`,
-            [String(auction.insertId), property.bidder ?? null, property.payer ?? null],
+            `INSERT INTO ${table('estado_remate')} (id_r, postor, pagador, rut_postor, rut_pagador) VALUES (?, ?, ?, ?, ?)`,
+            [
+              String(auction.insertId),
+              property.bidder ?? null,
+              property.payer ?? null,
+              property.bidderRut ?? null,
+              property.payerRut ?? null,
+            ],
           );
         }
       }
@@ -187,10 +209,11 @@ export async function startSourceFixture(adminPool: Pool): Promise<SourceFixture
         [dates.r3 ?? null, dates.r4 ?? null, dates.r5 ?? null, String(adminNewId)],
       );
     },
-    async setAuctionParticipants(adminNewId, bidder, payer) {
+    async setAuctionParticipants(adminNewId, bidder, payer, bidderRut, payerRut) {
       await adminPool.query(
-        `INSERT INTO ${table('estado_remate')} (id_r, postor, pagador) VALUES (?, ?, ?)`,
-        [String(adminNewId), bidder, payer],
+        `INSERT INTO ${table('estado_remate')} (id_r, postor, pagador, rut_postor, rut_pagador)
+         VALUES (?, ?, ?, ?, ?)`,
+        [String(adminNewId), bidder, payer, bidderRut ?? null, payerRut ?? null],
       );
     },
     async setCommune(adminNewId, commune) {

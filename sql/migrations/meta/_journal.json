@@ -85,6 +85,20 @@
       "when": 1795200000000,
       "tag": "0011_notification_rule_author",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795445956000,
+      "tag": "0012_normalize_agent_regions",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795452000000,
+      "tag": "0013_canonical_regions",
+      "breakpoints": true
     }
   ]
 }

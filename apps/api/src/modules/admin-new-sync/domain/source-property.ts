@@ -41,6 +41,8 @@ export interface SourceAuctionState {
   readonly rowId: number; // id_er
   readonly bidder: string | null; // postor
   readonly payer: string | null; // pagador (gestor)
+  readonly bidderRut?: string | null;
+  readonly payerRut?: string | null;
 }
 
 // Valores ya interpretados, con la forma de la tabla `properties`.
@@ -222,7 +224,10 @@ export function normalizeSourceProperty(source: SourceProperty): NormalizedPrope
   const balancePaymentDate = date(detail?.balancePaymentDate ?? null, 'r5');
   const assignmentRegion = clean(source.assignmentRegion);
   if (!assignmentRegion) {
-    report('UNMAPPED_ASSIGNMENT_REGION', 'No se pudo determinar la región de la propiedad desde su comuna');
+    report(
+      'UNMAPPED_ASSIGNMENT_REGION',
+      'No se pudo determinar la región de la propiedad desde su comuna',
+    );
   }
 
   const snapshot: PropertySnapshot = {

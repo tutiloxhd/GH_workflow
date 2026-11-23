@@ -93,7 +93,12 @@ describe('sincronización con admin_new', () => {
       roles: ['MANAGER'],
     });
     await context.database.pool.query(
-      'UPDATE users SET admin_new_user_id = ?, admin_new_region = NULL WHERE id = ?',
+      'INSERT INTO regions (name) VALUES (?) ON DUPLICATE KEY UPDATE name = VALUES(name)',
+      ['Coquimbo'],
+    );
+    const regionRows = await rows('SELECT id FROM regions WHERE name = ?', ['Coquimbo']);
+    await context.database.pool.query(
+      'UPDATE users SET admin_new_user_id = ?, region_id = NULL WHERE id = ?',
       [71001, user.id],
     );
     const sourceUser = {
@@ -102,9 +107,8 @@ describe('sincronización con admin_new', () => {
       rut: '12345678-5',
       email: user.email,
       legacyPassword: 'clave-sintetica',
-      adminNewAreaId: 3,
-      adminNewAreaName: 'Operaciones',
-      adminNewRegion: 'Coquimbo',
+      areaId: 3,
+      regionName: 'Coquimbo',
     };
     const source = {
       ...fixture.source,
@@ -122,9 +126,53 @@ describe('sincronización con admin_new', () => {
       true,
     );
 
-    const [row] = await rows('SELECT admin_new_region FROM users WHERE id = ?', [user.id]);
+    const [row] = await rows('SELECT region_id AS regionId FROM users WHERE id = ?', [user.id]);
     expect(summary).toMatchObject({ alreadyImported: 1, imported: 0, regionsUpdated: 1 });
-    expect(row?.admin_new_region).toBe('Coquimbo');
+    expect(row?.regionId).toBe(regionRows[0]?.id);
+  });
+
+  it('asigna la Región Metropolitana a un agente importado sin región de origen', async () => {
+    const user = await givenUser(context, {
+      email: 'agente-sin-region@example.test',
+      roles: ['MANAGER'],
+    });
+    await context.database.pool.query(
+      'UPDATE users SET admin_new_user_id = ?, region_id = NULL WHERE id = ?',
+      [71002, user.id],
+    );
+    const source = {
+      ...fixture.source,
+      readAgentUsers: () =>
+        Promise.resolve([
+          {
+            adminNewUserId: 71002,
+            name: user.name,
+            rut: '12345678-5',
+            email: user.email,
+            legacyPassword: 'clave-sintetica',
+            areaId: 3,
+            regionName: null,
+          },
+        ]),
+      close: () => Promise.resolve(),
+    };
+
+    const summary = await importAdminNewAgentUsers(
+      {
+        database: context.database,
+        source,
+        clock: context.clock,
+        passwordHasher: context.dependencies.passwordHasher,
+      },
+      true,
+    );
+
+    const [row] = await rows(
+      'SELECT r.name AS regionName FROM users u JOIN regions r ON r.id = u.region_id WHERE u.id = ?',
+      [user.id],
+    );
+    expect(summary).toMatchObject({ alreadyImported: 1, regionsUpdated: 1 });
+    expect(row?.regionName).toBe('Región Metropolitana');
   });
 
   describe('propiedades nuevas', () => {
@@ -173,7 +221,7 @@ describe('sincronización con admin_new', () => {
       expect(cursor).toMatchObject({ last_status: 'SUCCEEDED', last_source_id: 101 });
     });
 
-    it('asigna al pagador y al postor por nombre exacto y completa la tarea de asignación', async () => {
+    it('asigna pagador y postor por RUT, agrega al revisor legal y completa la tarea', async () => {
       const admin = await givenUser(context, {
         email: 'source-admin@example.test',
         name: 'Administrador de origen',
@@ -189,14 +237,47 @@ describe('sincronización con admin_new', () => {
         name: 'Postor de origen',
         roles: ['BIDDER'],
       });
+      await context.database.pool.query('UPDATE users SET rut = ? WHERE id = ?', [
+        '11111111-1',
+        manager.id,
+      ]);
+      await context.database.pool.query('UPDATE users SET rut = ? WHERE id = ?', [
+        '22222222-2',
+        bidder.id,
+      ]);
+      await context.database.pool.query('UPDATE users SET region_id = NULL WHERE id IN (?, ?)', [
+        manager.id,
+        bidder.id,
+      ]);
+      const passwordHash = await context.dependencies.passwordHasher.hash('ClaveSintetica123');
+      await context.database.pool.query(
+        'INSERT INTO users (id, name, email, password_hash, status) VALUES (9, ?, ?, ?, ?)',
+        ['Pablo Godoy', 'pablo.legal@example.test', passwordHash, 'ACTIVE'],
+      );
+      await context.database.pool.query(
+        `INSERT INTO user_roles (user_id, role_id)
+         SELECT 9, id FROM roles WHERE code = 'LEGAL_REVIEWER'`,
+      );
       await fixture.givenAccepted({
         id: 112,
         r1: FUTURE_AUCTION,
-        payer: manager.name,
-        bidder: bidder.name,
+        payer: 'Pagador antiguo del remate',
+        bidder: 'Postor antiguo del remate',
       });
+      await fixture.setAuctionParticipants(
+        112,
+        'Nombre distinto del postor',
+        'Nombre distinto del gestor',
+        '22.222.222-2',
+        '11.111.111-1',
+      );
 
       await completedSync();
+
+      expect(await propertyOf(112)).toMatchObject({
+        auction_bidder_name: 'Nombre distinto del postor',
+        auction_payer_name: 'Nombre distinto del gestor',
+      });
 
       const [workflow] = await workflowsOf(112);
       const participants = await rows(
@@ -206,6 +287,7 @@ describe('sincronización con admin_new', () => {
       );
       expect(participants).toEqual([
         { participantType: 'BIDDER', userId: bidder.id },
+        { participantType: 'LEGAL_REVIEWER', userId: 9 },
         { participantType: 'MANAGER', userId: manager.id },
       ]);
       const [assignmentTask] = await rows(

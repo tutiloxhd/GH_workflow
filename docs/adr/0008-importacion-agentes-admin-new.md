@@ -1,6 +1,6 @@
 # ADR 0008: Importación de cuentas de agentes desde admin_new
 
-- **Estado:** aceptado (2026-11-18)
+- **Estado:** reemplazado por [ADR 0012](./0012-importacion-completa-y-regiones.md) (2026-11-23)
 - **Ámbito:** identidad y asignación de participantes en `apps/api` y `apps/web`
 
 ## Contexto

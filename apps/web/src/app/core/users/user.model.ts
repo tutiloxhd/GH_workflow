@@ -10,9 +10,8 @@ export interface User {
   readonly name: string;
   readonly email: string;
   readonly rut: string | null;
-  readonly adminNewAreaId: number | null;
-  readonly adminNewAreaName: string | null;
-  readonly adminNewRegion: string | null;
+  readonly regionId: number | null;
+  readonly regionName: string | null;
   readonly status: UserStatus;
   readonly roles: readonly RoleCode[];
   readonly createdAt: string;

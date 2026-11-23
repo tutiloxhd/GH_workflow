@@ -15,6 +15,15 @@ import { ROLE_CODES } from '../../../modules/identity/domain/role-code.js';
 import { USER_STATUSES } from '../../../modules/identity/domain/user-status.js';
 import { createdAt, primaryId, referenceId, updatedAt, utcDateTime } from './columns.js';
 
+export const regions = mysqlTable(
+  'regions',
+  {
+    id: primaryId(),
+    name: varchar('name', { length: 100 }).notNull(),
+  },
+  (table) => [uniqueIndex('uq_regions_name').on(table.name)],
+);
+
 export const users = mysqlTable(
   'users',
   {
@@ -24,9 +33,7 @@ export const users = mysqlTable(
     passwordHash: varchar('password_hash', { length: 255 }).notNull(),
     rut: varchar('rut', { length: 20 }),
     adminNewUserId: int('admin_new_user_id', { unsigned: true }),
-    adminNewAreaId: int('admin_new_area_id', { unsigned: true }),
-    adminNewAreaName: varchar('admin_new_area_name', { length: 50 }),
-    adminNewRegion: varchar('admin_new_region', { length: 100 }),
+    regionId: referenceId('region_id'),
     status: varchar('status', { length: 20, enum: USER_STATUSES }).notNull().default('ACTIVE'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -34,6 +41,12 @@ export const users = mysqlTable(
   (table) => [
     uniqueIndex('uq_users_email').on(table.email),
     uniqueIndex('uq_users_admin_new_user_id').on(table.adminNewUserId),
+    index('idx_users_region').on(table.regionId),
+    foreignKey({
+      name: 'fk_users_region',
+      columns: [table.regionId],
+      foreignColumns: [regions.id],
+    }),
     check('chk_users_status', sql`${table.status} IN ('ACTIVE', 'INACTIVE', 'BLOCKED')`),
   ],
 );

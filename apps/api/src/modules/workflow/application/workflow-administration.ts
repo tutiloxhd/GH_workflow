@@ -42,7 +42,7 @@ async function isEligibleParticipant(
     user.roles.includes(participantType) &&
     isParticipantRegionEligible(
       participantType,
-      user.adminNewRegion,
+      user.regionName,
       context.assignmentRegion,
       context.auctionMode,
     )

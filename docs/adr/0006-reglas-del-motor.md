@@ -9,11 +9,11 @@ El motor debía implementarse con varias reglas que AGENTS.md marcaba como pendi
 
 ## Decisión
 
-**Plantilla.** `REMATE_JUDICIAL` v1 (`sql/seeds/0002_workflow_template_v1.sql`) tiene las 15 tareas del flujo principal de la maqueta (pasos 2 a 16), sin ramas. La v2 (`0004`) es igual pero exige evidencia en tres tareas y es la activa. Una versión publicada no se modifica: los cambios se hacen en una versión nueva, y cada workflow conserva la suya.
+**Plantilla.** `REMATE_JUDICIAL` v1 (`sql/seeds/0002_workflow_template_v1.sql`) tiene las 15 tareas del flujo principal de la maqueta (pasos 2 a 16), sin ramas. La v2 (`0004`) agrega evidencia obligatoria en tres tareas. La v3 (`0006`) conserva esas tareas y evidencias, corrige sus dependencias para formar una secuencia estrictamente lineal y es la activa. Una versión publicada no se modifica: los cambios se hacen en una versión nueva, y cada workflow conserva la suya.
 
 **Tareas manuales.** Todas las tareas son manuales. Las que el diseño original consideraba automáticas (carta Vale Vista, envío al gerente general, alertas pre-remate) las ejecuta un ADMIN. No hay cola de jobs.
 
-**Activación por dependencias.** Una tarea pasa de `BLOCKED` a `READY` cuando todas sus requisitos están `COMPLETED`; varias pueden activarse a la vez. El workflow pasa a `COMPLETED` cuando todas sus tareas lo están. Las revisiones legales no bloquean a otras tareas, pero sí el cierre (pendiente decidir si deben bloquear).
+**Activación por dependencias.** Una tarea pasa de `BLOCKED` a `READY` cuando todos sus requisitos están `COMPLETED`. El motor conserva soporte para grafos, pero la plantilla v3 aprobada enlaza cada tarea con su predecesora inmediata: solo una tarea puede quedar operativa a la vez. El workflow pasa a `COMPLETED` cuando todas sus tareas lo están.
 
 **Responsable.** Al activarse, una tarea queda a cargo de: titular vigente del rol en el workflow → primer usuario activo con el rol → primer ADMIN activo. Su suplente es el suplente vigente del rol.
 

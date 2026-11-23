@@ -23,13 +23,15 @@ npm run typecheck && npm run lint && npm test && npm run build   # apps/api
 npm test -- --watch=false && npm run build                         # apps/web
 ```
 
-Referencia de la copia local (18 nov 2026): `gh_agente_zona` tiene 27 filas para 23 usuarios distintos (un agente puede tener varias zonas), todas activas; tipos `region`, `oficina` y `cupon`.
+La importación crea un usuario por cada `id_user` distinto presente en `gh_agente_zona`, aunque
+existan varias filas de zona por persona. La copia local consultada el 23 nov 2026 tiene 24 filas
+para 21 usuarios distintos; tres de ellos tienen un correo inválido.
 
 ## 2. HU-06 · Usuarios desde admin_new (A2)
 
 | ID      | Caso                    | Preparación y acción                                                       | Resultado esperado                                                                                          |
 | ------- | ----------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| HU06-01 | Primera migración      | Base `workflow` sin agentes migrados; ejecutar la migración.              | Un usuario por agente activo distinto (23 en la copia de referencia), con el rol según la regla de A2.     |
+| HU06-01 | Primera migración      | Base `workflow` sin agentes migrados; ejecutar la importación.            | Un usuario por `id_user` distinto, también si el correo es inválido o repetido; estos reciben dummy único. |
 | HU06-02 | Agente con varias zonas | Agente con más de una fila en `gh_agente_zona`.                           | Un solo usuario; sin duplicados por correo ni por id de origen.                                             |
 | HU06-03 | Idempotencia            | Ejecutar la migración dos veces sin cambios en el origen.                   | No se crean, modifican ni duplican usuarios; ningún evento nuevo.                                          |
 | HU06-04 | Datos incompletos       | Agente sin correo o sin nombre en el origen.                                 | No se crea con datos inventados; queda un aviso que lo identifica (sin datos personales en el log).         |

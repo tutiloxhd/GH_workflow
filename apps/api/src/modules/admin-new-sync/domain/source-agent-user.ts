@@ -4,7 +4,6 @@ export interface SourceAgentUser {
   readonly rut: string | null;
   readonly email: string | null;
   readonly legacyPassword: string | null;
-  readonly adminNewAreaId: number;
-  readonly adminNewAreaName: string | null;
-  readonly adminNewRegion: string | null;
+  readonly areaId: number | null;
+  readonly regionName: string | null;
 }

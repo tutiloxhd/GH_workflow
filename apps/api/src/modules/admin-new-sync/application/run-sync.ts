@@ -1,7 +1,11 @@
 import type { Clock } from '../../../platform/clock/clock.js';
 import type { Database } from '../../../platform/database/database.js';
 import { isDuplicateEntryError } from '../../../platform/database/database-errors.js';
-import { findActiveUserIdsByExactNameAndRole } from '../../identity/persistence/users-repository.js';
+import {
+  findActiveUserIdsByExactNameAndRole,
+  findActiveUserIdsByRutAndRole,
+  findUserAccountById,
+} from '../../identity/persistence/users-repository.js';
 import { startWorkflow } from '../../workflow/application/start-workflow.js';
 import { synchronizeSourceParticipants } from '../../workflow/application/synchronize-source-participants.js';
 import { businessDayKey } from '../../workflow/domain/due-date.js';
@@ -16,6 +20,7 @@ import {
   type NormalizedProperty,
   type PropertySnapshot,
   type SourceProperty,
+  type SourceAuctionState,
 } from '../domain/source-property.js';
 import type { AdminNewSource } from '../persistence/admin-new-source.js';
 import {
@@ -40,6 +45,7 @@ import {
 import { applyPendingReprogrammings } from './apply-pending-reprogrammings.js';
 
 export const ADMIN_NEW_SOURCE_CODE = 'ADMIN_NEW';
+const DEFAULT_LEGAL_REVIEWER_USER_ID = 9;
 // Una ejecución que lleva más que esto marcada como en curso se considera abandonada.
 const STALE_RUN_MINUTES = 15;
 const MILLISECONDS_PER_MINUTE = 60_000;
@@ -231,7 +237,7 @@ class SyncRun {
   private async createProperty(
     adminNewId: number,
     normalized: NormalizedProperty,
-    sourceParticipants: { bidder: string | null; payer: string | null } | null,
+    sourceParticipants: SourceAuctionState | null,
   ): Promise<void> {
     const now = this.dependencies.clock.now();
     let propertyId: number;
@@ -348,7 +354,7 @@ class SyncRun {
   private async startWorkflowIfEligible(
     propertyId: number,
     auctionAt: Date | null,
-    sourceParticipants: { bidder: string | null; payer: string | null } | null,
+    sourceParticipants: SourceAuctionState | null,
     reportUnmatched: boolean,
     assignmentRegion: string | null,
     auctionMode: string | null,
@@ -364,7 +370,9 @@ class SyncRun {
       assignmentRegion,
       auctionMode,
     );
-    const outcome = await startWorkflow(this.dependencies, null, propertyId, { assignedParticipants });
+    const outcome = await startWorkflow(this.dependencies, null, propertyId, {
+      assignedParticipants,
+    });
     if (!outcome.isSuccess) {
       throw new Error(`No se pudo iniciar el workflow: ${outcome.failure}`);
     }
@@ -374,35 +382,57 @@ class SyncRun {
 
   private async resolveSourceParticipants(
     adminNewId: number,
-    sourceParticipants: { bidder: string | null; payer: string | null } | null,
+    sourceParticipants: SourceAuctionState | null,
     reportUnmatched: boolean,
     assignmentRegion: string | null,
     auctionMode: string | null,
   ) {
     if (!sourceParticipants) return [];
     const candidates = [
-      { sourceName: sourceParticipants.payer?.trim() ?? '', participantType: 'MANAGER' as const },
-      { sourceName: sourceParticipants.bidder?.trim() ?? '', participantType: 'BIDDER' as const },
+      {
+        sourceName: sourceParticipants.payer?.trim() ?? '',
+        sourceRut: sourceParticipants.payerRut?.trim() ?? '',
+        participantType: 'MANAGER' as const,
+      },
+      {
+        sourceName: sourceParticipants.bidder?.trim() ?? '',
+        sourceRut: sourceParticipants.bidderRut?.trim() ?? '',
+        participantType: 'BIDDER' as const,
+      },
     ];
-    const assignedParticipants: { participantType: 'MANAGER' | 'BIDDER'; userId: number }[] = [];
+    const assignedParticipants: {
+      participantType: 'MANAGER' | 'BIDDER' | 'LEGAL_REVIEWER';
+      userId: number;
+    }[] = [];
     for (const candidate of candidates) {
-      if (candidate.sourceName.length === 0) {
-        if (reportUnmatched) this.reportUnmatchedParticipant(adminNewId, candidate.participantType, false);
+      if (candidate.sourceName.length === 0 && candidate.sourceRut.length === 0) {
+        if (reportUnmatched)
+          this.reportUnmatchedParticipant(adminNewId, candidate.participantType, false);
         continue;
       }
-      const matches = await findActiveUserIdsByExactNameAndRole(
-        this.db,
-        candidate.sourceName,
-        candidate.participantType,
-      );
-      const eligibleMatches = matches.filter((user) =>
-        isParticipantRegionEligible(
-          candidate.participantType,
-          user.region,
-          assignmentRegion,
-          auctionMode,
-        ),
-      );
+      const matches = candidate.sourceRut
+        ? await findActiveUserIdsByRutAndRole(
+            this.db,
+            candidate.sourceRut,
+            candidate.participantType,
+          )
+        : await findActiveUserIdsByExactNameAndRole(
+            this.db,
+            candidate.sourceName,
+            candidate.participantType,
+          );
+      // La asignación explícita por RUT en admin_new prevalece sobre la región del agente,
+      // que puede estar vacía en gh_agente_zona. La coincidencia por nombre conserva el filtro.
+      const eligibleMatches = candidate.sourceRut
+        ? matches
+        : matches.filter((user) =>
+            isParticipantRegionEligible(
+              candidate.participantType,
+              user.region,
+              assignmentRegion,
+              auctionMode,
+            ),
+          );
       const matchedUser = eligibleMatches.length === 1 ? eligibleMatches[0] : undefined;
       if (matchedUser !== undefined) {
         assignedParticipants.push({
@@ -417,6 +447,16 @@ class SyncRun {
           candidate.participantType,
           eligibleMatches.length > 1,
         );
+      }
+    }
+    if (assignedParticipants.length === 2) {
+      const reviewer = await findUserAccountById(this.db, DEFAULT_LEGAL_REVIEWER_USER_ID);
+      if (
+        reviewer?.status === 'ACTIVE' &&
+        reviewer.name === 'Pablo Godoy' &&
+        reviewer.roles.includes('LEGAL_REVIEWER')
+      ) {
+        assignedParticipants.push({ participantType: 'LEGAL_REVIEWER', userId: reviewer.id });
       }
     }
     return assignedParticipants;

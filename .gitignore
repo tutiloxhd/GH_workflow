@@ -14,3 +14,5 @@ node_modules/
 dist/
 coverage/
 sql/admin_new TODO 09-10-2026-202611091548.sql
+
+*.log

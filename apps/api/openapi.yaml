@@ -1285,15 +1285,14 @@ components:
     User:
       type: object
       additionalProperties: false
-      required: [id, name, email, rut, adminNewAreaId, adminNewAreaName, adminNewRegion, status, roles, createdAt]
+      required: [id, name, email, rut, regionId, regionName, status, roles, createdAt]
       properties:
         id: { type: integer }
         name: { type: string }
         email: { type: string }
         rut: { type: [string, 'null'] }
-        adminNewAreaId: { type: [integer, 'null'] }
-        adminNewAreaName: { type: [string, 'null'] }
-        adminNewRegion: { type: [string, 'null'] }
+        regionId: { type: [integer, 'null'] }
+        regionName: { type: [string, 'null'] }
         status: { type: string, enum: [ACTIVE, INACTIVE, BLOCKED] }
         roles:
           type: array

@@ -69,9 +69,13 @@ erDiagram
         varchar password_hash
         varchar rut
         int admin_new_user_id UK
-        int admin_new_area_id
-        varchar admin_new_area_name
+        bigint region_id FK
         varchar status
+    }
+
+    REGIONS {
+        bigint id PK
+        varchar name UK
     }
 
     USER_SESSIONS {
@@ -271,8 +275,14 @@ Campos principales:
 - `rut`: RUT informado por `gh_agente_zona`; puede ser nulo en cuentas locales.
 - `admin_new_user_id`: identificador del usuario importado desde `admin_new`, único para hacer
   idempotente la importación.
-- `admin_new_area_id`, `admin_new_area_name`: identificador y descripción del área de origen.
+- `region_id`: región del agente; referencia a `regions`.
 - `created_at`, `updated_at`.
+
+#### `regions`
+
+Catálogo simple de regiones con `id` y `name`. Se usa para relacionar agentes con la región que
+determina su elegibilidad de asignación. La información de comuna de las propiedades sigue siendo
+parte del expediente operacional y es independiente de este catálogo.
 
 El registro de usuario no debe permitir que una persona se asigne libremente un rol privilegiado.
 

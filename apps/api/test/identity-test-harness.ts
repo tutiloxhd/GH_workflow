@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import type { RowDataPacket } from 'mysql2/promise';
 import { buildApiApp } from '../src/composition/build-api-app.js';
 import type { IdentityDependencies } from '../src/modules/identity/application/identity-dependencies.js';
 import { createBcryptPasswordHasher } from '../src/modules/identity/application/password-hasher.js';
@@ -18,6 +19,7 @@ const BASE_SEED_PATHS = [
   '0001_roles.sql',
   '0002_workflow_template_v1.sql',
   '0004_workflow_template_v2.sql',
+  '0006_workflow_template_v3_linear.sql',
   '0005_notification_rules.sql',
 ].map((fileName) => new URL(`../../../sql/seeds/${fileName}`, import.meta.url));
 // Tablas que escriben las pruebas, en orden compatible con las claves foráneas.
@@ -42,6 +44,7 @@ const MUTABLE_TABLES = [
   'user_roles',
   'login_attempts',
   'users',
+  'regions',
 ];
 
 export const SYNTHETIC_PASSWORD = 'Sintetica123';
@@ -133,7 +136,7 @@ export async function resetIdentityTables(context: IdentityTestContext): Promise
 
 export async function givenUser(
   context: IdentityTestContext,
-  user: { email: string; roles: RoleCode[]; name?: string; adminNewRegion?: string | null },
+  user: { email: string; roles: RoleCode[]; name?: string; regionName?: string | null },
 ): Promise<UserAccount> {
   const outcome = await createUser(context.dependencies, null, {
     name: user.name ?? 'Usuario Sintético',
@@ -143,15 +146,23 @@ export async function givenUser(
   });
   if (!outcome.isSuccess) throw new Error(`No se pudo crear el usuario de prueba`);
   const hasAgentRole = user.roles.some((role) => role === 'MANAGER' || role === 'BIDDER');
-  const adminNewRegion =
-    user.adminNewRegion === undefined
+  const regionName =
+    user.regionName === undefined
       ? hasAgentRole
         ? 'Región Metropolitana'
         : null
-      : user.adminNewRegion;
-  if (adminNewRegion !== null) {
-    await context.database.pool.query('UPDATE users SET admin_new_region = ? WHERE id = ?', [
-      adminNewRegion,
+      : user.regionName;
+  if (regionName !== null) {
+    await context.database.pool.query(
+      'INSERT INTO regions (name) VALUES (?) ON DUPLICATE KEY UPDATE name = VALUES(name)',
+      [regionName],
+    );
+    const [regionRows] = await context.database.pool.query<RowDataPacket[]>(
+      'SELECT id FROM regions WHERE name = ?',
+      [regionName],
+    );
+    await context.database.pool.query('UPDATE users SET region_id = ? WHERE id = ?', [
+      regionRows[0]?.id,
       outcome.value.id,
     ]);
   }

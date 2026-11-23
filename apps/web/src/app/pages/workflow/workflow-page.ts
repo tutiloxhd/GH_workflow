@@ -75,22 +75,15 @@ export class WorkflowPage implements OnInit, OnDestroy {
 
   protected readonly participantRows = computed(() => {
     const participants = this.workflow()?.participants ?? [];
-    const property = this.workflow()?.property;
     const holder = (type: ParticipantType, assignment: 'PRIMARY' | 'BACKUP') =>
       participants.find(
         (participant) =>
           participant.participantType === type && participant.assignmentType === assignment,
       )?.user?.name ?? null;
-    const sourceName = (type: ParticipantType) => {
-      if (type === 'MANAGER') return property?.auctionPayerName ?? null;
-      if (type === 'BIDDER') return property?.auctionBidderName ?? null;
-      return null;
-    };
     return PARTICIPANT_ORDER.map((type) => ({
       label: PARTICIPANT_LABELS[type],
       primary: holder(type, 'PRIMARY'),
       backup: holder(type, 'BACKUP'),
-      sourceName: sourceName(type),
     }));
   });
 

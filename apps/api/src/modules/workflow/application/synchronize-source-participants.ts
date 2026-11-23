@@ -7,7 +7,7 @@ import { runWorkflowCommand } from './run-workflow-command.js';
 import type { WorkflowDependencies } from './workflow-dependencies.js';
 
 export interface SourceParticipantAssignment {
-  readonly participantType: 'MANAGER' | 'BIDDER';
+  readonly participantType: 'MANAGER' | 'BIDDER' | 'LEGAL_REVIEWER';
   readonly userId: number;
 }
 
@@ -22,10 +22,9 @@ export async function synchronizeSourceParticipants(
     const assignmentTask = context.tasks.find(
       (task) => task.code === ASSIGN_PARTICIPANTS_TASK_CODE,
     );
-    if (assignmentTask?.status !== 'READY') return succeed(undefined);
-
     const newAssignments = assignments.filter(
       (assignment) =>
+        (assignment.participantType === 'LEGAL_REVIEWER' || assignmentTask?.status === 'READY') &&
         currentHolder(context.participants, assignment.participantType, 'PRIMARY') === null,
     );
     for (const assignment of newAssignments) {
@@ -77,14 +76,17 @@ export async function synchronizeSourceParticipants(
       }
     }
 
-    const sourceAssignmentsMatchWorkflow =
-      assignments.some((assignment) => assignment.participantType === 'MANAGER') &&
-      assignments.some((assignment) => assignment.participantType === 'BIDDER') &&
-      assignments.every(
-        (assignment) =>
-          currentHolder(context.participants, assignment.participantType, 'PRIMARY') ===
-          assignment.userId,
+    if (assignmentTask?.status !== 'READY') return succeed(undefined);
+
+    const sourceAssignmentsMatchWorkflow = (['MANAGER', 'BIDDER'] as const).every((type) => {
+      const sourceAssignment = assignments.find(
+        (assignment) => assignment.participantType === type,
       );
+      return (
+        sourceAssignment !== undefined &&
+        currentHolder(context.participants, type, 'PRIMARY') === sourceAssignment.userId
+      );
+    });
     if (sourceAssignmentsMatchWorkflow && hasRequiredParticipants(context.participants)) {
       await context.changeTask(assignmentTask.id, {
         status: 'COMPLETED',

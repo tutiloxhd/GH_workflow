@@ -43,19 +43,12 @@ interface Selection {
       @for (type of participantTypes; track type) {
         <fieldset class="checkbox-list">
           <legend>{{ labels[type] }}</legend>
-          @if (isAuctionParticipant(type)) {
-            @if (sourceName(type); as name) {
-              <p class="muted">{{ name }}</p>
-            }
-          }
           <label class="field">
             Titular
             <select [name]="type + '-primary'" [(ngModel)]="selections[type].primaryUserId">
               <option [ngValue]="null">Sin cambios</option>
               @for (user of candidatesFor(type); track user.id) {
-                <option [ngValue]="user.id">
-                  {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
-                </option>
+                <option [ngValue]="user.id">{{ user.name }}</option>
               }
             </select>
           </label>
@@ -64,9 +57,7 @@ interface Selection {
             <select [name]="type + '-backup'" [(ngModel)]="selections[type].backupUserId">
               <option [ngValue]="null">Sin suplente</option>
               @for (user of candidatesFor(type); track user.id) {
-                <option [ngValue]="user.id">
-                  {{ user.name }}{{ user.rut ? ' · ' + user.rut : '' }}
-                </option>
+                <option [ngValue]="user.id">{{ user.name }}</option>
               }
             </select>
           </label>
@@ -108,17 +99,6 @@ export class ParticipantsForm implements OnInit {
   protected readonly isSaving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
 
-  protected isAuctionParticipant(type: ParticipantType): boolean {
-    return type !== 'LEGAL_REVIEWER';
-  }
-
-  protected sourceName(type: ParticipantType): string | null {
-    const property = this.workflow().property;
-    if (type === 'MANAGER') return property?.auctionPayerName ?? null;
-    if (type === 'BIDDER') return property?.auctionBidderName ?? null;
-    return null;
-  }
-
   protected candidatesFor(type: ParticipantType): readonly User[] {
     const candidates = this.candidates()[type];
     if (type === 'LEGAL_REVIEWER') return candidates;
@@ -127,7 +107,7 @@ export class ParticipantsForm implements OnInit {
     if (type === 'BIDDER' && isVideoCall(property?.auctionMode ?? null)) return candidates;
     const assignmentRegion = property?.assignmentRegion;
     if (!assignmentRegion) return [];
-    return candidates.filter((user) => sameRegion(user.adminNewRegion, assignmentRegion));
+    return candidates.filter((user) => sameRegion(user.regionName, assignmentRegion));
   }
 
   ngOnInit(): void {

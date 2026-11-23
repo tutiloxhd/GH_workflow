@@ -10,18 +10,20 @@ import {
   replaceUserRoleIds,
 } from '../../identity/persistence/roles-repository.js';
 import {
+  findRegionIdsByName,
   findExistingEmails,
-  findAdminNewUserRegions,
+  findUserRegionsByAdminNewIds,
   findUserIdsByAdminNewUserIds,
   insertUser,
-  updateAdminNewUserRegion,
+  updateUserRegion,
 } from '../../identity/persistence/users-repository.js';
 import type { AdminNewSource } from '../persistence/admin-new-source.js';
 import type { SourceAgentUser } from '../domain/source-agent-user.js';
 
 const AGENT_ROLES = ['MANAGER', 'BIDDER'] as const;
 const LEGAL_REVIEWER_ROLE: RoleCode = 'LEGAL_REVIEWER';
-const LEGAL_REVIEWER_AREA_NAMES = new Set(['legal', 'jefe legal']);
+const LEGAL_REVIEWER_AREA_IDS = new Set([1, 4]);
+const DUMMY_EMAIL_DOMAIN = 'grupohouse.cl';
 const BCRYPT_HASH_PATTERN = /^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/;
 const EMAIL_SCHEMA = z.email();
 
@@ -29,21 +31,19 @@ interface EligibleAgentUser {
   readonly source: SourceAgentUser;
   readonly email: string;
   readonly name: string;
-  readonly rut: string;
+  readonly rut: string | null;
   readonly password: string;
 }
 
 export interface AgentUserImportSummary {
   readonly eligibleUsers: number;
   readonly legalReviewerUsers: number;
-  readonly skippedInvalidEmails: number;
-  readonly skippedDuplicateEmails: number;
+  readonly assignedDummyEmails: number;
   readonly skippedIncompleteRecords: number;
   readonly alreadyImported: number;
-  readonly emailConflicts: number;
   readonly imported: number;
   readonly regionsUpdated: number;
-  readonly usersWithoutRegion: number;
+  readonly sourceUsersWithoutRegion: number;
   readonly legalReviewerRolesAdded: number;
   readonly bcryptPasswords: number;
   readonly plaintextPasswords: number;
@@ -65,7 +65,7 @@ function isSupportedBcryptHash(password: string): boolean {
 }
 
 function needsLegalReviewerRole(user: EligibleAgentUser): boolean {
-  return LEGAL_REVIEWER_AREA_NAMES.has((user.source.adminNewAreaName ?? '').trim().toLowerCase());
+  return user.source.areaId !== null && LEGAL_REVIEWER_AREA_IDS.has(user.source.areaId);
 }
 
 function rolesForUser(user: EligibleAgentUser): readonly RoleCode[] {
@@ -74,52 +74,45 @@ function rolesForUser(user: EligibleAgentUser): readonly RoleCode[] {
 
 function eligibleAgentUsers(sourceUsers: readonly SourceAgentUser[]): {
   readonly users: readonly EligibleAgentUser[];
-  readonly skippedInvalidEmails: number;
-  readonly skippedDuplicateEmails: number;
+  readonly assignedDummyEmails: number;
   readonly skippedIncompleteRecords: number;
 } {
-  const withValidEmails: Array<{ source: SourceAgentUser; email: string }> = [];
-  let skippedInvalidEmails = 0;
-
-  for (const source of sourceUsers) {
-    if (!source.email) {
-      skippedInvalidEmails += 1;
-      continue;
-    }
-    const email = normalizeEmail(source.email);
-    if (!isValidSourceEmail(email)) {
-      skippedInvalidEmails += 1;
-      continue;
-    }
-    withValidEmails.push({ source, email });
-  }
-
   const emailCounts = new Map<string, number>();
-  for (const candidate of withValidEmails) {
-    emailCounts.set(candidate.email, (emailCounts.get(candidate.email) ?? 0) + 1);
+  for (const source of sourceUsers) {
+    const email = source.email ? normalizeEmail(source.email) : '';
+    if (isValidSourceEmail(email)) emailCounts.set(email, (emailCounts.get(email) ?? 0) + 1);
   }
 
   const users: EligibleAgentUser[] = [];
-  let skippedDuplicateEmails = 0;
+  let assignedDummyEmails = 0;
   let skippedIncompleteRecords = 0;
-  for (const candidate of withValidEmails) {
-    if ((emailCounts.get(candidate.email) ?? 0) !== 1) {
-      skippedDuplicateEmails += 1;
-      continue;
-    }
-
-    const name = candidate.source.name?.trim();
-    const rut = candidate.source.rut?.trim();
-    const password = candidate.source.legacyPassword;
-    if (!name || !rut || !password || !Number.isSafeInteger(candidate.source.adminNewAreaId)) {
+  for (const source of sourceUsers) {
+    const name =
+      source.name?.replace(/\s+/g, ' ').trim() || `Agente admin_new ${source.adminNewUserId}`;
+    const rut = source.rut?.trim() || null;
+    const password = source.legacyPassword;
+    if (!password || !Number.isSafeInteger(source.adminNewUserId)) {
       skippedIncompleteRecords += 1;
       continue;
     }
 
-    users.push({ source: candidate.source, email: candidate.email, name, rut, password });
+    const sourceEmail = source.email ? normalizeEmail(source.email) : '';
+    const usesDummyEmail =
+      !isValidSourceEmail(sourceEmail) || (emailCounts.get(sourceEmail) ?? 0) !== 1;
+    const email = usesDummyEmail ? dummyEmailFor(source.adminNewUserId) : sourceEmail;
+    if (usesDummyEmail) assignedDummyEmails += 1;
+    users.push({ source, email, name, rut, password });
   }
 
-  return { users, skippedInvalidEmails, skippedDuplicateEmails, skippedIncompleteRecords };
+  return { users, assignedDummyEmails, skippedIncompleteRecords };
+}
+
+function dummyEmailFor(adminNewUserId: number, suffix?: number): string {
+  const localPart =
+    suffix === undefined
+      ? `test+admin-new-${adminNewUserId}`
+      : `test+admin-new-${adminNewUserId}-${suffix}`;
+  return `${localPart}@${DUMMY_EMAIL_DOMAIN}`;
 }
 
 async function hashLegacyPassword(
@@ -157,7 +150,32 @@ export async function importAdminNewAgentUsers(
     dependencies.database.db,
     notImported.map((user) => user.email),
   );
-  const readyToImport = notImported.filter((user) => !existingEmails.has(user.email));
+  const emailConflicts = notImported.filter((user) => existingEmails.has(user.email));
+  let unresolvedEmailConflicts = emailConflicts;
+  const resolvedEmailConflicts: EligibleAgentUser[] = [];
+  for (let suffix = 1; unresolvedEmailConflicts.length > 0 && suffix <= 100; suffix += 1) {
+    const proposed = unresolvedEmailConflicts.map((user) => ({
+      ...user,
+      email: dummyEmailFor(user.source.adminNewUserId, suffix),
+    }));
+    const occupiedAliases = await findExistingEmails(
+      dependencies.database.db,
+      proposed.map((user) => user.email),
+    );
+    const available = proposed.filter((user) => !occupiedAliases.has(user.email));
+    resolvedEmailConflicts.push(...available);
+    const availableIds = new Set(available.map((user) => user.source.adminNewUserId));
+    unresolvedEmailConflicts = unresolvedEmailConflicts.filter(
+      (user) => !availableIds.has(user.source.adminNewUserId),
+    );
+  }
+  if (unresolvedEmailConflicts.length > 0) {
+    throw new Error('No se pudo asignar un correo dummy único a cada agente');
+  }
+  const readyToImport = [
+    ...notImported.filter((user) => !existingEmails.has(user.email)),
+    ...resolvedEmailConflicts,
+  ];
 
   let bcryptPasswords = 0;
   let plaintextPasswords = 0;
@@ -170,7 +188,6 @@ export async function importAdminNewAgentUsers(
   let regionsUpdated = 0;
   let legalReviewerRolesAdded = 0;
   let alreadyImported = existingSourceIds.size;
-  let emailConflicts = notImported.length - readyToImport.length;
   const legalReviewerUsers = candidateUsers.filter(needsLegalReviewerRole).length;
 
   if (shouldApply && candidateUsers.length > 0) {
@@ -186,10 +203,21 @@ export async function importAdminNewAgentUsers(
         transaction,
         candidateSourceIds,
       );
-      const currentRegionsBySourceId = await findAdminNewUserRegions(
+      const currentRegionsBySourceId = await findUserRegionsByAdminNewIds(
         transaction,
         candidateSourceIds,
       );
+      const regionIdsByName = await findRegionIdsByName(
+        transaction,
+        [
+          'Región Metropolitana',
+          ...candidateUsers.flatMap((user) =>
+            user.source.regionName ? [user.source.regionName] : [],
+          ),
+        ],
+      );
+      const metropolitanRegionId = regionIdsByName.get('Región Metropolitana');
+      if (metropolitanRegionId === undefined) throw new Error('Falta la Región Metropolitana');
       const remainingUsers = preparedUsers.filter(
         (user) => !currentUsersBySourceId.has(user.source.adminNewUserId),
       );
@@ -209,9 +237,11 @@ export async function importAdminNewAgentUsers(
 
       for (const user of candidateUsers) {
         const current = currentRegionsBySourceId.get(user.source.adminNewUserId);
-        const sourceRegion = user.source.adminNewRegion;
-        if (current && sourceRegion && current.region !== sourceRegion) {
-          await updateAdminNewUserRegion(transaction, current.userId, sourceRegion);
+        const sourceRegionId = user.source.regionName
+          ? (regionIdsByName.get(user.source.regionName) ?? metropolitanRegionId)
+          : metropolitanRegionId;
+        if (current && sourceRegionId !== null && current.regionId !== sourceRegionId) {
+          await updateUserRegion(transaction, current.userId, sourceRegionId);
           regionsUpdated += 1;
         }
       }
@@ -234,9 +264,9 @@ export async function importAdminNewAgentUsers(
           passwordHash: user.passwordHash,
           rut: user.rut,
           adminNewUserId: user.source.adminNewUserId,
-          adminNewAreaId: user.source.adminNewAreaId,
-          adminNewAreaName: user.source.adminNewAreaName,
-          adminNewRegion: user.source.adminNewRegion,
+          regionId: user.source.regionName
+            ? (regionIdsByName.get(user.source.regionName) ?? metropolitanRegionId)
+            : metropolitanRegionId,
         });
         await replaceUserRoleIds(transaction, {
           userId,
@@ -249,21 +279,18 @@ export async function importAdminNewAgentUsers(
 
       imported = usersToInsert.length;
       alreadyImported = currentUsersBySourceId.size;
-      emailConflicts += remainingUsers.length - usersToInsert.length;
     });
   }
 
   return {
     eligibleUsers: candidateUsers.length,
     legalReviewerUsers,
-    skippedInvalidEmails: eligibility.skippedInvalidEmails,
-    skippedDuplicateEmails: eligibility.skippedDuplicateEmails,
+    assignedDummyEmails: eligibility.assignedDummyEmails + resolvedEmailConflicts.length,
     skippedIncompleteRecords: eligibility.skippedIncompleteRecords,
     alreadyImported,
-    emailConflicts,
     imported,
     regionsUpdated,
-    usersWithoutRegion: candidateUsers.filter((user) => !user.source.adminNewRegion).length,
+    sourceUsersWithoutRegion: candidateUsers.filter((user) => !user.source.regionName).length,
     legalReviewerRolesAdded,
     bcryptPasswords,
     plaintextPasswords,

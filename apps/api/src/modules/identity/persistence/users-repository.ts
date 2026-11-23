@@ -1,6 +1,11 @@
-import { and, asc, count, eq, inArray, like, ne, or, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, like, ne, or, sql, type SQL } from 'drizzle-orm';
 import type { DatabaseExecutor } from '../../../platform/database/database.js';
-import { roles, userRoles, users } from '../../../platform/database/schema/identity.schema.js';
+import {
+  regions,
+  roles,
+  userRoles,
+  users,
+} from '../../../platform/database/schema/identity.schema.js';
 import { normalizeEmail } from '../domain/email.js';
 import { ADMIN_ROLE, type RoleCode } from '../domain/role-code.js';
 import type { UserStatus } from '../domain/user-status.js';
@@ -10,9 +15,8 @@ export interface UserAccount {
   readonly name: string;
   readonly email: string;
   readonly rut: string | null;
-  readonly adminNewAreaId: number | null;
-  readonly adminNewAreaName: string | null;
-  readonly adminNewRegion: string | null;
+  readonly regionId: number | null;
+  readonly regionName: string | null;
   readonly status: UserStatus;
   readonly roles: readonly RoleCode[];
   readonly createdAt: Date;
@@ -29,9 +33,8 @@ const userColumns = {
   name: users.name,
   email: users.email,
   rut: users.rut,
-  adminNewAreaId: users.adminNewAreaId,
-  adminNewAreaName: users.adminNewAreaName,
-  adminNewRegion: users.adminNewRegion,
+  regionId: users.regionId,
+  regionName: regions.name,
   status: users.status,
   createdAt: users.createdAt,
 };
@@ -78,7 +81,11 @@ export async function findUserAccountById(
   executor: DatabaseExecutor,
   userId: number,
 ): Promise<UserAccount | undefined> {
-  const userRows = await executor.select(userColumns).from(users).where(eq(users.id, userId));
+  const userRows = await executor
+    .select(userColumns)
+    .from(users)
+    .leftJoin(regions, eq(regions.id, users.regionId))
+    .where(eq(users.id, userId));
   const [account] = await attachRoles(executor, userRows);
   return account;
 }
@@ -124,34 +131,60 @@ export async function findUserIdsByAdminNewUserIds(
   );
 }
 
-export async function findAdminNewUserRegions(
+export async function findUserRegionsByAdminNewIds(
   executor: DatabaseExecutor,
   adminNewUserIds: readonly number[],
-): Promise<Map<number, { userId: number; region: string | null }>> {
+): Promise<Map<number, { userId: number; regionId: number | null; regionName: string | null }>> {
   if (adminNewUserIds.length === 0) return new Map();
   const rows = await executor
     .select({
       userId: users.id,
       adminNewUserId: users.adminNewUserId,
-      region: users.adminNewRegion,
+      regionId: users.regionId,
+      regionName: regions.name,
     })
     .from(users)
+    .leftJoin(regions, eq(regions.id, users.regionId))
     .where(inArray(users.adminNewUserId, adminNewUserIds));
   return new Map(
     rows.flatMap((row) =>
       row.adminNewUserId === null
         ? []
-        : [[row.adminNewUserId, { userId: row.userId, region: row.region }] as const],
+        : [
+            [
+              row.adminNewUserId,
+              { userId: row.userId, regionId: row.regionId, regionName: row.regionName },
+            ] as const,
+          ],
     ),
   );
 }
 
-export async function updateAdminNewUserRegion(
+export async function updateUserRegion(
   executor: DatabaseExecutor,
   userId: number,
-  region: string,
+  regionId: number | null,
 ): Promise<void> {
-  await executor.update(users).set({ adminNewRegion: region }).where(eq(users.id, userId));
+  await executor.update(users).set({ regionId }).where(eq(users.id, userId));
+}
+
+export async function findRegionIdsByName(
+  executor: DatabaseExecutor,
+  regionNames: readonly string[],
+): Promise<Map<string, number>> {
+  const uniqueNames = [...new Set(regionNames.map((name) => name.trim()).filter(Boolean))];
+  if (uniqueNames.length === 0) return new Map();
+
+  const rows = await executor
+    .select({ id: regions.id, name: regions.name })
+    .from(regions)
+    .where(inArray(regions.name, uniqueNames));
+  const regionIds = new Map(rows.map((region) => [region.name, region.id]));
+  const unknownNames = uniqueNames.filter((name) => !regionIds.has(name));
+  if (unknownNames.length > 0) {
+    throw new Error(`Regiones de origen fuera del catálogo: ${unknownNames.join(', ')}`);
+  }
+  return regionIds;
 }
 
 export async function findExistingEmails(
@@ -174,9 +207,7 @@ export async function insertUser(
     passwordHash: string;
     rut?: string | null;
     adminNewUserId?: number | null;
-    adminNewAreaId?: number | null;
-    adminNewAreaName?: string | null;
-    adminNewRegion?: string | null;
+    regionId?: number | null;
   },
 ): Promise<number> {
   const [inserted] = await executor.insert(users).values(user).$returningId();
@@ -235,12 +266,38 @@ export async function findActiveUserIdsByExactNameAndRole(
   role: RoleCode,
 ): Promise<{ id: number; region: string | null }[]> {
   const rows = await executor
-    .select({ id: users.id, name: users.name, region: users.adminNewRegion })
+    .select({ id: users.id, name: users.name, region: regions.name })
     .from(users)
     .innerJoin(userRoles, eq(userRoles.userId, users.id))
     .innerJoin(roles, eq(roles.id, userRoles.roleId))
+    .leftJoin(regions, eq(regions.id, users.regionId))
     .where(and(eq(roles.code, role), eq(users.status, 'ACTIVE'), eq(users.name, name)));
   return rows.filter((user) => user.name === name).map(({ id, region }) => ({ id, region }));
+}
+
+export async function findActiveUserIdsByRutAndRole(
+  executor: DatabaseExecutor,
+  rut: string,
+  role: RoleCode,
+): Promise<{ id: number; region: string | null }[]> {
+  const normalizedRut = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+  if (!/^[0-9]{7,8}[0-9K]$/.test(normalizedRut)) return [];
+  return executor
+    .select({ id: users.id, region: regions.name })
+    .from(users)
+    .innerJoin(userRoles, eq(userRoles.userId, users.id))
+    .innerJoin(roles, eq(roles.id, userRoles.roleId))
+    .leftJoin(regions, eq(regions.id, users.regionId))
+    .where(
+      and(
+        eq(roles.code, role),
+        eq(users.status, 'ACTIVE'),
+        eq(
+          sql<string>`REPLACE(REPLACE(REPLACE(UPPER(${users.rut}), '.', ''), '-', ''), ' ', '')`,
+          normalizedRut,
+        ),
+      ),
+    );
 }
 
 export async function findUserNames(
@@ -293,6 +350,7 @@ export async function listUserAccounts(
   const userRows = await executor
     .select(userColumns)
     .from(users)
+    .leftJoin(regions, eq(regions.id, users.regionId))
     .where(filter)
     .orderBy(asc(users.name), asc(users.id))
     .limit(query.limit)

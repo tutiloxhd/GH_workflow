@@ -79,6 +79,7 @@ npm run db:migrate
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0001_roles.sql"
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0002_workflow_template_v1.sql"
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0004_workflow_template_v2.sql"
+mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0006_workflow_template_v3_linear.sql"
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0005_notification_rules.sql"
 ADMIN_INITIAL_PASSWORD='<contraseña>' npm run users:create-admin -- --email <email> --name "<nombre>"
 ```

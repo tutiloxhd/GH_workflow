@@ -102,6 +102,8 @@ const toAuctionState = (raw: RowDataPacket): SourceAuctionState => ({
   rowId: Number(raw.id_er),
   bidder: nullableText(raw.postor),
   payer: nullableText(raw.pagador),
+  bidderRut: nullableText(raw.rut_postor),
+  payerRut: nullableText(raw.rut_pagador),
 });
 
 export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSource {
@@ -144,18 +146,15 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
                 agent.region AS agent_region,
                 source_user.correo AS email,
                 source_user.pass AS legacy_password,
-                source_user.id_gh_area AS area_id,
-                area.descripcion AS area_name
+                source_user.id_gh_area AS area_id
            FROM gh_agente_zona AS agent
            INNER JOIN \u0060user\u0060 AS source_user ON source_user.id_user = agent.id_user
-           LEFT JOIN gh_area AS area ON area.id_gh_area = source_user.id_gh_area
-          WHERE NOT EXISTS (
-            SELECT 1
-              FROM gh_agente_zona AS newer_agent
-             WHERE newer_agent.id_user = agent.id_user
-               AND (newer_agent.creado > agent.creado
-                    OR (newer_agent.creado = agent.creado
-                        AND newer_agent.id_gh_agente_zona > agent.id_gh_agente_zona))
+          WHERE agent.id_gh_agente_zona = (
+            SELECT latest_agent.id_gh_agente_zona
+              FROM gh_agente_zona AS latest_agent
+             WHERE latest_agent.id_user = agent.id_user
+             ORDER BY latest_agent.creado DESC, latest_agent.id_gh_agente_zona DESC
+             LIMIT 1
           )
           ORDER BY agent.id_user`,
       );
@@ -165,9 +164,8 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
         rut: nullableText(row.agent_rut),
         email: nullableText(row.email),
         legacyPassword: nullableText(row.legacy_password),
-        adminNewAreaId: Number(row.area_id),
-        adminNewAreaName: nullableText(row.area_name),
-        adminNewRegion: nullableText(row.agent_region)?.trim() || null,
+        areaId: row.area_id === null ? null : Number(row.area_id),
+        regionName: nullableText(row.agent_region)?.replace(/\s+/g, ' ').trim() || null,
       }));
     },
 
@@ -218,18 +216,10 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
         toAuction,
       );
       const auctionIds = [...auctions.values()].map(({ row }) => String(row.rowId));
-      const auctionIdsMatchingPropertyIds = new Set(
-        (await selectByIds(`SELECT id_dr FROM datos_lremate WHERE id_dr IN (?)`, textIds)).map(
-          (row) => String(row.id_dr),
-        ),
-      );
-      const propertyIdsForAuctionStateFallback = new Set(
-        textIds.filter((propertyId) => !auctionIdsMatchingPropertyIds.has(propertyId)),
-      );
-      const auctionStateIds = [...new Set([...auctionIds, ...propertyIdsForAuctionStateFallback])];
+      const auctionStateIds = [...new Set([...textIds, ...auctionIds])];
       const auctionStates = latestByProperty(
         await selectByIds(
-          `SELECT id_er, id_r, postor, pagador
+          `SELECT id_er, id_r, postor, pagador, rut_postor, rut_pagador
              FROM estado_remate
             WHERE id_r IN (?)`,
           auctionStateIds,
@@ -251,16 +241,14 @@ export function connectAdminNewSource(settings: DatabaseSettings): AdminNewSourc
           location: nullableText(row.ubicacion),
           commune,
           region: nullableText(row.region),
-          assignmentRegion: communeRegions?.size === 1 ? [...communeRegions][0] ?? null : null,
+          assignmentRegion: communeRegions?.size === 1 ? ([...communeRegions][0] ?? null) : null,
           detail: detail?.row ?? null,
           detailRowCount: detail?.count ?? 0,
           auction: auction?.row ?? null,
           auctionRowCount: auction?.count ?? 0,
           auctionState:
-            (auction ? auctionStates.get(auction.row.rowId)?.row : undefined) ??
-            (propertyIdsForAuctionStateFallback.has(String(adminNewId))
-              ? (auctionStates.get(adminNewId)?.row ?? null)
-              : null),
+            auctionStates.get(adminNewId)?.row ??
+            (auction ? (auctionStates.get(auction.row.rowId)?.row ?? null) : null),
         };
       });
     },

@@ -77,6 +77,17 @@ describe('motor del workflow', () => {
     return completeAs(context, cookie, task.id);
   }
 
+  async function advanceUntilReady(workflowId: number, targetCode: string): Promise<WorkflowView> {
+    const targetIndex = TASK_ORDER.indexOf(targetCode);
+    if (targetIndex < 0) throw new Error(`Código de tarea desconocido: ${targetCode}`);
+    for (const code of TASK_ORDER.slice(0, targetIndex)) {
+      const current = taskOf(await getWorkflow(context, cast, workflowId), code);
+      if (current.status !== 'COMPLETED')
+        expect((await completeByCode(workflowId, code)).status).toBe(200);
+    }
+    return getWorkflow(context, cast, workflowId);
+  }
+
   it('el inicio es idempotente y solo activa la primera tarea, asignada a un admin', async () => {
     const propertyId = await givenProperty(context);
 
@@ -117,7 +128,7 @@ describe('motor del workflow', () => {
     expect(rows[0]?.total).toBe(1);
   });
 
-  it('«Asignar gestor y postor» exige participantes y al completarse abre tres tareas en paralelo', async () => {
+  it('«Asignar gestor y postor» exige participantes y al completarse abre solo la tarea siguiente', async () => {
     const workflow = await startWorkflowFor(context, cast, await givenProperty(context));
     const firstTaskId = taskOf(workflow, 'ASSIGN_MANAGER_AND_BIDDER').id;
 
@@ -132,36 +143,32 @@ describe('motor del workflow', () => {
     expect(statusesOf(after)).toMatchObject({
       ASSIGN_MANAGER_AND_BIDDER: 'COMPLETED',
       GENERATE_VALE_VISTA_LETTER: 'READY',
-      PREPARE_SUBMISSION_FORM: 'READY',
-      PRE_DELIVERY_LEGAL_REVIEW: 'READY',
+      PREPARE_SUBMISSION_FORM: 'BLOCKED',
+      PRE_DELIVERY_LEGAL_REVIEW: 'BLOCKED',
       SEND_LETTER_TO_GENERAL_MANAGER: 'BLOCKED',
     });
-    expect(taskOf(after, 'PREPARE_SUBMISSION_FORM')).toMatchObject({
-      assignee: { id: cast.manager.id },
-      backup: { id: cast.backupManager.id },
-    });
-    expect(taskOf(after, 'PRE_DELIVERY_LEGAL_REVIEW').assignee?.id).toBe(cast.legal.id);
+    expect(after.tasks.filter((task) => task.status === 'READY')).toHaveLength(1);
   });
 
-  it('una tarea con dos requisitos espera a ambos', async () => {
+  it('cada tarea espera a que se complete su predecesora inmediata', async () => {
     const workflow = await startAndAssign();
     for (const code of [
       'ASSIGN_MANAGER_AND_BIDDER',
       'GENERATE_VALE_VISTA_LETTER',
       'SEND_LETTER_TO_GENERAL_MANAGER',
       'SEND_LETTER_TO_BANK',
-      'COLLECT_VALE_VISTA',
     ]) {
       expect((await completeByCode(workflow.id, code)).status).toBe(200);
     }
-    expect(
-      taskOf(await getWorkflow(context, cast, workflow.id), 'DELIVER_VALE_VISTA_AND_FORM').status,
-    ).toBe('BLOCKED');
+    const before = await getWorkflow(context, cast, workflow.id);
+    expect(taskOf(before, 'PREPARE_SUBMISSION_FORM').status).toBe('READY');
+    expect(taskOf(before, 'PRE_DELIVERY_LEGAL_REVIEW').status).toBe('BLOCKED');
 
     const after = workflowOf(
       await completeByCode(workflow.id, 'PREPARE_SUBMISSION_FORM', cast.cookies.manager),
     );
-    expect(taskOf(after, 'DELIVER_VALE_VISTA_AND_FORM').status).toBe('READY');
+    expect(taskOf(after, 'PRE_DELIVERY_LEGAL_REVIEW').status).toBe('READY');
+    expect(after.tasks.filter((task) => task.status === 'READY')).toHaveLength(1);
   });
 
   it('recorre el flujo completo hasta COMPLETED y deja historial de cada paso', async () => {
@@ -189,7 +196,7 @@ describe('motor del workflow', () => {
 
   it('solo el responsable, su suplente o un admin pueden trabajar una tarea', async () => {
     const workflow = await startAndAssign();
-    await completeByCode(workflow.id, 'ASSIGN_MANAGER_AND_BIDDER');
+    await advanceUntilReady(workflow.id, 'PREPARE_SUBMISSION_FORM');
     const formTaskId = taskOf(
       await getWorkflow(context, cast, workflow.id),
       'PREPARE_SUBMISSION_FORM',
@@ -208,7 +215,7 @@ describe('motor del workflow', () => {
 
   it('cuando el suplente actúa pasa a ser titular del rol en todo el workflow', async () => {
     const workflow = await startAndAssign();
-    await completeByCode(workflow.id, 'ASSIGN_MANAGER_AND_BIDDER');
+    await advanceUntilReady(workflow.id, 'PREPARE_SUBMISSION_FORM');
     const formTaskId = taskOf(
       await getWorkflow(context, cast, workflow.id),
       'PREPARE_SUBMISSION_FORM',
@@ -234,14 +241,12 @@ describe('motor del workflow', () => {
     // El titular anterior ya no puede trabajarla.
     expect((await completeAs(context, cast.cookies.manager, formTaskId)).status).toBe(403);
 
-    // Las tareas futuras del rol también son del nuevo titular.
-    for (const code of [
-      'GENERATE_VALE_VISTA_LETTER',
-      'SEND_LETTER_TO_GENERAL_MANAGER',
-      'SEND_LETTER_TO_BANK',
-    ]) {
-      await completeByCode(workflow.id, code);
-    }
+    // Las tareas futuras del rol se asignan al nuevo titular cuando se activan.
+    expect(
+      (await completeByCode(workflow.id, 'PREPARE_SUBMISSION_FORM', cast.cookies.backupManager))
+        .status,
+    ).toBe(200);
+    expect((await completeByCode(workflow.id, 'PRE_DELIVERY_LEGAL_REVIEW')).status).toBe(200);
     expect(
       taskOf(await getWorkflow(context, cast, workflow.id), 'COLLECT_VALE_VISTA').assignee?.id,
     ).toBe(cast.backupManager.id);
@@ -267,8 +272,8 @@ describe('motor del workflow', () => {
         WHERE workflow_instance_id = ? AND event_type = 'TASK_ACTIVATED'`,
       [workflow.id],
     );
-    // 1 al iniciar + 3 al completar la primera tarea.
-    expect(rows[0]?.total).toBe(4);
+    // Una activación inicial y una única sucesora al completar la primera tarea.
+    expect(rows[0]?.total).toBe(2);
   });
 
   it('ya no existe registro de avance: el endpoint no está', async () => {
@@ -292,6 +297,8 @@ describe('motor del workflow', () => {
         'GENERATE_VALE_VISTA_LETTER',
         'SEND_LETTER_TO_GENERAL_MANAGER',
         'SEND_LETTER_TO_BANK',
+        'PREPARE_SUBMISSION_FORM',
+        'PRE_DELIVERY_LEGAL_REVIEW',
       ]) {
         await completeByCode(workflow.id, code);
       }
@@ -468,7 +475,7 @@ describe('motor del workflow', () => {
   describe('suspensión', () => {
     it('sin nueva fecha suspende el workflow y sus tareas; reanudar exige la fecha', async () => {
       const workflow = await startAndAssign();
-      await completeByCode(workflow.id, 'ASSIGN_MANAGER_AND_BIDDER');
+      await advanceUntilReady(workflow.id, 'PREPARE_SUBMISSION_FORM');
       const formTaskId = taskOf(
         await getWorkflow(context, cast, workflow.id),
         'PREPARE_SUBMISSION_FORM',
@@ -495,7 +502,7 @@ describe('motor del workflow', () => {
       expect(suspended.status).toBe('SUSPENDED');
       expect(statusesOf(suspended)).toMatchObject({
         ASSIGN_MANAGER_AND_BIDDER: 'COMPLETED',
-        GENERATE_VALE_VISTA_LETTER: 'SUSPENDED',
+        GENERATE_VALE_VISTA_LETTER: 'COMPLETED',
         PREPARE_SUBMISSION_FORM: 'SUSPENDED',
         SEND_LETTER_TO_BANK: 'BLOCKED',
       });
@@ -526,7 +533,7 @@ describe('motor del workflow', () => {
       );
       expect(resumed).toMatchObject({ status: 'ACTIVE', auctionAt: '2026-12-20T13:00:00.000Z' });
       expect(statusesOf(resumed)).toMatchObject({
-        GENERATE_VALE_VISTA_LETTER: 'READY',
+        GENERATE_VALE_VISTA_LETTER: 'COMPLETED',
         PREPARE_SUBMISSION_FORM: 'IN_PROGRESS',
       });
       // El plazo desde la activación vuelve a correr desde la reanudación (12 nov 14:00 UTC).
@@ -553,7 +560,7 @@ describe('motor del workflow', () => {
       expect(taskOf(after, 'ASSIGN_MANAGER_AND_BIDDER').dueAt).toBe(
         taskOf(before, 'ASSIGN_MANAGER_AND_BIDDER').dueAt,
       );
-      expect(taskOf(after, 'PREPARE_SUBMISSION_FORM').dueAt).toBe('2026-11-15T13:00:00.000Z');
+      expect(taskOf(after, 'GENERATE_VALE_VISTA_LETTER').dueAt).toBe('2026-11-15T13:00:00.000Z');
 
       const [rows] = await context.database.pool.query<RowDataPacket[]>(
         `SELECT origin, status, previous_auction_at AS previousAuctionAt, new_auction_at AS newAuctionAt
@@ -651,7 +658,7 @@ describe('motor del workflow', () => {
 
   it('«mis tareas» muestra las del titular y las del suplente, y el detalle se restringe a participantes', async () => {
     const workflow = await startAndAssign();
-    await completeByCode(workflow.id, 'ASSIGN_MANAGER_AND_BIDDER');
+    await advanceUntilReady(workflow.id, 'PREPARE_SUBMISSION_FORM');
 
     const mine = async (cookie: string) =>
       (
