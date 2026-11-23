@@ -53,6 +53,20 @@
 .participant-backup { color: var(--muted); font-size: .75rem; }
 .detail-link { text-decoration: none; }
 
+dialog.modal.flow-dialog {
+  width: min(1600px, calc(100vw - 48px));
+  max-width: none;
+  max-height: min(92vh, 980px);
+  padding: 28px;
+  overflow: auto;
+}
+
+.flow-dialog-close { position: absolute; z-index: 2; top: 18px; right: 18px; width: 44px; height: 44px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); font-size: 1.5rem; cursor: pointer; }
+
+@media (max-width: 640px) {
+  dialog.modal.flow-dialog { width: 100vw; max-height: 100dvh; min-height: 100dvh; padding: 16px; border-radius: 0; }
+}
+
 @media (max-width: 640px) {
   .card-header { align-items: flex-start; flex-direction: column; }
   .week-selector { width: 100%; justify-content: space-between; }

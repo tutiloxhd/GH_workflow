@@ -1,4 +1,5 @@
 @if (workflow(); as current) {
+  @if (!isDialog()) {
   <header class="page-header">
     <div>
       <a class="muted" routerLink="/">← Remates</a>
@@ -37,28 +38,42 @@
       }
     </div>
   </header>
+  }
 
-  <div class="page-body workflow-layout">
+  <div class="page-body workflow-layout" [class.diagram-only]="isDialog()">
     <section class="card tasks-card process-card" aria-labelledby="tasks-title">
       <div class="card-header">
         <div>
           <h2 id="tasks-title">Diagrama del proceso</h2>
-          <p class="muted">Selecciona un nodo para revisar o completar la tarea.</p>
+          <p class="muted">
+            @if (isDialog()) {
+              <strong>{{ current.property?.title ?? 'Propiedad ' + current.propertyId }}</strong>
+              · {{ completedCount() }} de {{ current.tasks.length }} tareas ·
+              {{ workflowStatusLabels[current.status] }}
+            } @else {
+              Selecciona un nodo para revisar o completar la tarea.
+            }
+          </p>
         </div>
-        <span class="muted">{{ completedCount() }} de {{ current.tasks.length }} completadas</span>
-      </div>
-      <div class="process-legend" aria-label="Leyenda del diagrama">
+        @if (!isDialog()) {
+          <span class="muted">{{ completedCount() }} de {{ current.tasks.length }} completadas</span>
+        }
+        <div class="process-legend" aria-label="Leyenda del diagrama">
         <span><i class="done"></i>Completada</span>
         <span><i class="current"></i>En proceso</span>
         <span><i class="late"></i>Vencida</span>
         <span><i class="pending"></i>Pendiente</span>
         <span><i class="suspended"></i>Suspendida</span>
         <span><i class="cancelled"></i>Cancelada</span>
+        </div>
       </div>
+      @if (isDialog()) {
+        <progress class="process-progress" [value]="completedCount()" [max]="current.tasks.length || 1" [attr.aria-label]="'Progreso: ' + completedCount() + ' de ' + current.tasks.length + ' tareas'"></progress>
+      }
       <div class="process-scroll">
         <div class="process-map">
           <ol class="process-row process-row-top">
-            @for (task of current.tasks.slice(0, 5); track task.id) {
+            @for (task of current.tasks.slice(0, isDialog() ? 7 : 5); track task.id) {
               <li [class.last-node]="$last">
                 <button
                   type="button"
@@ -84,7 +99,7 @@
                     {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
                   </span>
                 </button>
-                @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
+                @if (isAdmin && !isDialog() && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
                   <button
                     type="button"
                     class="node-deadline"
@@ -98,8 +113,8 @@
             }
           </ol>
           <div class="process-turn" aria-hidden="true"></div>
-          <ol class="process-row process-row-reverse" start="6">
-            @for (task of current.tasks.slice(5, 10); track task.id) {
+          <ol class="process-row process-row-reverse" [attr.start]="isDialog() ? 8 : 6">
+            @for (task of current.tasks.slice(isDialog() ? 7 : 5, isDialog() ? 14 : 10); track task.id) {
               <li [class.last-node]="$last">
                 <button
                   type="button"
@@ -125,7 +140,7 @@
                     {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
                   </span>
                 </button>
-                @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
+                @if (isAdmin && !isDialog() && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
                   <button
                     type="button"
                     class="node-deadline"
@@ -139,8 +154,8 @@
             }
           </ol>
           <div class="process-turn process-turn-left" aria-hidden="true"></div>
-          <ol class="process-row" start="11">
-            @for (task of current.tasks.slice(10, 15); track task.id) {
+          <ol class="process-row" [attr.start]="isDialog() ? 15 : 11">
+            @for (task of current.tasks.slice(isDialog() ? 14 : 10, isDialog() ? 21 : 15); track task.id) {
               <li [class.last-node]="$last" [style.--node-index]="task.displayOrder">
                 <button
                   type="button"
@@ -166,7 +181,7 @@
                     {{ task.isOverdue ? 'Vencida' : taskStatusLabels[task.status] }}
                   </span>
                 </button>
-                @if (isAdmin && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
+                @if (isAdmin && !isDialog() && task.status !== 'COMPLETED' && task.status !== 'CANCELLED') {
                   <button
                     type="button"
                     class="node-deadline"
@@ -181,8 +196,32 @@
           </ol>
         </div>
       </div>
+      @if (isDialog() && canChangeLifecycle && (current.status === 'ACTIVE' || current.status === 'SUSPENDED')) {
+        <aside class="diagram-actions" aria-label="Acciones del proceso">
+          <h3>Estados excepcionales</h3>
+          @if (canChangeLifecycle && current.status === 'ACTIVE') {
+            <button type="button" class="exception-action suspend-action" (click)="lifecycleAction.set('SUSPEND')">
+              <span class="exception-icon" aria-hidden="true">Ⅱ</span>
+              <span><strong>Suspender remate</strong><small>Se puede reanudar.</small></span>
+            </button>
+          }
+          @if (canChangeLifecycle && current.status === 'SUSPENDED') {
+            <button type="button" class="exception-action resume-action" (click)="lifecycleAction.set('RESUME')">
+              <span class="exception-icon" aria-hidden="true">↻</span>
+              <span><strong>Reanudar remate</strong><small>Continuar el proceso.</small></span>
+            </button>
+          }
+          @if (canChangeLifecycle && (current.status === 'ACTIVE' || current.status === 'SUSPENDED')) {
+            <button type="button" class="exception-action cancel-action" (click)="lifecycleAction.set('CANCEL')">
+              <span class="exception-icon" aria-hidden="true">×</span>
+              <span><strong>Cancelar remate</strong><small>Cierra el workflow.</small></span>
+            </button>
+          }
+        </aside>
+      }
     </section>
 
+    @if (!isDialog()) {
     <div class="side-column">
       <section class="card" aria-labelledby="participants-title">
         <div class="card-header"><h2 id="participants-title">Participantes</h2></div>
@@ -214,6 +253,7 @@
         </ol>
       </section>
     </div>
+    }
   </div>
 
   @if (openTaskId(); as taskId) {

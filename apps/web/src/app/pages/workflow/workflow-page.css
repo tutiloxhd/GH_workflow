@@ -19,6 +19,9 @@
   font-size: 0.75rem;
 }
 
+.workflow-layout:not(.diagram-only) .process-card .card-header { flex-wrap: wrap; }
+.workflow-layout:not(.diagram-only) .process-legend { flex-basis: 100%; padding: 0; }
+
 .process-legend {
   display: flex;
   flex-wrap: wrap;

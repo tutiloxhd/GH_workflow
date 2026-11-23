@@ -53,6 +53,7 @@ export class WorkflowPage implements OnInit, OnDestroy {
 
   // Parámetro de ruta (withComponentInputBinding).
   readonly workflowId = input.required({ transform: numberAttribute });
+  readonly isDialog = input(false);
 
   protected readonly workflow = signal<WorkflowDetail | null>(null);
   protected readonly events = signal<readonly WorkflowEvent[]>([]);
@@ -122,7 +123,9 @@ export class WorkflowPage implements OnInit, OnDestroy {
       ]);
       this.workflow.set(workflow);
       this.events.set([...events].reverse());
-      const requestedTaskId = Number(this.route.snapshot.queryParamMap.get('task'));
+      const requestedTaskId = this.isDialog()
+        ? 0
+        : Number(this.route.snapshot.queryParamMap.get('task'));
       if (requestedTaskId > 0 && workflow.tasks.some((task) => task.id === requestedTaskId)) {
         this.openTaskId.set(requestedTaskId);
       }

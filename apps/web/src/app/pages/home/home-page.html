@@ -322,14 +322,22 @@
           }
         </dl>
       </section>
-      <a
+      <button
+        type="button"
         class="button primary detail-link"
-        [routerLink]="['/workflows', detail.id]"
-        target="_blank"
-        rel="noopener"
+        (click)="openFlow()"
       >
-        Ver detalle y flujo extendido →
-      </a>
+        Ver diagrama del proceso →
+      </button>
     </div>
   </aside>
+}
+
+@if (isFlowOpen()) {
+  @if (selectedWorkflow(); as detail) {
+  <dialog #flowDialog appModalDialog class="flow-dialog" aria-labelledby="tasks-title" (closed)="onFlowClosed()">
+    <button type="button" class="flow-dialog-close" aria-label="Cerrar diagrama" (click)="flowDialog.close()">×</button>
+    <app-workflow-page [workflowId]="detail.id" [isDialog]="true" />
+  </dialog>
+  }
 }

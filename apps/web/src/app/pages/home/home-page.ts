@@ -16,6 +16,8 @@ import { formatDateTime, santiagoLocalToIso } from '../../core/time/santiago-tim
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
 import { ListPagination } from '../../shared/pagination/list-pagination';
 import { Icon } from '../../shared/icon/icon';
+import { ModalDialog } from '../../shared/modal/modal-dialog';
+import { WorkflowPage } from '../workflow/workflow-page';
 import {
   PARTICIPANT_LABELS,
   WORKFLOW_STATUS_LABELS,
@@ -53,7 +55,7 @@ const EMPTY_FILTER_OPTIONS: WorkflowFilterOptions = { communes: [], regions: [],
 // Tablero inicial: remates con workflow y, para ADMIN, propiedades que aún no lo tienen.
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, ListPagination, Icon],
+  imports: [RouterLink, ListPagination, Icon, ModalDialog, WorkflowPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home-page.html',
   styleUrl: './home-page.css',
@@ -77,6 +79,7 @@ export class HomePage implements OnInit {
   protected readonly startingPropertyId = signal<number | null>(null);
   protected readonly selectedWeekStart = signal(keyFromDate(mondayFor(localDateKey(new Date()))));
   protected readonly selectedWorkflow = signal<WorkflowDetail | null>(null);
+  protected readonly isFlowOpen = signal(false);
   protected readonly isFiltersOpen = signal(false);
   protected readonly statusFilter = signal<WorkflowStatus | ''>('');
   protected readonly responsibleFilter = signal<number | null>(null);
@@ -231,13 +234,29 @@ export class HomePage implements OnInit {
   }
 
   protected closeDetail(): void {
+    this.isFlowOpen.set(false);
     this.selectedWorkflow.set(null);
     queueMicrotask(() => this.detailTrigger?.focus());
   }
 
+  protected openFlow(): void {
+    this.isFlowOpen.set(true);
+  }
+
+  protected async onFlowClosed(): Promise<void> {
+    this.isFlowOpen.set(false);
+    const workflowId = this.selectedWorkflow()?.id;
+    if (workflowId === undefined) return;
+    try {
+      this.selectedWorkflow.set(await this.api.getWorkflow(workflowId));
+    } catch (error) {
+      this.errorMessage.set(problemMessage(toApiProblem(error)));
+    }
+  }
+
   @HostListener('document:keydown.escape')
   protected closeDetailWithEscape(): void {
-    if (this.selectedWorkflow()) this.closeDetail();
+    if (this.selectedWorkflow() && !this.isFlowOpen()) this.closeDetail();
   }
 
   protected currentTask(workflow: WorkflowDetail) {
