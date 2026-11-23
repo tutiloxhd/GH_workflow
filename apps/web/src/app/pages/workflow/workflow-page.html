@@ -58,6 +58,7 @@
         @if (!isDialog()) {
           <span class="muted">{{ completedCount() }} de {{ current.tasks.length }} completadas</span>
         }
+        <div class="diagram-tools">
         <div class="process-legend" aria-label="Leyenda del diagrama">
         <span><i class="done"></i>Completada</span>
         <span><i class="current"></i>En proceso</span>
@@ -66,12 +67,20 @@
         <span><i class="suspended"></i>Suspendida</span>
         <span><i class="cancelled"></i>Cancelada</span>
         </div>
+        @if (isDialog()) {
+          <div class="diagram-zoom" role="group" aria-label="Zoom del diagrama">
+            <button type="button" aria-label="Alejar diagrama" [disabled]="diagramZoom() === 70" (click)="changeDiagramZoom(-1)">−</button>
+            <output aria-live="polite">{{ diagramZoom() }}%</output>
+            <button type="button" aria-label="Acercar diagrama" [disabled]="diagramZoom() === 130" (click)="changeDiagramZoom(1)">+</button>
+          </div>
+        }
+        </div>
       </div>
       @if (isDialog()) {
         <progress class="process-progress" [value]="completedCount()" [max]="current.tasks.length || 1" [attr.aria-label]="'Progreso: ' + completedCount() + ' de ' + current.tasks.length + ' tareas'"></progress>
       }
       <div class="process-scroll">
-        <div class="process-map">
+        <div class="process-map" [style.zoom]="isDialog() ? diagramZoom() + '%' : null">
           <ol class="process-row process-row-top">
             @for (task of current.tasks.slice(0, isDialog() ? 7 : 5); track task.id) {
               <li [class.last-node]="$last">

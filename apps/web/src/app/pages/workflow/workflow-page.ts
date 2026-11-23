@@ -35,6 +35,9 @@ import { ParticipantsDialog } from './participants-dialog';
 import { TaskDialog } from './task-dialog';
 
 const PARTICIPANT_ORDER: readonly ParticipantType[] = ['MANAGER', 'BIDDER', 'LEGAL_REVIEWER'];
+const MIN_DIAGRAM_ZOOM = 70;
+const MAX_DIAGRAM_ZOOM = 130;
+const DIAGRAM_ZOOM_STEP = 10;
 
 @Component({
   selector: 'app-workflow-page',
@@ -62,6 +65,7 @@ export class WorkflowPage implements OnInit, OnDestroy {
   protected readonly isEditingParticipants = signal(false);
   protected readonly lifecycleAction = signal<LifecycleAction | null>(null);
   protected readonly taskEditingDeadline = signal<WorkflowTask | null>(null);
+  protected readonly diagramZoom = signal(100);
 
   protected readonly isAdmin = this.auth.hasRole('ADMIN');
   protected readonly canChangeLifecycle = this.isAdmin || this.auth.hasRole('LEGAL_REVIEWER');
@@ -145,5 +149,11 @@ export class WorkflowPage implements OnInit, OnDestroy {
   protected taskName(taskId: number | null): string | null {
     if (taskId === null) return null;
     return this.workflow()?.tasks.find((task) => task.id === taskId)?.name ?? null;
+  }
+
+  protected changeDiagramZoom(direction: -1 | 1): void {
+    this.diagramZoom.update((current) =>
+      Math.max(MIN_DIAGRAM_ZOOM, Math.min(MAX_DIAGRAM_ZOOM, current + direction * DIAGRAM_ZOOM_STEP)),
+    );
   }
 }

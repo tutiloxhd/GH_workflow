@@ -20,6 +20,7 @@
 }
 
 .workflow-layout:not(.diagram-only) .process-card .card-header { flex-wrap: wrap; }
+.workflow-layout:not(.diagram-only) .diagram-tools { flex-basis: 100%; }
 .workflow-layout:not(.diagram-only) .process-legend { flex-basis: 100%; padding: 0; }
 
 .process-legend {

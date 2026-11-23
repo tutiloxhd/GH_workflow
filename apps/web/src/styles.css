@@ -521,8 +521,14 @@ app-workflow-page .diagram-only .process-card .card-header {
 app-workflow-page .diagram-only .process-card .card-header h2 { font-size: 1.35rem; }
 app-workflow-page .diagram-only .process-card .card-header p { margin-top: 4px; font-size: .8125rem; }
 app-workflow-page .diagram-only .process-card .card-header p strong { color: var(--navy); }
+app-workflow-page .diagram-only .diagram-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
 app-workflow-page .diagram-only .process-legend { justify-content: flex-end; gap: 5px; padding: 0; }
 app-workflow-page .diagram-only .process-legend span { gap: 5px; padding: 6px 9px; border-radius: 20px; background: var(--slate-soft); white-space: nowrap; }
+app-workflow-page .diagram-zoom { display: flex; flex: none; align-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; }
+app-workflow-page .diagram-zoom button { width: 44px; height: 44px; border: 0; background: var(--surface); font: inherit; font-size: 1.2rem; cursor: pointer; }
+app-workflow-page .diagram-zoom button:disabled { color: var(--muted); cursor: default; opacity: .5; }
+app-workflow-page .diagram-zoom button:not(:disabled):hover { background: var(--slate-soft); }
+app-workflow-page .diagram-zoom output { min-width: 52px; padding: 0 6px; border-inline: 1px solid var(--line); font-size: .75rem; font-weight: 700; line-height: 44px; text-align: center; }
 app-workflow-page .diagram-only .process-progress { display: block; grid-column: 1 / -1; width: 100%; height: 6px; margin: 0; border: 0; border-radius: 99px; accent-color: var(--green); }
 app-workflow-page .diagram-only .process-progress::-webkit-progress-bar { border-radius: 99px; background: var(--slate-soft); }
 app-workflow-page .diagram-only .process-progress::-webkit-progress-value { border-radius: 99px; background: var(--green); }
@@ -546,6 +552,7 @@ app-workflow-page .diagram-only .process-node .status-pill { position: absolute;
 @media (max-width: 760px) {
   app-workflow-page .diagram-only .process-card { display: block; }
   app-workflow-page .diagram-only .process-card .card-header { display: grid; padding-right: 48px; }
+  app-workflow-page .diagram-only .diagram-tools { justify-content: flex-start; }
   app-workflow-page .diagram-only .process-legend { justify-content: flex-start; }
   app-workflow-page .diagram-only .process-map { width: auto; min-width: 0; }
   app-workflow-page .diagram-only .process-row-reverse { flex-direction: column; }
