@@ -18,6 +18,7 @@ import { ROLE_CODES } from '../../../modules/identity/domain/role-code.js';
 import { users } from './identity.schema.js';
 
 import {
+  DEADLINE_DAY_KINDS,
   DEFAULT_DUE_OFFSET_DAYS,
   DUE_REFERENCES,
 } from '../../../modules/workflow/domain/due-date.js';
@@ -26,6 +27,7 @@ import {
   PARTICIPANT_TYPES,
 } from '../../../modules/workflow/domain/participants.js';
 import { TASK_STATUSES, WORKFLOW_STATUSES } from '../../../modules/workflow/domain/statuses.js';
+import { TEMPLATE_STATUSES } from '../../../modules/workflow-templates/domain/template-definition.js';
 
 export const REPROGRAMMING_ORIGINS = ['SYNC', 'USER'] as const;
 export const REPROGRAMMING_STATUSES = ['PENDING', 'APPLIED', 'FAILED', 'CANCELLED'] as const;
@@ -53,10 +55,56 @@ export const workflowTemplates = mysqlTable(
     code: varchar('code', { length: 100 }).notNull(),
     name: varchar('name', { length: 150 }).notNull(),
     version: int('version', { unsigned: true }).notNull(),
+    // Por omisión PUBLISHED: las plantillas cargadas por seed ya están publicadas. La aplicación
+    // crea los borradores indicando DRAFT explícitamente.
+    status: varchar('status', { length: 20, enum: TEMPLATE_STATUSES })
+      .notNull()
+      .default('PUBLISHED'),
     isActive: boolean('is_active').notNull().default(false),
+    // Cómo se cuentan los días de los plazos. Por omisión CALENDAR: las plantillas heredadas y
+    // las de seed cuentan días corridos; la aplicación crea los borradores con BUSINESS.
+    deadlineDayKind: varchar('deadline_day_kind', { length: 20, enum: DEADLINE_DAY_KINDS })
+      .notNull()
+      .default('CALENDAR'),
+    createdBy: referenceId('created_by'),
+    publishedBy: referenceId('published_by'),
+    publishedAt: utcDateTime('published_at'),
+    archivedBy: referenceId('archived_by'),
+    archivedAt: utcDateTime('archived_at'),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
-  (table) => [uniqueIndex('uq_workflow_templates_code_version').on(table.code, table.version)],
+  (table) => [
+    uniqueIndex('uq_workflow_templates_code_version').on(table.code, table.version),
+    foreignKey({
+      name: 'fk_workflow_templates_creator',
+      columns: [table.createdBy],
+      foreignColumns: [users.id],
+    }),
+    foreignKey({
+      name: 'fk_workflow_templates_publisher',
+      columns: [table.publishedBy],
+      foreignColumns: [users.id],
+    }),
+    foreignKey({
+      name: 'fk_workflow_templates_archiver',
+      columns: [table.archivedBy],
+      foreignColumns: [users.id],
+    }),
+    check(
+      'chk_workflow_templates_status',
+      sql`${table.status} IN ('DRAFT', 'PUBLISHED', 'ARCHIVED')`,
+    ),
+    check(
+      'chk_workflow_templates_day_kind',
+      sql`${table.deadlineDayKind} IN ('CALENDAR', 'BUSINESS')`,
+    ),
+    // Solo una versión publicada puede estar activa.
+    check(
+      'chk_workflow_templates_active_published',
+      sql`${table.isActive} = FALSE OR ${table.status} = 'PUBLISHED'`,
+    ),
+  ],
 );
 
 export const taskDefinitions = mysqlTable(
@@ -70,6 +118,11 @@ export const taskDefinitions = mysqlTable(
     responsibleRole: varchar('responsible_role', { length: 50, enum: ROLE_CODES }).notNull(),
     displayOrder: int('display_order').notNull().default(0),
     requiresEvidence: boolean('requires_evidence').notNull().default(false),
+    // Posición en el diagrama del editor de flujos; null = ubicación automática.
+    diagramX: int('diagram_x'),
+    diagramY: int('diagram_y'),
+    // Formulario de evidencia (ADR 0014); null = el inicial del código de la tarea, si tiene.
+    evidenceForm: json('evidence_form'),
     // Plazo base de la plantilla; cada workflow recibe una copia editable en task_instances.
     ...deadlineColumns(),
     createdAt: createdAt(),

@@ -45,6 +45,29 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/users/users-page').then((page) => page.UsersPage),
       },
       {
+        path: 'flujos',
+        canActivate: [adminGuard],
+        title: 'Flujos · GrupoHouse',
+        loadComponent: () =>
+          import('./pages/workflow-templates/templates-page').then((page) => page.TemplatesPage),
+      },
+      {
+        path: 'feriados',
+        canActivate: [adminGuard],
+        title: 'Feriados · GrupoHouse',
+        loadComponent: () =>
+          import('./pages/holidays/holidays-page').then((page) => page.HolidaysPage),
+      },
+      {
+        path: 'flujos/:templateId',
+        canActivate: [adminGuard],
+        title: 'Editar flujo · GrupoHouse',
+        loadComponent: () =>
+          import('./pages/workflow-templates/template-editor-page').then(
+            (page) => page.TemplateEditorPage,
+          ),
+      },
+      {
         path: 'sincronizacion',
         canActivate: [adminGuard],
         title: 'Sincronización · GrupoHouse',

@@ -1,0 +1,148 @@
+<header class="page-header">
+  <div>
+    <h1>Flujos</h1>
+    <p>
+      Define las tareas, dependencias y plazos de los remates. Los cambios se hacen en un borrador y
+      se aplican a los remates nuevos al publicarlo.
+    </p>
+  </div>
+  <div class="page-actions">
+    <button type="button" class="button primary" (click)="isCreating.set(true)">
+      + Nuevo flujo
+    </button>
+  </div>
+</header>
+
+<div class="page-body">
+  @if (errorMessage(); as message) {
+    <p class="form-error" role="alert">{{ message }}</p>
+  }
+  @if (notice(); as message) {
+    <p class="notice" role="status">{{ message }}</p>
+  }
+
+  @if (isLoading() && flows().length === 0) {
+    <p class="muted">Cargando flujos…</p>
+  } @else if (flows().length === 0) {
+    <p class="muted">Todavía no hay flujos.</p>
+  }
+
+  @for (flow of flows(); track flow.code) {
+    <section class="card" [attr.aria-labelledby]="'flow-' + flow.code">
+      <div class="card-header">
+        <div>
+          <h2 [id]="'flow-' + flow.code">{{ flow.name }}</h2>
+          <span class="muted flow-code">{{ flow.code }}</span>
+        </div>
+        <button
+          type="button"
+          class="button"
+          [disabled]="isBusy() || flow.hasDraft"
+          [title]="flow.hasDraft ? 'Ya hay un borrador en edición' : ''"
+          (click)="createVersion(flow)"
+        >
+          Nueva versión
+        </button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <caption class="visually-hidden">
+            Versiones de
+            {{
+              flow.name
+            }}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Versión</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Tareas</th>
+              <th scope="col">Remates</th>
+              <th scope="col">Publicada</th>
+              <th scope="col"><span class="visually-hidden">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (template of flow.versions; track template.id) {
+              <tr>
+                <td>
+                  <a [routerLink]="['/flujos', template.id]">v{{ template.version }}</a>
+                </td>
+                <td data-label="Estado">
+                  <span class="status-pill" [class]="statusTones[template.status]">
+                    {{ statusLabels[template.status] }}
+                  </span>
+                  @if (template.isActive) {
+                    <span class="status-pill good">Activa</span>
+                  }
+                </td>
+                <td data-label="Tareas">{{ template.taskCount }}</td>
+                <td data-label="Remates">{{ template.workflowCount }}</td>
+                <td data-label="Publicada">
+                  {{ template.publishedAt ? formatDateTime(template.publishedAt) : '—' }}
+                </td>
+                <td class="version-actions">
+                  <a class="button link" [routerLink]="['/flujos', template.id]">
+                    {{ template.status === 'DRAFT' ? 'Editar' : 'Ver' }}
+                  </a>
+                  @if (template.status === 'PUBLISHED' && !template.isActive) {
+                    @if (isPending('archive', template.id)) {
+                      <button
+                        type="button"
+                        class="button danger"
+                        [disabled]="isBusy()"
+                        (click)="archive(template)"
+                      >
+                        Confirmar: archivar
+                      </button>
+                      <button type="button" class="button link" (click)="pendingAction.set(null)">
+                        Cancelar
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="button link"
+                        [disabled]="isBusy()"
+                        (click)="pendingAction.set({ kind: 'archive', templateId: template.id })"
+                      >
+                        Archivar
+                      </button>
+                    }
+                  }
+                  @if (template.status === 'DRAFT') {
+                    @if (isPending('delete', template.id)) {
+                      <button
+                        type="button"
+                        class="button danger"
+                        [disabled]="isBusy()"
+                        (click)="deleteDraft(template)"
+                      >
+                        Confirmar: eliminar
+                      </button>
+                      <button type="button" class="button link" (click)="pendingAction.set(null)">
+                        Cancelar
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="button link"
+                        [disabled]="isBusy()"
+                        (click)="pendingAction.set({ kind: 'delete', templateId: template.id })"
+                      >
+                        Eliminar
+                      </button>
+                    }
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+  }
+</div>
+
+@if (isCreating()) {
+  <app-create-flow-dialog (created)="onFlowCreated($event)" (closed)="isCreating.set(false)" />
+}
