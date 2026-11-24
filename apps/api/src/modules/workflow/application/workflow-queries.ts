@@ -6,7 +6,7 @@ import {
   businessLocalToInstant,
   isOverdue,
 } from '../domain/due-date.js';
-import { evidenceFormFor } from '../domain/evidence-forms.js';
+import { resolveEvidenceForm } from '../domain/evidence-forms.js';
 import { isAdmin, type Actor } from '../domain/task-rules.js';
 import type { WorkflowStatus } from '../domain/statuses.js';
 import {
@@ -17,7 +17,9 @@ import {
   listPropertiesWithWorkflow,
   listWorkflowSummaries,
   listWorkflowFilterOptions,
+  findStoredEvidenceForms,
   findTaskRequirements,
+  findTemplateDeadlineDayKind,
   findTasksOfUser,
   findWorkflow,
   findWorkflowEvents,
@@ -62,6 +64,8 @@ export async function getWorkflowDetail(
     findTaskRequirements(db, workflow.templateId),
     findEvidenceOfWorkflow(db, workflowId),
   ]);
+  const deadlineDayKind = await findTemplateDeadlineDayKind(db, workflow.templateId);
+  const storedForms = await findStoredEvidenceForms(db, workflow.templateId);
   const names = await findUserNames(db, [
     ...participants.map((participant) => participant.userId),
     ...tasks
@@ -79,6 +83,7 @@ export async function getWorkflowDetail(
     propertyId: workflow.propertyId,
     property: property ?? null,
     auctionAt: toIso(dates?.auctionAt ?? null),
+    deadlineDayKind,
     participants: participants.map((participant) => ({
       participantType: participant.participantType,
       assignmentType: participant.assignmentType,
@@ -108,7 +113,7 @@ export async function getWorkflowDetail(
       activatedAt: toIso(task.activatedAt),
       completedAt: toIso(task.completedAt),
       requiresEvidence: task.requiresEvidence,
-      evidenceForm: evidenceFormFor(task.code),
+      evidenceForm: resolveEvidenceForm(task.code, storedForms.get(task.definitionId)),
       evidence: evidenceOf(evidenceByTask.get(task.id)),
     })),
   });

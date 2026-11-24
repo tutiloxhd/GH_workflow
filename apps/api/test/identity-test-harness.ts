@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { buildApiApp } from '../src/composition/build-api-app.js';
+import type { HolidayProvider } from '../src/modules/holidays/source/holiday-provider.js';
 import type { IdentityDependencies } from '../src/modules/identity/application/identity-dependencies.js';
 import { createBcryptPasswordHasher } from '../src/modules/identity/application/password-hasher.js';
 import { createUser } from '../src/modules/identity/application/user-administration.js';
@@ -38,6 +39,7 @@ const MUTABLE_TABLES = [
   'sync_issues',
   'sync_executions',
   'sync_cursors',
+  'holidays',
   'user_sessions',
   'user_roles',
   'login_attempts',
@@ -92,7 +94,9 @@ export interface IdentityTestContext {
   close(): Promise<void>;
 }
 
-export async function startIdentityTestContext(): Promise<IdentityTestContext> {
+export async function startIdentityTestContext(
+  options: { holidayProvider?: HolidayProvider } = {},
+): Promise<IdentityTestContext> {
   const database = connectTestDatabase();
   await applyMigrations(database);
   await runBaseSeeds(database);
@@ -109,7 +113,11 @@ export async function startIdentityTestContext(): Promise<IdentityTestContext> {
     },
   };
   const server = await startServer(
-    buildApiApp(dependencies, { allowedOrigin: TEST_WEB_ORIGIN, isSecureCookie: false }),
+    buildApiApp(dependencies, {
+      allowedOrigin: TEST_WEB_ORIGIN,
+      isSecureCookie: false,
+      holidayProvider: options.holidayProvider ?? null,
+    }),
   );
 
   return {

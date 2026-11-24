@@ -1,6 +1,6 @@
 import type { RoleCode } from '../../identity/domain/role-code.js';
 import type { DueReference } from '../../workflow/domain/due-date.js';
-import { evidenceFormFor } from '../../workflow/domain/evidence-forms.js';
+import type { EvidenceForm } from '../../workflow/domain/evidence-forms.js';
 
 // Ciclo de vida de una plantilla: se edita como borrador, se publica (inmutable) y se archiva.
 // Solo una versión publicada puede estar activa; los workflows nuevos usan la activa.
@@ -26,7 +26,19 @@ export interface TaskDefinitionInput {
   readonly dueOffsetMinutes: number;
   // Códigos de las tareas que deben estar completadas antes de activar esta.
   readonly dependsOn: readonly string[];
+  // Posición de la tarea en el diagrama del editor; null = la ubica el editor automáticamente.
+  readonly position: DiagramPosition | null;
+  // Formulario de evidencia de la tarea; null = sin formulario.
+  readonly evidenceForm: EvidenceForm | null;
 }
+
+export interface DiagramPosition {
+  readonly x: number;
+  readonly y: number;
+}
+
+// Límite del lienzo del diagrama, en píxeles desde el origen.
+export const MAX_DIAGRAM_COORDINATE = 100_000;
 
 export type DefinitionIssue =
   | { readonly kind: 'DUPLICATE_CODE'; readonly taskCode: string }
@@ -53,7 +65,7 @@ export function findDefinitionIssues(tasks: readonly TaskDefinitionInput[]): Def
       }
     }
     // Exigir evidencia sin formulario dejaría la tarea imposible de completar.
-    if (task.requiresEvidence && evidenceFormFor(task.code) === null) {
+    if (task.requiresEvidence && !task.evidenceForm?.fields.length) {
       issues.push({ kind: 'EVIDENCE_FORM_MISSING', taskCode: task.code });
     }
   }

@@ -18,6 +18,7 @@ import { ROLE_CODES } from '../../../modules/identity/domain/role-code.js';
 import { users } from './identity.schema.js';
 
 import {
+  DEADLINE_DAY_KINDS,
   DEFAULT_DUE_OFFSET_DAYS,
   DUE_REFERENCES,
 } from '../../../modules/workflow/domain/due-date.js';
@@ -60,6 +61,11 @@ export const workflowTemplates = mysqlTable(
       .notNull()
       .default('PUBLISHED'),
     isActive: boolean('is_active').notNull().default(false),
+    // Cómo se cuentan los días de los plazos. Por omisión CALENDAR: las plantillas heredadas y
+    // las de seed cuentan días corridos; la aplicación crea los borradores con BUSINESS.
+    deadlineDayKind: varchar('deadline_day_kind', { length: 20, enum: DEADLINE_DAY_KINDS })
+      .notNull()
+      .default('CALENDAR'),
     createdBy: referenceId('created_by'),
     publishedBy: referenceId('published_by'),
     publishedAt: utcDateTime('published_at'),
@@ -89,6 +95,10 @@ export const workflowTemplates = mysqlTable(
       'chk_workflow_templates_status',
       sql`${table.status} IN ('DRAFT', 'PUBLISHED', 'ARCHIVED')`,
     ),
+    check(
+      'chk_workflow_templates_day_kind',
+      sql`${table.deadlineDayKind} IN ('CALENDAR', 'BUSINESS')`,
+    ),
     // Solo una versión publicada puede estar activa.
     check(
       'chk_workflow_templates_active_published',
@@ -108,6 +118,11 @@ export const taskDefinitions = mysqlTable(
     responsibleRole: varchar('responsible_role', { length: 50, enum: ROLE_CODES }).notNull(),
     displayOrder: int('display_order').notNull().default(0),
     requiresEvidence: boolean('requires_evidence').notNull().default(false),
+    // Posición en el diagrama del editor de flujos; null = ubicación automática.
+    diagramX: int('diagram_x'),
+    diagramY: int('diagram_y'),
+    // Formulario de evidencia (ADR 0012); null = el inicial del código de la tarea, si tiene.
+    evidenceForm: json('evidence_form'),
     // Plazo base de la plantilla; cada workflow recibe una copia editable en task_instances.
     ...deadlineColumns(),
     createdAt: createdAt(),

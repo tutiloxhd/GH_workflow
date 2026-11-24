@@ -24,7 +24,23 @@ interface TaskView {
   dueOffsetDays: number;
   dueOffsetMinutes: number;
   dependsOn: string[];
+  evidenceForm: { fields: { name: string }[] } | null;
 }
+
+// Fuente de feriados falsa: el viernes 13 de noviembre de 2026 (día siguiente al inicio de las
+// pruebas) es feriado, y la fuente repite un día para probar la consolidación.
+const fakeHolidayProvider = {
+  fetchYear: (year: number) =>
+    Promise.resolve(
+      year === 2026
+        ? [
+            { date: '2026-11-13', name: 'Feriado de prueba', isInalienable: false },
+            { date: '2026-12-08', name: 'Inmaculada Concepción', isInalienable: false },
+            { date: '2026-12-08', name: 'Otra celebración', isInalienable: true },
+          ]
+        : null,
+    ),
+};
 
 interface TemplateView {
   id: number;
@@ -33,6 +49,7 @@ interface TemplateView {
   version: number;
   status: string;
   isActive: boolean;
+  deadlineDayKind: string;
   taskCount: number;
   workflowCount: number;
   tasks: TaskView[];
@@ -85,7 +102,7 @@ describe('administración de plantillas de flujo', () => {
   }
 
   beforeAll(async () => {
-    context = await startIdentityTestContext();
+    context = await startIdentityTestContext({ holidayProvider: fakeHolidayProvider });
   });
 
   afterAll(async () => {
@@ -135,7 +152,7 @@ describe('administración de plantillas de flujo', () => {
     expect(catalog.status).toBe(200);
     expect(catalog.body).toMatchObject({
       participantAssignmentTaskCode: 'ASSIGN_MANAGER_AND_BIDDER',
-      evidenceFormTaskCodes: expect.arrayContaining(['COLLECT_VALE_VISTA']) as unknown,
+      evidenceFieldTypes: expect.arrayContaining(['TEXT', 'CHOICE']) as unknown,
     });
   });
 
@@ -150,6 +167,24 @@ describe('administración de plantillas de flujo', () => {
 
     const lastTask = draft.tasks.at(-1);
     if (!lastTask) throw new Error('El borrador no copió las tareas');
+    // La copia guarda el formulario vigente de las tareas heredadas.
+    expect(
+      draft.tasks
+        .find((task) => task.code === 'COLLECT_VALE_VISTA')
+        ?.evidenceForm?.fields.map((field) => field.name),
+    ).toEqual(['bank', 'valeVistaNumber', 'amountClp']);
+    const closingForm = {
+      fields: [
+        { name: 'archiveNumber', label: 'N° de archivo', type: 'TEXT', isRequired: true },
+        {
+          name: 'channel',
+          label: 'Canal',
+          type: 'CHOICE',
+          isRequired: false,
+          options: [{ value: 'MAIL', label: 'Correo' }],
+        },
+      ],
+    };
     const saved = await api('PUT', `/${draft.id}`, {
       name: 'Remate judicial (con cierre)',
       tasks: [
@@ -159,11 +194,13 @@ describe('administración de plantillas de flujo', () => {
           name: 'Cerrar expediente',
           description: '',
           responsibleRole: 'ADMIN',
-          requiresEvidence: false,
+          requiresEvidence: true,
           dueReference: 'TASK_ACTIVATED_AT',
           dueOffsetDays: 5,
           dueOffsetMinutes: 0,
           dependsOn: [lastTask.code],
+          position: { x: 640, y: 480 },
+          evidenceForm: closingForm,
         },
       ],
     });
@@ -176,6 +213,8 @@ describe('administración de plantillas de flujo', () => {
       code: 'CLOSE_FILE',
       description: null,
       dependsOn: [lastTask.code],
+      position: { x: 640, y: 480 },
+      evidenceForm: closingForm,
     });
 
     const published = await api('POST', `/${draft.id}/publish`);
@@ -191,6 +230,13 @@ describe('administración de plantillas de flujo', () => {
     // Los workflows nuevos usan la v3 y heredan las reglas de notificación de la v2.
     const workflow = await startWorkflowFor(context, cast, await givenProperty(context));
     expect(workflow.tasks.map((task) => task.code)).toContain('CLOSE_FILE');
+    const detail = await callApi(context, 'GET', `/api/workflows/${String(workflow.id)}`, {
+      sessionCookie: cast.cookies.admin,
+    });
+    const closingTask = (
+      detail.body as { workflow: { tasks: { code: string; evidenceForm: unknown }[] } }
+    ).workflow.tasks.find((task) => task.code === 'CLOSE_FILE');
+    expect(closingTask?.evidenceForm).toEqual(closingForm);
     const [ruleRows] = await context.database.pool.query<RowDataPacket[]>(
       `SELECT COUNT(*) AS rules
          FROM workflow_notification_rule_sets AS assignment
@@ -255,5 +301,66 @@ describe('administración de plantillas de flujo', () => {
 
     expect((await api('DELETE', `/${draft.id}`)).status).toBe(204);
     expect((await api('GET', `/${draft.id}`)).status).toBe(404);
+  });
+
+  it('las versiones nuevas cuentan los plazos en días hábiles, saltando feriados', async () => {
+    const v2 = await activeTemplate();
+    expect(v2.deadlineDayKind).toBe('CALENDAR');
+
+    const holidaysApi = (method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown) =>
+      callApi(context, method, `/api/holidays${path}`, {
+        sessionCookie: cast.cookies.admin,
+        ...(body === undefined ? {} : { body }),
+      });
+    expect(
+      (
+        await callApi(context, 'POST', '/api/holidays/sync', {
+          sessionCookie: cast.cookies.manager,
+          body: { year: 2026 },
+        })
+      ).status,
+    ).toBe(403);
+    const synced = await holidaysApi('POST', '/sync', { year: 2026 });
+    expect(synced.status).toBe(200);
+    expect(synced.body).toMatchObject({
+      canSync: true,
+      holidays: [
+        { date: '2026-11-13', source: 'BOOSTR' },
+        {
+          date: '2026-12-08',
+          name: 'Inmaculada Concepción / Otra celebración',
+          isInalienable: true,
+        },
+      ],
+    });
+    expect(problemOf(await holidaysApi('POST', '/sync', { year: 2027 })).code).toBe(
+      'HOLIDAY_SOURCE_UNAVAILABLE',
+    );
+    expect(
+      (await holidaysApi('POST', '', { date: '2026-12-31', name: 'Feriado bancario' })).status,
+    ).toBe(201);
+    expect(
+      problemOf(await holidaysApi('POST', '', { date: '2026-12-31', name: 'Repetido' })).code,
+    ).toBe('HOLIDAY_EXISTS');
+    expect((await holidaysApi('DELETE', '/2026-12-31')).status).toBe(204);
+
+    const draft = templateOf(await api('POST', '', { sourceTemplateId: v2.id }));
+    expect(draft.deadlineDayKind).toBe('BUSINESS');
+    const [first, ...rest] = draft.tasks;
+    if (!first) throw new Error('El borrador no copió las tareas');
+    await api('PUT', `/${draft.id}`, {
+      name: draft.name,
+      tasks: [
+        { ...first, dueReference: 'TASK_ACTIVATED_AT', dueOffsetDays: 3, dueOffsetMinutes: 0 },
+        ...rest,
+      ],
+    });
+    await api('POST', `/${draft.id}/publish`);
+
+    // Inicio: jueves 12 nov, 09:00. Se salta el viernes 13 (feriado) y el fin de semana:
+    // lunes 16 (1), martes 17 (2), miércoles 18 (3).
+    const workflow = await startWorkflowFor(context, cast, await givenProperty(context));
+    const firstTask = workflow.tasks.find((task) => task.code === first.code);
+    expect(firstTask?.dueAt).toBe('2026-11-18T12:00:00.000Z');
   });
 });

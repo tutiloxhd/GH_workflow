@@ -5,6 +5,7 @@ import { applyMigrations } from '../src/platform/database/migrations.js';
 import { connectTestDatabase } from './test-database.js';
 
 const MVP_TABLES = [
+  'holidays',
   'login_attempts',
   'notifications',
   'notification_jobs',
@@ -44,7 +45,7 @@ describe('esquema inicial de la base', () => {
     await database.close();
   });
 
-  it('crea las 25 tablas del modelo MVP', async () => {
+  it('crea las 26 tablas del modelo MVP', async () => {
     const [rows] = await database.pool.query<RowDataPacket[]>(
       `SELECT table_name AS tableName
          FROM information_schema.tables

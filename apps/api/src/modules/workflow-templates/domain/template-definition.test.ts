@@ -16,6 +16,10 @@ const task = (code: string, dependsOn: string[] = [], requiresEvidence = false) 
     dueOffsetDays: 3,
     dueOffsetMinutes: 0,
     dependsOn,
+    position: null,
+    evidenceForm: requiresEvidence
+      ? { fields: [{ name: 'notes', label: 'Notas', type: 'TEXT', isRequired: true }] }
+      : null,
   }) satisfies TaskDefinitionInput;
 
 describe('validación de la definición de una plantilla', () => {
@@ -42,8 +46,10 @@ describe('validación de la definición de una plantilla', () => {
   });
 
   it('solo permite exigir evidencia en tareas que tienen formulario', () => {
-    expect(findDefinitionIssues([task('COLLECT_VALE_VISTA', [], true)])).toEqual([]);
-    expect(findDefinitionIssues([task('NUEVA_TAREA', [], true)])).toEqual([
+    expect(findDefinitionIssues([task('NUEVA_TAREA', [], true)])).toEqual([]);
+    expect(
+      findDefinitionIssues([{ ...task('NUEVA_TAREA'), requiresEvidence: true, evidenceForm: null }]),
+    ).toEqual([
       { kind: 'EVIDENCE_FORM_MISSING', taskCode: 'NUEVA_TAREA' },
     ]);
   });

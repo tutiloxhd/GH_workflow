@@ -7,7 +7,11 @@ import { getCurrentUser, requireRole, requireSession } from '../../identity/http
 import { ROLE_CODES } from '../../identity/domain/role-code.js';
 import type { WorkflowDependencies } from '../../workflow/application/workflow-dependencies.js';
 import { DUE_REFERENCES } from '../../workflow/domain/due-date.js';
-import { EVIDENCE_FORM_TASK_CODES } from '../../workflow/domain/evidence-forms.js';
+import {
+  EVIDENCE_FIELD_TYPES,
+  evidenceFormSchema,
+  toEvidenceForm,
+} from '../../workflow/domain/evidence-forms.js';
 import { ASSIGN_PARTICIPANTS_TASK_CODE, type Actor } from '../../workflow/domain/task-rules.js';
 import {
   archiveTemplate,
@@ -21,6 +25,7 @@ import {
 } from '../application/template-administration.js';
 import {
   CODE_PATTERN,
+  MAX_DIAGRAM_COORDINATE,
   MAX_DESCRIPTION_LENGTH,
   MAX_NAME_LENGTH,
   MAX_TASK_CODE_LENGTH,
@@ -32,6 +37,11 @@ import { TEMPLATE_PROBLEMS } from './template-problems.js';
 const positiveId = z.coerce.number().int().positive();
 const templateParams = z.strictObject({ templateId: positiveId });
 const name = z.string().trim().min(1).max(MAX_NAME_LENGTH);
+const diagramCoordinate = z
+  .number()
+  .int()
+  .min(-MAX_DIAGRAM_COORDINATE)
+  .max(MAX_DIAGRAM_COORDINATE);
 const taskCode = z.string().trim().max(MAX_TASK_CODE_LENGTH).regex(CODE_PATTERN);
 // Un año en días y en minutos, igual que el ajuste de plazo por tarea.
 const MAX_OFFSET_DAYS = 365;
@@ -63,6 +73,14 @@ const draftBody = z.strictObject({
         dueOffsetDays: z.number().int().min(-MAX_OFFSET_DAYS).max(MAX_OFFSET_DAYS),
         dueOffsetMinutes: z.number().int().min(-MAX_OFFSET_MINUTES).max(MAX_OFFSET_MINUTES),
         dependsOn: z.array(taskCode).max(MAX_TASKS_PER_TEMPLATE),
+        position: z
+          .strictObject({ x: diagramCoordinate, y: diagramCoordinate })
+          .nullable()
+          .default(null),
+        evidenceForm: evidenceFormSchema
+          .nullable()
+          .default(null)
+          .transform((form) => (form ? toEvidenceForm(form) : null)),
       }),
     )
     .max(MAX_TASKS_PER_TEMPLATE),
@@ -127,7 +145,7 @@ export function createTemplatesRouter(
     response.json({
       roles: ROLE_CODES,
       dueReferences: DUE_REFERENCES,
-      evidenceFormTaskCodes: EVIDENCE_FORM_TASK_CODES,
+      evidenceFieldTypes: EVIDENCE_FIELD_TYPES,
       participantAssignmentTaskCode: ASSIGN_PARTICIPANTS_TASK_CODE,
     });
   });

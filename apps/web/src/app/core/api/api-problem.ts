@@ -82,6 +82,12 @@ const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   TEMPLATE_DRAFT_EXISTS: 'Este flujo ya tiene un borrador en edición.',
   TEMPLATE_CODE_TAKEN: 'Ya existe un flujo con ese código.',
   INVALID_TEMPLATE: 'El flujo tiene problemas que impiden guardarlo o publicarlo.',
+  HOLIDAY_SOURCE_NOT_CONFIGURED:
+    'La sincronización de feriados no está configurada. Agrega los feriados a mano.',
+  HOLIDAY_SOURCE_UNAVAILABLE:
+    'No se pudieron obtener los feriados desde Boostr. Inténtalo más tarde o agrégalos a mano.',
+  HOLIDAY_EXISTS: 'Ese día ya está registrado como feriado.',
+  HOLIDAY_NOT_FOUND: 'El feriado ya no existe. Actualiza la vista.',
   SOURCE_CHANGE_NOT_REVIEWABLE:
     'Este cambio ya fue revisado o no se revisa a mano. Actualiza la vista.',
 };

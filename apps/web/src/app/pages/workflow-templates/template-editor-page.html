@@ -20,6 +20,7 @@
         @if (current.workflowCount > 0) {
           · {{ current.workflowCount }} remates la usan
         }
+        · Plazos en {{ current.deadlineDayKind === 'BUSINESS' ? 'días hábiles' : 'días corridos' }}
       </p>
     </div>
     <div class="page-actions">
@@ -99,6 +100,126 @@
 
     <fieldset class="editor" [disabled]="!isEditable() || isBusy()">
       <legend class="visually-hidden">Definición del flujo</legend>
+      <ng-template #taskFields let-task let-index="index" let-first="first" let-last="last">
+        <div class="task-fields">
+          <label class="field">
+            Nombre
+            <input
+              [name]="'name-' + task.key"
+              maxlength="150"
+              [(ngModel)]="task.name"
+              (ngModelChange)="touch()"
+            />
+          </label>
+          <label class="field">
+            Código
+            <input
+              [name]="'code-' + task.key"
+              maxlength="50"
+              [ngModel]="task.code"
+              (ngModelChange)="renameTask(task, $event)"
+            />
+            @if (isParticipantAssignment(task.code)) {
+              <span class="field-hint">
+                Tarea especial: exige asignar gestor y postor para completarse.
+              </span>
+            }
+          </label>
+          <label class="field wide">
+            Descripción
+            <textarea
+              [name]="'description-' + task.key"
+              rows="2"
+              maxlength="2000"
+              [(ngModel)]="task.description"
+              (ngModelChange)="touch()"
+            ></textarea>
+          </label>
+          <label class="field">
+            Responsable
+            <select
+              [name]="'role-' + task.key"
+              [(ngModel)]="task.responsibleRole"
+              (ngModelChange)="touch()"
+            >
+              @for (role of catalog()?.roles ?? []; track role) {
+                <option [ngValue]="role">{{ roleLabels[role] }}</option>
+              }
+            </select>
+          </label>
+          <app-deadline-rule-editor
+            class="wide"
+            [idPrefix]="'deadline-' + task.key"
+            [dayKind]="current.deadlineDayKind"
+            [references]="catalog()?.dueReferences ?? []"
+            [rule]="task"
+            (ruleChange)="setDeadline(task, $event)"
+          />
+          <app-evidence-form-builder
+            class="wide"
+            [idPrefix]="'form-' + task.key"
+            [types]="catalog()?.evidenceFieldTypes ?? []"
+            [form]="task.evidenceForm"
+            (formChange)="setEvidenceForm(task, $event)"
+          />
+          <label class="evidence-toggle wide">
+            <input
+              type="checkbox"
+              [name]="'evidence-' + task.key"
+              [disabled]="!task.evidenceForm"
+              [(ngModel)]="task.requiresEvidence"
+              (ngModelChange)="touch()"
+            />
+            Exige completar el formulario para terminar la tarea
+            @if (!task.evidenceForm) {
+              <span class="field-hint">(agrega al menos un campo al formulario)</span>
+            }
+          </label>
+
+          <fieldset class="checkbox-list wide dependencies">
+            <legend>Se activa cuando se completen</legend>
+            @for (other of otherTasks(task); track other.key) {
+              <label>
+                <input
+                  type="checkbox"
+                  [checked]="task.dependsOn.includes(other.code)"
+                  (change)="toggleDependency(task, other.code, $any($event.target).checked)"
+                />
+                {{ other.name || other.code }}
+              </label>
+            } @empty {
+              <p class="muted">No hay otras tareas.</p>
+            }
+            @if (task.dependsOn.length === 0) {
+              <p class="field-hint">Sin dependencias: se activa al iniciar el remate.</p>
+            }
+          </fieldset>
+
+          @if (isEditable()) {
+            <div class="task-actions wide">
+              <button
+                type="button"
+                class="button link"
+                [disabled]="first"
+                (click)="moveTask(index, -1)"
+              >
+                ↑ Subir
+              </button>
+              <button
+                type="button"
+                class="button link"
+                [disabled]="last"
+                (click)="moveTask(index, 1)"
+              >
+                ↓ Bajar
+              </button>
+              <button type="button" class="button link danger-link" (click)="removeTask(task)">
+                Quitar tarea
+              </button>
+            </div>
+          }
+        </div>
+      </ng-template>
       <label class="field flow-name">
         Nombre del flujo
         <input name="flow-name" maxlength="150" [(ngModel)]="name" (ngModelChange)="touch()" />
@@ -110,6 +231,26 @@
           @if (isDirty()) {
             <span class="status-pill alert">Cambios sin guardar</span>
           }
+          <div class="view-switch" role="group" aria-label="Vista de las tareas">
+            <button
+              type="button"
+              class="button"
+              [class.primary]="viewMode() === 'diagram'"
+              [attr.aria-pressed]="viewMode() === 'diagram'"
+              (click)="setViewMode('diagram')"
+            >
+              Diagrama
+            </button>
+            <button
+              type="button"
+              class="button"
+              [class.primary]="viewMode() === 'list'"
+              [attr.aria-pressed]="viewMode() === 'list'"
+              (click)="setViewMode('list')"
+            >
+              Lista
+            </button>
+          </div>
         </div>
 
         @if (localProblems().length > 0) {
@@ -120,180 +261,81 @@
           </ul>
         }
 
-        <ol class="task-list">
-          @for (task of tasks(); track task.key; let index = $index, first = $first, last = $last) {
-            <li class="task-item">
-              <details [open]="!task.code">
-                <summary>
-                  <span class="task-order">{{ index + 1 }}</span>
-                  <span class="task-summary">
-                    <strong>{{ task.name || 'Tarea sin nombre' }}</strong>
-                    <span class="muted">
-                      {{ roleLabels[task.responsibleRole] }}
-                      @if (task.dependsOn.length > 0) {
-                        · después de {{ dependencyNames(task) }}
-                      } @else {
-                        · inicial
-                      }
-                      @if (task.requiresEvidence) {
-                        · exige evidencia
-                      }
-                    </span>
-                  </span>
-                </summary>
-
-                <div class="task-fields">
-                  <label class="field">
-                    Nombre
-                    <input
-                      [name]="'name-' + task.key"
-                      maxlength="150"
-                      [(ngModel)]="task.name"
-                      (ngModelChange)="touch()"
-                    />
-                  </label>
-                  <label class="field">
-                    Código
-                    <input
-                      [name]="'code-' + task.key"
-                      maxlength="50"
-                      [ngModel]="task.code"
-                      (ngModelChange)="renameTask(task, $event)"
-                    />
-                    @if (isParticipantAssignment(task.code)) {
-                      <span class="field-hint">
-                        Tarea especial: exige asignar gestor y postor para completarse.
+        @if (viewMode() === 'diagram') {
+          <div class="card-body diagram-help">
+            @if (isEditable()) {
+              Arrastra las tareas para ordenarlas. Para que una tarea dependa de otra, arrastra
+              desde el punto azul (derecha) de la primera hasta la segunda. Para quitar una flecha,
+              selecciónala y presiona Supr.
+            } @else {
+              Selecciona una tarea para ver su detalle.
+            }
+          </div>
+          <div class="diagram-layout">
+            <app-flow-diagram
+              [nodes]="diagramNodes()"
+              [isEditable]="isEditable() && !isBusy()"
+              [selectedKey]="selectedKey()"
+              (selected)="selectedKey.set($event)"
+              (moved)="moveNode($event.key, $event.position)"
+              (linked)="linkTasks($event.fromKey, $event.toKey)"
+              (unlinked)="unlinkTasks($event)"
+            />
+            <aside class="diagram-panel" aria-label="Detalle de la tarea seleccionada">
+              @if (selectedTask(); as task) {
+                <h3>{{ task.name || 'Tarea sin nombre' }}</h3>
+                <ng-container
+                  [ngTemplateOutlet]="taskFields"
+                  [ngTemplateOutletContext]="{
+                    $implicit: task,
+                    index: selectedIndex(),
+                    first: selectedIndex() === 0,
+                    last: selectedIndex() === tasks().length - 1,
+                  }"
+                />
+              } @else {
+                <p class="muted">Selecciona una tarea en el diagrama para editarla.</p>
+              }
+            </aside>
+          </div>
+        } @else {
+          <ol class="task-list">
+            @for (
+              task of tasks();
+              track task.key;
+              let index = $index, first = $first, last = $last
+            ) {
+              <li class="task-item">
+                <details [open]="!task.code">
+                  <summary>
+                    <span class="task-order">{{ index + 1 }}</span>
+                    <span class="task-summary">
+                      <strong>{{ task.name || 'Tarea sin nombre' }}</strong>
+                      <span class="muted">
+                        {{ roleLabels[task.responsibleRole] }}
+                        @if (task.dependsOn.length > 0) {
+                          · después de {{ dependencyNames(task) }}
+                        } @else {
+                          · inicial
+                        }
+                        @if (task.requiresEvidence) {
+                          · exige evidencia
+                        }
                       </span>
-                    } @else if (hasEvidenceForm(task.code)) {
-                      <span class="field-hint">Tiene formulario de evidencia disponible.</span>
-                    }
-                  </label>
-                  <label class="field wide">
-                    Descripción
-                    <textarea
-                      [name]="'description-' + task.key"
-                      rows="2"
-                      maxlength="2000"
-                      [(ngModel)]="task.description"
-                      (ngModelChange)="touch()"
-                    ></textarea>
-                  </label>
-                  <label class="field">
-                    Responsable
-                    <select
-                      [name]="'role-' + task.key"
-                      [(ngModel)]="task.responsibleRole"
-                      (ngModelChange)="touch()"
-                    >
-                      @for (role of catalog()?.roles ?? []; track role) {
-                        <option [ngValue]="role">{{ roleLabels[role] }}</option>
-                      }
-                    </select>
-                  </label>
-                  <label class="field">
-                    Plazo desde
-                    <select
-                      [name]="'due-reference-' + task.key"
-                      [(ngModel)]="task.dueReference"
-                      (ngModelChange)="touch()"
-                    >
-                      @for (reference of catalog()?.dueReferences ?? []; track reference) {
-                        <option [ngValue]="reference">{{ dueReferenceLabels[reference] }}</option>
-                      }
-                    </select>
-                  </label>
-                  <label class="field">
-                    Días
-                    <input
-                      type="number"
-                      [name]="'due-days-' + task.key"
-                      min="-365"
-                      max="365"
-                      step="1"
-                      [(ngModel)]="task.dueOffsetDays"
-                      (ngModelChange)="touch()"
-                    />
-                    <span class="field-hint">Negativo: antes de la fecha de referencia.</span>
-                  </label>
-                  <label class="field">
-                    Minutos
-                    <input
-                      type="number"
-                      [name]="'due-minutes-' + task.key"
-                      min="-525600"
-                      max="525600"
-                      step="1"
-                      [(ngModel)]="task.dueOffsetMinutes"
-                      (ngModelChange)="touch()"
-                    />
-                  </label>
-                  <label class="evidence-toggle wide">
-                    <input
-                      type="checkbox"
-                      [name]="'evidence-' + task.key"
-                      [disabled]="!hasEvidenceForm(task.code)"
-                      [(ngModel)]="task.requiresEvidence"
-                      (ngModelChange)="touch()"
-                    />
-                    Exige evidencia para completarse
-                    @if (!hasEvidenceForm(task.code)) {
-                      <span class="field-hint">(esta tarea no tiene formulario de evidencia)</span>
-                    }
-                  </label>
+                    </span>
+                  </summary>
 
-                  <fieldset class="checkbox-list wide dependencies">
-                    <legend>Se activa cuando se completen</legend>
-                    @for (other of otherTasks(task); track other.key) {
-                      <label>
-                        <input
-                          type="checkbox"
-                          [checked]="task.dependsOn.includes(other.code)"
-                          (change)="toggleDependency(task, other.code, $any($event.target).checked)"
-                        />
-                        {{ other.name || other.code }}
-                      </label>
-                    } @empty {
-                      <p class="muted">No hay otras tareas.</p>
-                    }
-                    @if (task.dependsOn.length === 0) {
-                      <p class="field-hint">Sin dependencias: se activa al iniciar el remate.</p>
-                    }
-                  </fieldset>
-
-                  @if (isEditable()) {
-                    <div class="task-actions wide">
-                      <button
-                        type="button"
-                        class="button link"
-                        [disabled]="first"
-                        (click)="moveTask(index, -1)"
-                      >
-                        ↑ Subir
-                      </button>
-                      <button
-                        type="button"
-                        class="button link"
-                        [disabled]="last"
-                        (click)="moveTask(index, 1)"
-                      >
-                        ↓ Bajar
-                      </button>
-                      <button
-                        type="button"
-                        class="button link danger-link"
-                        (click)="removeTask(task)"
-                      >
-                        Quitar tarea
-                      </button>
-                    </div>
-                  }
-                </div>
-              </details>
-            </li>
-          } @empty {
-            <li class="empty-state">Este flujo todavía no tiene tareas.</li>
-          }
-        </ol>
+                  <ng-container
+                    [ngTemplateOutlet]="taskFields"
+                    [ngTemplateOutletContext]="{ $implicit: task, index, first, last }"
+                  />
+                </details>
+              </li>
+            } @empty {
+              <li class="empty-state">Este flujo todavía no tiene tareas.</li>
+            }
+          </ol>
+        }
 
         @if (isEditable()) {
           <div class="card-body">

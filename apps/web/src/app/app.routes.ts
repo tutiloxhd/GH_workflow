@@ -52,6 +52,13 @@ export const routes: Routes = [
           import('./pages/workflow-templates/templates-page').then((page) => page.TemplatesPage),
       },
       {
+        path: 'feriados',
+        canActivate: [adminGuard],
+        title: 'Feriados · GrupoHouse',
+        loadComponent: () =>
+          import('./pages/holidays/holidays-page').then((page) => page.HolidaysPage),
+      },
+      {
         path: 'flujos/:templateId',
         canActivate: [adminGuard],
         title: 'Editar flujo · GrupoHouse',

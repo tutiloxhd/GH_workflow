@@ -1,6 +1,8 @@
 import { and, asc, count, desc, eq, inArray, max, ne, sql } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import type { DatabaseExecutor } from '../../../platform/database/database.js';
+import type { DeadlineDayKind } from '../../workflow/domain/due-date.js';
+import { resolveEvidenceForm } from '../../workflow/domain/evidence-forms.js';
 import { users } from '../../../platform/database/schema/identity.schema.js';
 import {
   notificationRules,
@@ -26,6 +28,7 @@ export interface TemplateRow {
   readonly version: number;
   readonly status: TemplateStatus;
   readonly isActive: boolean;
+  readonly deadlineDayKind: DeadlineDayKind;
   readonly taskCount: number;
   readonly workflowCount: number;
   readonly createdAt: Date;
@@ -71,6 +74,7 @@ export async function findTemplates(
       version: workflowTemplates.version,
       status: workflowTemplates.status,
       isActive: workflowTemplates.isActive,
+      deadlineDayKind: workflowTemplates.deadlineDayKind,
       // LEFT JOIN: una plantilla sin tareas o sin workflows no tiene fila en el conteo.
       taskCount: sql<number>`COALESCE(${taskCounts.total}, 0)`.mapWith(Number),
       workflowCount: sql<number>`COALESCE(${workflowCounts.total}, 0)`.mapWith(Number),
@@ -97,6 +101,7 @@ export async function findTemplates(
     version: row.version,
     status: row.status,
     isActive: row.isActive,
+    deadlineDayKind: row.deadlineDayKind,
     taskCount: row.taskCount,
     workflowCount: row.workflowCount,
     createdAt: row.createdAt,
@@ -159,7 +164,8 @@ export async function insertDraftTemplate(
 ): Promise<number> {
   const [created] = await executor
     .insert(workflowTemplates)
-    .values({ ...values, status: 'DRAFT', isActive: false })
+    // Toda versión nueva cuenta sus plazos en días hábiles (ADR 0010).
+    .values({ ...values, status: 'DRAFT', isActive: false, deadlineDayKind: 'BUSINESS' })
     .$returningId();
   if (!created) throw new Error('No se pudo crear el borrador de plantilla');
   return created.id;
@@ -180,6 +186,9 @@ export async function findTemplateTasks(
       dueReference: taskDefinitions.dueReference,
       dueOffsetDays: taskDefinitions.dueOffsetDays,
       dueOffsetMinutes: taskDefinitions.dueOffsetMinutes,
+      diagramX: taskDefinitions.diagramX,
+      diagramY: taskDefinitions.diagramY,
+      evidenceForm: taskDefinitions.evidenceForm,
     })
     .from(taskDefinitions)
     .where(eq(taskDefinitions.workflowTemplateId, templateId))
@@ -209,6 +218,12 @@ export async function findTemplateTasks(
       .map((dependency) => codeById.get(dependency.requirementId))
       .filter((code): code is string => code !== undefined)
       .sort(),
+    position:
+      definition.diagramX === null || definition.diagramY === null
+        ? null
+        : { x: definition.diagramX, y: definition.diagramY },
+    // Se entrega el formulario vigente: al copiar una versión heredada queda guardado.
+    evidenceForm: resolveEvidenceForm(definition.code, definition.evidenceForm),
   }));
 }
 
@@ -233,6 +248,10 @@ export async function replaceTemplateTasks(
       dueReference: task.dueReference,
       dueOffsetDays: task.dueOffsetDays,
       dueOffsetMinutes: task.dueOffsetMinutes,
+      diagramX: task.position?.x ?? null,
+      diagramY: task.position?.y ?? null,
+      // Un formulario vacío se guarda como tal para no volver al inicial del código.
+      evidenceForm: task.evidenceForm ?? { fields: [] },
     })),
   );
   const inserted = await executor

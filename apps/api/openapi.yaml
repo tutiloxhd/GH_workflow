@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: API Workflow de Remates
-  version: 0.6.0
+  version: 0.7.0
   description: >
     Contrato de la API del workflow de remates judiciales. Se amplía en cada sprint,
     antes o junto con la implementación de cada endpoint.
@@ -24,6 +24,8 @@ tags:
     description: Estado de la sincronización con admin_new; exige rol ADMIN
   - name: workflow-templates
     description: Plantillas de flujo (borrador, publicada, archivada); exige rol ADMIN
+  - name: holidays
+    description: Feriados de Chile usados para contar plazos en días hábiles
 paths:
   /api/health:
     get:
@@ -874,6 +876,75 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
 
+  /api/holidays:
+    get:
+      operationId: listHolidays
+      summary: Feriados de un año
+      tags: [holidays]
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100 } }
+      responses:
+        '200': { $ref: '#/components/responses/HolidayYear' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: addHoliday
+      summary: Agrega un feriado a mano (ADMIN)
+      description: Responde 409 `HOLIDAY_EXISTS` si el día ya es feriado.
+      tags: [holidays]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [date, name]
+              properties:
+                date: { type: string, format: date }
+                name: { type: string, minLength: 1, maxLength: 200 }
+                isInalienable: { type: boolean, default: false }
+      responses:
+        '201': { $ref: '#/components/responses/HolidayYear' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/holidays/sync:
+    post:
+      operationId: syncHolidays
+      summary: Sincroniza los feriados de un año desde Boostr (ADMIN)
+      description: >
+        Reemplaza los feriados sincronizados del año; los ingresados a mano se conservan. Responde
+        409 `HOLIDAY_SOURCE_NOT_CONFIGURED` si la API no tiene fuente de feriados y 502
+        `HOLIDAY_SOURCE_UNAVAILABLE` si la fuente falla.
+      tags: [holidays]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [year]
+              properties:
+                year: { type: integer, minimum: 2000, maximum: 2100 }
+      responses:
+        '200': { $ref: '#/components/responses/HolidayYear' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+  /api/holidays/{date}:
+    delete:
+      operationId: removeHoliday
+      summary: Elimina un feriado (ADMIN)
+      tags: [holidays]
+      parameters:
+        - { name: date, in: path, required: true, schema: { type: string, format: date } }
+      responses:
+        '204': { description: Feriado eliminado }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
   /api/workflow-templates:
     get:
       operationId: listWorkflowTemplates
@@ -937,14 +1008,14 @@ paths:
               schema:
                 type: object
                 required:
-                  [roles, dueReferences, evidenceFormTaskCodes, participantAssignmentTaskCode]
+                  [roles, dueReferences, evidenceFieldTypes, participantAssignmentTaskCode]
                 properties:
                   roles: { type: array, items: { $ref: '#/components/schemas/RoleCode' } }
                   dueReferences: { type: array, items: { type: string } }
-                  evidenceFormTaskCodes:
-                    description: Códigos de tarea con formulario de evidencia; solo ellas pueden exigirla.
+                  evidenceFieldTypes:
+                    description: Tipos de campo disponibles para los formularios de evidencia.
                     type: array
-                    items: { type: string }
+                    items: { type: string, enum: [TEXT, LONG_TEXT, DATE, AMOUNT_CLP, CHOICE] }
                   participantAssignmentTaskCode:
                     description: Código de la tarea que exige asignar gestor y postor para completarse.
                     type: string
@@ -1072,6 +1143,26 @@ components:
       required: true
       schema: { type: integer, minimum: 1 }
   responses:
+    HolidayYear:
+      description: Feriados del año y si la sincronización está configurada
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [year, holidays, canSync]
+            properties:
+              year: { type: integer }
+              canSync: { type: boolean }
+              holidays:
+                type: array
+                items:
+                  type: object
+                  required: [date, name, isInalienable, source]
+                  properties:
+                    date: { type: string, format: date }
+                    name: { type: string }
+                    isInalienable: { type: boolean }
+                    source: { type: string, enum: [BOOSTR, MANUAL] }
     WorkflowTemplateChanged:
       description: Detalle de la plantilla
       content:
@@ -1146,6 +1237,23 @@ components:
           description: Códigos de las tareas que deben completarse antes.
           type: array
           items: { type: string }
+        position:
+          description: >
+            Posición de la tarea en el diagrama del editor; null (u omitida al guardar) deja que
+            el editor la ubique automáticamente.
+          type: [object, 'null']
+          additionalProperties: false
+          required: [x, y]
+          properties:
+            x: { type: integer, minimum: -100000, maximum: 100000 }
+            y: { type: integer, minimum: -100000, maximum: 100000 }
+        evidenceForm:
+          description: >
+            Formulario de evidencia de la tarea; null = sin formulario. Al leer, las tareas
+            heredadas sin formulario guardado muestran el inicial de su código.
+          oneOf:
+            - { $ref: '#/components/schemas/EvidenceForm' }
+            - { type: 'null' }
     WorkflowTemplateSummary:
       type: object
       required:
@@ -1155,6 +1263,7 @@ components:
         - version
         - status
         - isActive
+        - deadlineDayKind
         - taskCount
         - workflowCount
         - createdAt
@@ -1169,6 +1278,10 @@ components:
         version: { type: integer }
         status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
         isActive: { type: boolean }
+        deadlineDayKind:
+          type: string
+          enum: [CALENDAR, BUSINESS]
+          description: Cómo se cuentan los días de los plazos (corridos o hábiles)
         taskCount: { type: integer }
         workflowCount: { type: integer }
         createdAt: { type: string, format: date-time }
@@ -1413,16 +1526,22 @@ components:
             updatedAt: { type: string, format: date-time }
     EvidenceForm:
       type: object
-      description: Formulario básico de prueba; su estructura definitiva la define negocio
+      description: >
+        Formulario de evidencia configurado en la versión del flujo (hasta 30 campos). Una lista
+        (CHOICE) exige opciones; los demás tipos no las aceptan.
+      additionalProperties: false
+      required: [fields]
       properties:
         fields:
           type: array
+          maxItems: 30
           items:
             type: object
+            additionalProperties: false
             required: [name, label, type, isRequired]
             properties:
-              name: { type: string }
-              label: { type: string }
+              name: { type: string, pattern: '^[a-z][a-zA-Z0-9]*$', maxLength: 50 }
+              label: { type: string, minLength: 1, maxLength: 150 }
               type: { type: string, enum: [TEXT, LONG_TEXT, DATE, AMOUNT_CLP, CHOICE] }
               isRequired: { type: boolean }
               options:
@@ -1487,6 +1606,7 @@ components:
             assignmentRegion: { type: [string, 'null'] }
             auctionMode: { type: [string, 'null'] }
         auctionAt: { type: [string, 'null'], format: date-time }
+        deadlineDayKind: { type: string, enum: [CALENDAR, BUSINESS] }
         participants:
           type: array
           items:

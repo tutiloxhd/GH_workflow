@@ -49,6 +49,7 @@ export interface TemplateSummary {
   readonly version: number;
   readonly status: TemplateRow['status'];
   readonly isActive: boolean;
+  readonly deadlineDayKind: TemplateRow['deadlineDayKind'];
   readonly taskCount: number;
   readonly workflowCount: number;
   readonly createdAt: string;

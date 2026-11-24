@@ -1,5 +1,11 @@
 import type { RoleCode } from '../users/user.model';
-import type { DueReference, PersonRef } from '../workflow/workflow.model';
+import type { DeadlineDayKind } from '../workflow/deadline-rule';
+import type {
+  DueReference,
+  EvidenceFieldType,
+  EvidenceForm,
+  PersonRef,
+} from '../workflow/workflow.model';
 
 export type TemplateStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
@@ -13,6 +19,10 @@ export interface TemplateTask {
   readonly dueOffsetDays: number;
   readonly dueOffsetMinutes: number;
   readonly dependsOn: readonly string[];
+  // Posición en el diagrama del editor; null = ubicación automática.
+  readonly position: { readonly x: number; readonly y: number } | null;
+  // Formulario de evidencia de la tarea; null = sin formulario.
+  readonly evidenceForm: EvidenceForm | null;
 }
 
 export interface TemplateSummary {
@@ -22,6 +32,7 @@ export interface TemplateSummary {
   readonly version: number;
   readonly status: TemplateStatus;
   readonly isActive: boolean;
+  readonly deadlineDayKind: DeadlineDayKind;
   readonly taskCount: number;
   readonly workflowCount: number;
   readonly createdAt: string;
@@ -38,7 +49,7 @@ export interface TemplateDetail extends TemplateSummary {
 export interface TemplateCatalog {
   readonly roles: readonly RoleCode[];
   readonly dueReferences: readonly DueReference[];
-  readonly evidenceFormTaskCodes: readonly string[];
+  readonly evidenceFieldTypes: readonly EvidenceFieldType[];
   readonly participantAssignmentTaskCode: string;
 }
 

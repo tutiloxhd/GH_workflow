@@ -1,0 +1,146 @@
+<header class="page-header">
+  <div>
+    <h1>Feriados</h1>
+    <p>
+      Los plazos de los flujos nuevos se cuentan en días hábiles: de lunes a viernes, sin los
+      feriados de esta lista.
+    </p>
+  </div>
+  <div class="page-actions">
+    <button
+      type="button"
+      class="button primary"
+      [disabled]="isBusy() || !canSync()"
+      [title]="canSync() ? '' : 'La sincronización no está disponible'"
+      (click)="sync()"
+    >
+      Sincronizar feriados de {{ year() }}
+    </button>
+  </div>
+</header>
+
+<div class="page-body">
+  @if (errorMessage(); as message) {
+    <p class="form-error" role="alert">{{ message }}</p>
+  }
+  @if (notice(); as message) {
+    <p class="notice" role="status">{{ message }}</p>
+  }
+  @if (!canSync() && !isLoading()) {
+    <p class="muted">
+      La sincronización automática no está disponible en este entorno. Puedes
+      agregar los feriados a mano.
+    </p>
+  }
+
+  <section class="card" aria-labelledby="holidays-year-title">
+    <div class="card-header">
+      <button
+        type="button"
+        class="button link"
+        [disabled]="isLoading()"
+        (click)="changeYear(-1)"
+        aria-label="Año anterior"
+      >
+        ←
+      </button>
+      <h2 id="holidays-year-title">{{ year() }}</h2>
+      <button
+        type="button"
+        class="button link"
+        [disabled]="isLoading()"
+        (click)="changeYear(1)"
+        aria-label="Año siguiente"
+      >
+        →
+      </button>
+    </div>
+
+    @if (isLoading()) {
+      <p class="muted">Cargando feriados…</p>
+    } @else if (holidays().length === 0) {
+      <p class="warning" role="status">
+        No hay feriados cargados para {{ year() }}. Hasta cargarlos, los plazos de ese año solo
+        saltan fines de semana.
+      </p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <caption class="visually-hidden">
+            Feriados de
+            {{
+              year()
+            }}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Día</th>
+              <th scope="col">Feriado</th>
+              <th scope="col">Origen</th>
+              <th scope="col"><span class="visually-hidden">Acciones</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (holiday of holidays(); track holiday.date) {
+              <tr>
+                <td>{{ formatDay(holiday.date) }}</td>
+                <td data-label="Feriado">
+                  {{ holiday.name }}
+                  @if (holiday.isInalienable) {
+                    <span class="status-pill neutral">Irrenunciable</span>
+                  }
+                </td>
+                <td data-label="Origen">
+                  {{ holiday.source === 'BOOSTR' ? 'Sincronizado' : 'Manual' }}
+                </td>
+                <td class="row-actions">
+                  @if (pendingDelete() === holiday.date) {
+                    <button
+                      type="button"
+                      class="button danger"
+                      [disabled]="isBusy()"
+                      (click)="remove(holiday.date)"
+                    >
+                      Confirmar: eliminar
+                    </button>
+                    <button type="button" class="button link" (click)="pendingDelete.set(null)">
+                      Cancelar
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      class="button link"
+                      [disabled]="isBusy()"
+                      (click)="pendingDelete.set(holiday.date)"
+                    >
+                      Eliminar
+                    </button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </section>
+
+  <section class="card" aria-labelledby="add-holiday-title">
+    <h2 id="add-holiday-title">Agregar feriado</h2>
+    <form class="add-form" (ngSubmit)="add()">
+      <label class="field">
+        Fecha
+        <input type="date" name="date" required [(ngModel)]="newDate" />
+      </label>
+      <label class="field">
+        Nombre
+        <input type="text" name="name" required maxlength="200" [(ngModel)]="newName" />
+      </label>
+      <label class="checkbox-field">
+        <input type="checkbox" name="isInalienable" [(ngModel)]="newIsInalienable" />
+        Irrenunciable
+      </label>
+      <button type="submit" class="button primary" [disabled]="isBusy()">Agregar</button>
+    </form>
+  </section>
+</div>

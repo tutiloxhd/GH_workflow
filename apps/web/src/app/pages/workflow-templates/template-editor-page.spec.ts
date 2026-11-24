@@ -13,7 +13,7 @@ import { TemplateEditorPage } from './template-editor-page';
 const CATALOG: TemplateCatalog = {
   roles: ['ADMIN', 'MANAGER', 'BIDDER', 'LEGAL_REVIEWER'],
   dueReferences: ['TASK_ACTIVATED_AT', 'AUCTION_AT'] as TemplateCatalog['dueReferences'],
-  evidenceFormTaskCodes: ['COLLECT_VALE_VISTA'],
+  evidenceFieldTypes: ['TEXT', 'LONG_TEXT', 'DATE', 'AMOUNT_CLP', 'CHOICE'],
   participantAssignmentTaskCode: 'ASSIGN_MANAGER_AND_BIDDER',
 };
 
@@ -27,6 +27,8 @@ const task = (code: string, dependsOn: string[] = []): TemplateTask => ({
   dueOffsetDays: 3,
   dueOffsetMinutes: 0,
   dependsOn,
+  position: null,
+  evidenceForm: null,
 });
 
 const templateWith = (overrides: Partial<TemplateDetail>): TemplateDetail => ({
@@ -36,6 +38,7 @@ const templateWith = (overrides: Partial<TemplateDetail>): TemplateDetail => ({
   version: 3,
   status: 'DRAFT',
   isActive: false,
+  deadlineDayKind: 'BUSINESS',
   taskCount: 2,
   workflowCount: 0,
   createdAt: '2026-11-20T12:00:00.000Z',
@@ -57,7 +60,9 @@ describe('TemplateEditorPage', () => {
       candidate.textContent?.includes(text),
     );
 
+  // La lista es la vista accesible por teclado; el diagrama se prueba en diagram-layout.spec.
   async function open(template: TemplateDetail): Promise<void> {
+    localStorage.setItem('template-editor.view-mode', 'list');
     TestBed.configureTestingModule({
       imports: [TemplateEditorPage],
       providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
@@ -109,6 +114,8 @@ describe('TemplateEditorPage', () => {
     expect(request.request.body.tasks.at(-1)).toEqual({
       ...task('CERRAR_EXPEDIENTE', ['SECOND']),
       name: 'Cerrar expediente',
+      // Las tareas sin posición se ubican por niveles; la nueva queda a la derecha de la última.
+      position: { x: 560, y: 0 },
     });
     request.flush({ template: templateWith({ tasks: request.request.body.tasks }) });
     await vi.waitFor(async () => {

@@ -8,6 +8,7 @@ import {
   signal,
   type OnInit,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { problemMessage, toApiProblem, type ApiProblem } from '../../core/api/api-problem';
@@ -23,7 +24,17 @@ import {
   type TemplateTask,
 } from '../../core/workflow-templates/workflow-template.model';
 import { WorkflowTemplatesApiService } from '../../core/workflow-templates/workflow-templates-api.service';
-import { DUE_REFERENCE_LABELS, type DueReference } from '../../core/workflow/workflow.model';
+import {
+  dayUnit,
+  describeDeadline,
+  type DeadlineDayKind,
+  type DeadlineRule,
+} from '../../core/workflow/deadline-rule';
+import type { DueReference, EvidenceForm } from '../../core/workflow/workflow.model';
+import { DeadlineRuleEditor } from '../../shared/deadline/deadline-rule-editor';
+import { COLUMN_WIDTH, layoutPositions, wouldCreateCycle } from './diagram-layout';
+import { EvidenceFormBuilder } from './evidence-form-builder';
+import { FlowDiagram, type DiagramLink, type DiagramNode, type DiagramPoint } from './flow-diagram';
 import { toCode } from './template-code';
 
 // Copia editable de una tarea; `key` identifica la fila aunque cambie su código.
@@ -38,15 +49,48 @@ interface EditableTask {
   dueOffsetDays: number;
   dueOffsetMinutes: number;
   dependsOn: string[];
+  position: DiagramPoint;
+  evidenceForm: EvidenceForm | null;
+}
+
+type ViewMode = 'diagram' | 'list';
+const VIEW_MODE_STORAGE_KEY = 'template-editor.view-mode';
+// En pantallas angostas el diagrama es incómodo: la lista es la vista inicial.
+const NARROW_SCREEN_QUERY = '(max-width: 760px)';
+
+function initialViewMode(): ViewMode {
+  try {
+    const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    if (stored === 'diagram' || stored === 'list') return stored;
+  } catch {
+    // Sin almacenamiento disponible se usa la vista por omisión.
+  }
+  return typeof matchMedia === 'function' && matchMedia(NARROW_SCREEN_QUERY).matches
+    ? 'list'
+    : 'diagram';
 }
 
 const DEFAULT_DUE_OFFSET_DAYS = 3;
+
+// «3 d hábiles antes de la fecha del remate»: el plazo compacto de la caja del diagrama.
+function shortDeadline(rule: DeadlineRule, dayKind: DeadlineDayKind): string {
+  const sentence = describeDeadline(rule, dayKind).replace(/^Vence /, '');
+  const days = Math.abs(rule.dueOffsetDays);
+  return days === 0 ? sentence : sentence.replace(dayUnit(days, dayKind), 'd');
+}
 
 // Editor de una versión de flujo. Solo los borradores se editan; las publicadas se muestran
 // en modo lectura y se cambian creando una nueva versión.
 @Component({
   selector: 'app-template-editor-page',
-  imports: [FormsModule, RouterLink],
+  imports: [
+    FormsModule,
+    RouterLink,
+    NgTemplateOutlet,
+    DeadlineRuleEditor,
+    EvidenceFormBuilder,
+    FlowDiagram,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './template-editor-page.html',
   styleUrl: './template-editor-page.css',
@@ -69,16 +113,42 @@ export class TemplateEditorPage implements OnInit {
   protected readonly issues = signal<readonly TemplateIssue[]>([]);
   protected readonly notice = signal<string | null>(null);
   protected readonly confirming = signal<'publish' | 'delete' | null>(null);
+  protected readonly viewMode = signal<ViewMode>(initialViewMode());
+  protected readonly selectedKey = signal<number | null>(null);
   private nextKey = 1;
 
   protected readonly roleLabels = ROLE_LABELS;
-  protected readonly dueReferenceLabels = DUE_REFERENCE_LABELS;
   protected readonly statusLabels = TEMPLATE_STATUS_LABELS;
   protected readonly statusTones = TEMPLATE_STATUS_TONES;
   protected readonly formatDateTime = formatDateTime;
   protected readonly describeIssue = describeTemplateIssue;
 
   protected readonly isEditable = computed(() => this.template()?.status === 'DRAFT');
+
+  protected readonly selectedIndex = computed(() =>
+    this.tasks().findIndex((task) => task.key === this.selectedKey()),
+  );
+  protected readonly selectedTask = computed(() => this.tasks()[this.selectedIndex()] ?? null);
+
+  protected readonly diagramNodes = computed<DiagramNode[]>(() => {
+    const tasks = this.tasks();
+    const keyByCode = new Map(tasks.map((task) => [task.code, task.key]));
+    const dayKind = this.template()?.deadlineDayKind ?? 'BUSINESS';
+    return tasks.map((task) => ({
+      key: task.key,
+      code: task.code,
+      title: task.name || task.code || 'Tarea sin nombre',
+      subtitle: `${this.roleLabels[task.responsibleRole]} · ${shortDeadline(task, dayKind)}`,
+      badges: [
+        ...(task.dependsOn.length === 0 ? ['Inicial'] : []),
+        ...(task.requiresEvidence ? ['Evidencia'] : []),
+      ],
+      position: task.position,
+      dependsOnKeys: task.dependsOn
+        .map((code) => keyByCode.get(code))
+        .filter((key): key is number => key !== undefined),
+    }));
+  });
 
   // Revisión local mínima; la API valida todo (incluidos los ciclos) al guardar.
   protected readonly localProblems = computed(() => {
@@ -113,26 +183,94 @@ export class TemplateEditorPage implements OnInit {
   private applyTemplate(template: TemplateDetail): void {
     this.template.set(template);
     this.name = template.name;
+    const positions = layoutPositions(template.tasks);
     this.tasks.set(
-      template.tasks.map((task) => ({
+      template.tasks.map((task, index) => ({
         ...task,
         key: this.nextKey++,
         description: task.description ?? '',
         dependsOn: [...task.dependsOn],
+        position: positions[index] ?? { x: 0, y: 0 },
       })),
     );
+    this.selectedKey.set(null);
     this.isDirty.set(false);
   }
 
+  protected setViewMode(mode: ViewMode): void {
+    this.viewMode.set(mode);
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      // La preferencia es solo una comodidad.
+    }
+  }
+
+  protected moveNode(key: number, position: DiagramPoint): void {
+    const task = this.tasks().find((candidate) => candidate.key === key);
+    if (!task || !this.isEditable()) return;
+    task.position = { x: Math.round(position.x), y: Math.round(position.y) };
+    this.touch();
+  }
+
+  // Une dos tareas: `to` se activa cuando se complete `from`.
+  protected linkTasks(fromKey: number, toKey: number): void {
+    const tasks = this.tasks();
+    const from = tasks.find((task) => task.key === fromKey);
+    const to = tasks.find((task) => task.key === toKey);
+    if (!from || !to || !this.isEditable()) return;
+    this.notice.set(null);
+    if (!from.code || !to.code) {
+      this.errorMessage.set('Asigna un código a ambas tareas antes de unirlas.');
+      return;
+    }
+    if (from.key === to.key || to.dependsOn.includes(from.code)) return;
+    if (wouldCreateCycle(tasks, from.code, to.code)) {
+      const fromName = from.name || from.code;
+      const toName = to.name || to.code;
+      this.errorMessage.set(
+        `No se puede: «${fromName}» ya depende de «${toName}» y se formaría un ciclo.`,
+      );
+      return;
+    }
+    this.errorMessage.set(null);
+    to.dependsOn = [...to.dependsOn, from.code];
+    this.touch();
+  }
+
+  protected unlinkTasks(links: readonly DiagramLink[]): void {
+    const codeByKey = new Map(this.tasks().map((task) => [task.key, task.code]));
+    for (const link of links) {
+      const task = this.tasks().find((candidate) => candidate.key === link.toKey);
+      const requirement = codeByKey.get(link.fromKey);
+      if (task && requirement) {
+        task.dependsOn = task.dependsOn.filter((code) => code !== requirement);
+      }
+    }
+    this.touch();
+  }
+
   // Cada cambio crea una lista nueva para que OnPush vuelva a dibujar lo derivado.
+  protected setDeadline(task: EditableTask, rule: DeadlineRule): void {
+    task.dueReference = rule.dueReference;
+    task.dueOffsetDays = rule.dueOffsetDays;
+    task.dueOffsetMinutes = rule.dueOffsetMinutes;
+    this.tasks.update((tasks) => [...tasks]);
+    this.touch();
+  }
+
   protected touch(): void {
     this.tasks.update((tasks) => [...tasks]);
     this.isDirty.set(true);
     this.issues.set([]);
   }
 
-  protected hasEvidenceForm(code: string): boolean {
-    return this.catalog()?.evidenceFormTaskCodes.includes(code) ?? false;
+  // Crear el primer campo marca la tarea como «exige evidencia»; quitar todos lo desmarca.
+  protected setEvidenceForm(task: EditableTask, form: EvidenceForm | null): void {
+    if (!task.evidenceForm && form) task.requiresEvidence = true;
+    if (!form) task.requiresEvidence = false;
+    task.evidenceForm = form;
+    this.touch();
   }
 
   protected isParticipantAssignment(code: string): boolean {
@@ -160,7 +298,6 @@ export class TemplateEditorPage implements OnInit {
         );
       }
     }
-    if (!this.hasEvidenceForm(code)) task.requiresEvidence = false;
     this.touch();
   }
 
@@ -174,10 +311,11 @@ export class TemplateEditorPage implements OnInit {
   // La tarea nueva depende de la última, que es el caso más común en un flujo secuencial.
   protected addTask(): void {
     const last = this.tasks().at(-1);
+    const key = this.nextKey++;
     this.tasks.update((tasks) => [
       ...tasks,
       {
-        key: this.nextKey++,
+        key,
         code: '',
         name: '',
         description: '',
@@ -187,12 +325,17 @@ export class TemplateEditorPage implements OnInit {
         dueOffsetDays: DEFAULT_DUE_OFFSET_DAYS,
         dueOffsetMinutes: 0,
         dependsOn: last?.code ? [last.code] : [],
+        evidenceForm: null,
+        // A la derecha de la última tarea, donde la flecha queda corta.
+        position: last ? { x: last.position.x + COLUMN_WIDTH, y: last.position.y } : { x: 0, y: 0 },
       },
     ]);
+    this.selectedKey.set(key);
     this.isDirty.set(true);
   }
 
   protected removeTask(task: EditableTask): void {
+    if (this.selectedKey() === task.key) this.selectedKey.set(null);
     this.tasks.update((tasks) =>
       tasks
         .filter((candidate) => candidate.key !== task.key)
@@ -226,6 +369,8 @@ export class TemplateEditorPage implements OnInit {
       dueOffsetDays: Number(task.dueOffsetDays) || 0,
       dueOffsetMinutes: Number(task.dueOffsetMinutes) || 0,
       dependsOn: task.dependsOn,
+      position: { x: Math.round(task.position.x), y: Math.round(task.position.y) },
+      evidenceForm: task.evidenceForm,
     }));
   }
 
