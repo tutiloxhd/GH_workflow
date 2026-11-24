@@ -1,5 +1,5 @@
 import { fail, succeed, type Result } from '../../../platform/result.js';
-import { evidenceSchemaFor } from '../domain/evidence-forms.js';
+import { evidenceSchemaFor, resolveEvidenceForm } from '../domain/evidence-forms.js';
 import { participantTypeForRole } from '../domain/participants.js';
 import { isTaskClosed, isTaskWorkable } from '../domain/statuses.js';
 import {
@@ -10,7 +10,7 @@ import {
 } from '../domain/task-rules.js';
 import {
   endCurrentParticipants,
-  findTaskCode,
+  findTaskEvidenceDefinition,
   hasEvidence,
   insertParticipant,
   upsertEvidence,
@@ -105,16 +105,19 @@ export type EvidenceFailure =
   | { readonly code: 'INVALID_EVIDENCE'; readonly invalidFields: readonly string[] };
 
 // Guarda o reemplaza el formulario de evidencia vigente de la tarea. El formulario se valida
-// antes de abrir la transacción: depende solo del código de la tarea, que nunca cambia.
+// antes de abrir la transacción: depende solo de la definición de la tarea, que nunca cambia.
 export async function submitTaskEvidence(
   dependencies: WorkflowDependencies,
   actor: Actor,
   taskId: number,
   formData: unknown,
 ): Promise<Result<TaskCommandResult, EvidenceFailure>> {
-  const taskCode = await findTaskCode(dependencies.database.db, taskId);
-  if (taskCode === null) return fail({ code: 'TASK_NOT_FOUND' });
-  const schema = evidenceSchemaFor(taskCode);
+  const definition = await findTaskEvidenceDefinition(dependencies.database.db, taskId);
+  if (definition === null) return fail({ code: 'TASK_NOT_FOUND' });
+  const schema = evidenceSchemaFor(
+    definition.code,
+    resolveEvidenceForm(definition.code, definition.evidenceForm),
+  );
   if (!schema) return fail({ code: 'EVIDENCE_NOT_APPLICABLE' });
   const parsed = schema.safeParse(formData);
   if (!parsed.success) {
@@ -139,7 +142,7 @@ export async function submitTaskEvidence(
       formData: parsed.data,
       submittedAt: context.now,
     });
-    context.record({ taskId, eventType: 'EVIDENCE_SUBMITTED', details: { code: taskCode } });
+    context.record({ taskId, eventType: 'EVIDENCE_SUBMITTED', details: { code: definition.code } });
     return succeed({ workflowId: context.workflow.id });
   });
   return outcome.isSuccess ? outcome : fail({ code: outcome.failure });

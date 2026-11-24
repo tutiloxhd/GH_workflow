@@ -1,0 +1,57 @@
+.card + .card {
+  margin-top: 16px;
+}
+
+.card-header {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+.card-header h2 {
+  min-width: 4ch;
+  text-align: center;
+}
+
+.data-table td .status-pill {
+  margin-left: 6px;
+}
+
+.row-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.warning {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-muted, rgba(234, 179, 8, 0.12));
+}
+
+.add-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  font-size: 0.8125rem;
+}
+
+@media (max-width: 760px) {
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    text-align: left;
+  }
+
+  .add-form > * {
+    flex: 1 1 100%;
+  }
+}

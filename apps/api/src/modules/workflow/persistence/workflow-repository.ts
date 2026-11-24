@@ -19,7 +19,7 @@ import {
   workflowNotificationRuleSets,
 } from '../../../platform/database/schema/notification.schema.js';
 import type { RoleCode } from '../../identity/domain/role-code.js';
-import type { BusinessDates, DueReference } from '../domain/due-date.js';
+import type { BusinessDates, DeadlineDayKind, DueReference } from '../domain/due-date.js';
 import type {
   AssignmentType,
   CurrentParticipant,
@@ -341,6 +341,18 @@ export async function insertWorkflow(
   return inserted.id;
 }
 
+export async function findTemplateDeadlineDayKind(
+  executor: DatabaseExecutor,
+  templateId: number,
+): Promise<DeadlineDayKind> {
+  const [template] = await executor
+    .select({ deadlineDayKind: workflowTemplates.deadlineDayKind })
+    .from(workflowTemplates)
+    .where(eq(workflowTemplates.id, templateId));
+  if (!template) throw new Error('El workflow apunta a una plantilla inexistente');
+  return template.deadlineDayKind;
+}
+
 // Bloquea la instancia: todos los comandos sobre un workflow se serializan aquí.
 export async function lockWorkflow(
   executor: DatabaseExecutor,
@@ -516,16 +528,29 @@ export async function updateTask(
     .where(eq(taskInstances.id, taskId));
 }
 
-export async function findTaskCode(
+// Código y formulario de evidencia guardado (sin resolver) de la definición de una tarea.
+export async function findTaskEvidenceDefinition(
   executor: DatabaseExecutor,
   taskId: number,
-): Promise<string | null> {
+): Promise<{ code: string; evidenceForm: unknown } | null> {
   const [task] = await executor
-    .select({ code: taskDefinitions.code })
+    .select({ code: taskDefinitions.code, evidenceForm: taskDefinitions.evidenceForm })
     .from(taskInstances)
     .innerJoin(taskDefinitions, eq(taskDefinitions.id, taskInstances.taskDefinitionId))
     .where(eq(taskInstances.id, taskId));
-  return task?.code ?? null;
+  return task ?? null;
+}
+
+// Formularios guardados (sin resolver) de las tareas de una plantilla, por definición.
+export async function findStoredEvidenceForms(
+  executor: DatabaseExecutor,
+  templateId: number,
+): Promise<Map<number, unknown>> {
+  const rows = await executor
+    .select({ id: taskDefinitions.id, evidenceForm: taskDefinitions.evidenceForm })
+    .from(taskDefinitions)
+    .where(eq(taskDefinitions.workflowTemplateId, templateId));
+  return new Map(rows.map((row) => [row.id, row.evidenceForm]));
 }
 
 // Un formulario vigente por tarea: enviarlo de nuevo reemplaza el anterior.

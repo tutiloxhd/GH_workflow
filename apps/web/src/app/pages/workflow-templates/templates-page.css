@@ -1,0 +1,26 @@
+.flow-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.data-table td .status-pill + .status-pill {
+  margin-left: 6px;
+}
+
+.version-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .card-header {
+    flex-wrap: wrap;
+  }
+
+  .version-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    text-align: left;
+  }
+}

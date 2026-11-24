@@ -115,8 +115,53 @@ export function addBusinessCalendarDays(instant: Date, days: number): Date {
   });
 }
 
-export function applyDeadlineRule(referenceAt: Date, rule: DeadlineRule): Date {
-  const shifted = addBusinessCalendarDays(referenceAt, rule.dueOffsetDays);
+// Cómo se cuentan los días de un plazo. Lo fija la versión de la plantilla del workflow:
+// las versiones heredadas cuentan días corridos y las nuevas, días hábiles (ADR 0010).
+export const DEADLINE_DAY_KINDS = ['CALENDAR', 'BUSINESS'] as const;
+export type DeadlineDayKind = (typeof DEADLINE_DAY_KINDS)[number];
+
+export type DeadlineCalendar =
+  | { readonly dayKind: 'CALENDAR' }
+  // `holidays` son días «AAAA-MM-DD» de Santiago que no cuentan como hábiles.
+  | { readonly dayKind: 'BUSINESS'; readonly holidays: ReadonlySet<string> };
+
+export const CALENDAR_DAYS: DeadlineCalendar = { dayKind: 'CALENDAR' };
+
+const SATURDAY = 6;
+const SUNDAY = 0;
+
+// Día hábil: de lunes a viernes y no feriado, según el calendario de Santiago.
+export function isBusinessDay(dayKey: string, holidays: ReadonlySet<string>): boolean {
+  const weekday = new Date(`${dayKey}T00:00:00Z`).getUTCDay();
+  return weekday !== SATURDAY && weekday !== SUNDAY && !holidays.has(dayKey);
+}
+
+// Avanza (o retrocede, si `days` es negativo) la cantidad de días hábiles indicada, conservando la
+// hora local. Con 0 días la fecha no se mueve aunque caiga en un día inhábil.
+export function addBusinessDays(
+  instant: Date,
+  days: number,
+  holidays: ReadonlySet<string>,
+): Date {
+  const step = Math.sign(days);
+  let remaining = Math.abs(days);
+  let shifted = instant;
+  while (remaining > 0) {
+    shifted = addBusinessCalendarDays(shifted, step);
+    if (isBusinessDay(businessDayKey(shifted), holidays)) remaining--;
+  }
+  return shifted;
+}
+
+export function applyDeadlineRule(
+  referenceAt: Date,
+  rule: DeadlineRule,
+  calendar: DeadlineCalendar = CALENDAR_DAYS,
+): Date {
+  const shifted =
+    calendar.dayKind === 'BUSINESS'
+      ? addBusinessDays(referenceAt, rule.dueOffsetDays, calendar.holidays)
+      : addBusinessCalendarDays(referenceAt, rule.dueOffsetDays);
   return new Date(shifted.getTime() + rule.dueOffsetMinutes * MILLISECONDS_PER_MINUTE);
 }
 
@@ -141,6 +186,7 @@ export function computeDeadline(
   rule: DeadlineRule,
   clockStart: Date,
   businessDates: BusinessDates,
+  calendar: DeadlineCalendar = CALENDAR_DAYS,
 ): ComputedDeadline {
   const referenceAt =
     rule.dueReference === 'TASK_ACTIVATED_AT'
@@ -148,7 +194,7 @@ export function computeDeadline(
       : businessDates[BUSINESS_DATE_BY_REFERENCE[rule.dueReference]];
   // Sin fecha de referencia la tarea queda sin vencimiento: no se inventa una fecha.
   if (!referenceAt) return { dueReferenceAt: null, dueAt: null };
-  return { dueReferenceAt: referenceAt, dueAt: applyDeadlineRule(referenceAt, rule) };
+  return { dueReferenceAt: referenceAt, dueAt: applyDeadlineRule(referenceAt, rule, calendar) };
 }
 
 export const isOverdue = (dueAt: Date | null, now: Date): boolean =>

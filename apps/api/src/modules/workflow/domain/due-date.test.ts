@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addBusinessCalendarDays,
+  addBusinessDays,
   computeDeadline,
   isOverdue,
   type BusinessDates,
@@ -76,6 +77,38 @@ describe('computeDeadline', () => {
         noBusinessDates,
       ),
     ).toEqual({ dueReferenceAt: null, dueAt: null });
+  });
+});
+
+describe('addBusinessDays', () => {
+  // Jueves 24 de diciembre de 2026, 10:00 en Santiago (UTC-3); el 25 es feriado.
+  const christmasEve = new Date('2026-12-24T13:00:00Z');
+  const holidays = new Set(['2026-12-25']);
+
+  it('salta fines de semana y feriados conservando la hora local', () => {
+    expect(addBusinessDays(christmasEve, 2, holidays).toISOString()).toBe(
+      '2026-12-29T13:00:00.000Z',
+    );
+  });
+
+  it('retrocede contando solo días hábiles', () => {
+    expect(addBusinessDays(new Date('2026-12-28T13:00:00Z'), -1, holidays).toISOString()).toBe(
+      '2026-12-24T13:00:00.000Z',
+    );
+  });
+
+  it('con cero días no mueve la fecha', () => {
+    expect(addBusinessDays(christmasEve, 0, holidays)).toEqual(christmasEve);
+  });
+
+  it('computeDeadline usa días hábiles cuando el calendario lo indica', () => {
+    const deadline = computeDeadline(
+      { dueReference: 'TASK_ACTIVATED_AT', dueOffsetDays: 1, dueOffsetMinutes: 30 },
+      christmasEve,
+      noBusinessDates,
+      { dayKind: 'BUSINESS', holidays },
+    );
+    expect(deadline.dueAt?.toISOString()).toBe('2026-12-28T13:30:00.000Z');
   });
 });
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: API Workflow de Remates
-  version: 0.5.0
+  version: 0.7.0
   description: >
     Contrato de la API del workflow de remates judiciales. Se amplía en cada sprint,
     antes o junto con la implementación de cada endpoint.
@@ -22,6 +22,10 @@ tags:
   - name: notifications
   - name: sync
     description: Estado de la sincronización con admin_new; exige rol ADMIN
+  - name: workflow-templates
+    description: Plantillas de flujo (borrador, publicada, archivada); exige rol ADMIN
+  - name: holidays
+    description: Feriados de Chile usados para contar plazos en días hábiles
 paths:
   /api/health:
     get:
@@ -872,6 +876,233 @@ paths:
         '403': { $ref: '#/components/responses/Problem' }
         '404': { $ref: '#/components/responses/Problem' }
 
+  /api/holidays:
+    get:
+      operationId: listHolidays
+      summary: Feriados de un año
+      tags: [holidays]
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer, minimum: 2000, maximum: 2100 } }
+      responses:
+        '200': { $ref: '#/components/responses/HolidayYear' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: addHoliday
+      summary: Agrega un feriado a mano (ADMIN)
+      description: Responde 409 `HOLIDAY_EXISTS` si el día ya es feriado.
+      tags: [holidays]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [date, name]
+              properties:
+                date: { type: string, format: date }
+                name: { type: string, minLength: 1, maxLength: 200 }
+                isInalienable: { type: boolean, default: false }
+      responses:
+        '201': { $ref: '#/components/responses/HolidayYear' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+  /api/holidays/sync:
+    post:
+      operationId: syncHolidays
+      summary: Sincroniza los feriados de un año desde Boostr (ADMIN)
+      description: >
+        Reemplaza los feriados sincronizados del año; los ingresados a mano se conservan. Responde
+        409 `HOLIDAY_SOURCE_NOT_CONFIGURED` si la API no tiene fuente de feriados y 502
+        `HOLIDAY_SOURCE_UNAVAILABLE` si la fuente falla.
+      tags: [holidays]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [year]
+              properties:
+                year: { type: integer, minimum: 2000, maximum: 2100 }
+      responses:
+        '200': { $ref: '#/components/responses/HolidayYear' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+        '502': { $ref: '#/components/responses/Problem' }
+  /api/holidays/{date}:
+    delete:
+      operationId: removeHoliday
+      summary: Elimina un feriado (ADMIN)
+      tags: [holidays]
+      parameters:
+        - { name: date, in: path, required: true, schema: { type: string, format: date } }
+      responses:
+        '204': { description: Feriado eliminado }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+  /api/workflow-templates:
+    get:
+      operationId: listWorkflowTemplates
+      summary: Lista las plantillas de flujo y sus versiones (ADMIN)
+      tags: [workflow-templates]
+      responses:
+        '200':
+          description: Plantillas ordenadas por código y versión descendente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [templates]
+                properties:
+                  templates:
+                    type: array
+                    items: { $ref: '#/components/schemas/WorkflowTemplateSummary' }
+        '403': { $ref: '#/components/responses/Problem' }
+    post:
+      operationId: createWorkflowTemplateDraft
+      summary: Crea un borrador copiando una versión, o un flujo nuevo vacío (ADMIN)
+      description: >
+        Con `sourceTemplateId` crea la siguiente versión del mismo código copiando sus tareas.
+        Con `code` y `name` crea un flujo nuevo (versión 1) sin tareas. Cada código admite un
+        solo borrador a la vez: 409 `TEMPLATE_DRAFT_EXISTS` o `TEMPLATE_CODE_TAKEN`.
+      tags: [workflow-templates]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [sourceTemplateId]
+                  properties:
+                    sourceTemplateId: { type: integer, minimum: 1 }
+                - type: object
+                  additionalProperties: false
+                  required: [code, name]
+                  properties:
+                    code: { type: string, maxLength: 100, pattern: '^[A-Z][A-Z0-9_]*$' }
+                    name: { type: string, minLength: 1, maxLength: 150 }
+      responses:
+        '201': { $ref: '#/components/responses/WorkflowTemplateChanged' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /api/workflow-templates/catalog:
+    get:
+      operationId: getWorkflowTemplateCatalog
+      summary: Opciones del editor de plantillas (ADMIN)
+      tags: [workflow-templates]
+      responses:
+        '200':
+          description: Roles, referencias de plazo y tareas con comportamiento especial
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  [roles, dueReferences, evidenceFieldTypes, participantAssignmentTaskCode]
+                properties:
+                  roles: { type: array, items: { $ref: '#/components/schemas/RoleCode' } }
+                  dueReferences: { type: array, items: { type: string } }
+                  evidenceFieldTypes:
+                    description: Tipos de campo disponibles para los formularios de evidencia.
+                    type: array
+                    items: { type: string, enum: [TEXT, LONG_TEXT, DATE, AMOUNT_CLP, CHOICE] }
+                  participantAssignmentTaskCode:
+                    description: Código de la tarea que exige asignar gestor y postor para completarse.
+                    type: string
+        '403': { $ref: '#/components/responses/Problem' }
+
+  /api/workflow-templates/{templateId}:
+    parameters:
+      - { name: templateId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+    get:
+      operationId: getWorkflowTemplate
+      summary: Detalle de una plantilla con sus tareas (ADMIN)
+      tags: [workflow-templates]
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowTemplateChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    put:
+      operationId: saveWorkflowTemplateDraft
+      summary: Reemplaza nombre y tareas de un borrador (ADMIN)
+      description: >
+        El orden del arreglo define el orden de las tareas. Responde 400 `INVALID_TEMPLATE` con
+        `issues` si hay códigos repetidos, dependencias desconocidas o cíclicas, o evidencia
+        exigida en una tarea sin formulario; 409 `TEMPLATE_NOT_DRAFT` si ya fue publicada.
+      tags: [workflow-templates]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, tasks]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 150 }
+                tasks:
+                  type: array
+                  maxItems: 100
+                  items: { $ref: '#/components/schemas/WorkflowTemplateTask' }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowTemplateChanged' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteWorkflowTemplateDraft
+      summary: Elimina un borrador (ADMIN)
+      description: Las versiones publicadas no se eliminan; se archivan.
+      tags: [workflow-templates]
+      responses:
+        '204': { description: Borrador eliminado }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /api/workflow-templates/{templateId}/publish:
+    post:
+      operationId: publishWorkflowTemplate
+      summary: Publica un borrador y lo deja como única plantilla activa (ADMIN)
+      description: >
+        Valida la definición (al menos una tarea, sin ciclos). Los workflows existentes conservan
+        su versión; los nuevos usan esta. Copia las reglas de notificación de la plantilla que
+        estaba activa.
+      tags: [workflow-templates]
+      parameters:
+        - { name: templateId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowTemplateChanged' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /api/workflow-templates/{templateId}/archive:
+    post:
+      operationId: archiveWorkflowTemplate
+      summary: Archiva una versión publicada que no está activa (ADMIN)
+      description: Sus workflows siguen funcionando. 409 `TEMPLATE_ACTIVE` si es la activa.
+      tags: [workflow-templates]
+      parameters:
+        - { name: templateId, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowTemplateChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/Problem' }
+
 security:
   - sessionCookie: []
 
@@ -912,6 +1143,35 @@ components:
       required: true
       schema: { type: integer, minimum: 1 }
   responses:
+    HolidayYear:
+      description: Feriados del año y si la sincronización está configurada
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [year, holidays, canSync]
+            properties:
+              year: { type: integer }
+              canSync: { type: boolean }
+              holidays:
+                type: array
+                items:
+                  type: object
+                  required: [date, name, isInalienable, source]
+                  properties:
+                    date: { type: string, format: date }
+                    name: { type: string }
+                    isInalienable: { type: boolean }
+                    source: { type: string, enum: [BOOSTR, MANUAL] }
+    WorkflowTemplateChanged:
+      description: Detalle de la plantilla
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [template]
+            properties:
+              template: { $ref: '#/components/schemas/WorkflowTemplateDetail' }
     Problem:
       description: Error en formato Problem Details
       content:
@@ -944,6 +1204,108 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    WorkflowTemplateTask:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - name
+        - description
+        - responsibleRole
+        - requiresEvidence
+        - dueReference
+        - dueOffsetDays
+        - dueOffsetMinutes
+        - dependsOn
+      properties:
+        code: { type: string, maxLength: 50, pattern: '^[A-Z][A-Z0-9_]*$' }
+        name: { type: string, minLength: 1, maxLength: 150 }
+        description: { type: [string, 'null'], maxLength: 2000 }
+        responsibleRole: { $ref: '#/components/schemas/RoleCode' }
+        requiresEvidence: { type: boolean }
+        dueReference:
+          type: string
+          enum:
+            - TASK_ACTIVATED_AT
+            - AUCTION_AT
+            - GUARANTEE_PAYMENT_AT
+            - GUARANTEE_RETURN_AT
+            - BALANCE_PAYMENT_AT
+        dueOffsetDays: { type: integer, minimum: -365, maximum: 365 }
+        dueOffsetMinutes: { type: integer, minimum: -525600, maximum: 525600 }
+        dependsOn:
+          description: Códigos de las tareas que deben completarse antes.
+          type: array
+          items: { type: string }
+        position:
+          description: >
+            Posición de la tarea en el diagrama del editor; null (u omitida al guardar) deja que
+            el editor la ubique automáticamente.
+          type: [object, 'null']
+          additionalProperties: false
+          required: [x, y]
+          properties:
+            x: { type: integer, minimum: -100000, maximum: 100000 }
+            y: { type: integer, minimum: -100000, maximum: 100000 }
+        evidenceForm:
+          description: >
+            Formulario de evidencia de la tarea; null = sin formulario. Al leer, las tareas
+            heredadas sin formulario guardado muestran el inicial de su código.
+          oneOf:
+            - { $ref: '#/components/schemas/EvidenceForm' }
+            - { type: 'null' }
+    WorkflowTemplateSummary:
+      type: object
+      required:
+        - id
+        - code
+        - name
+        - version
+        - status
+        - isActive
+        - deadlineDayKind
+        - taskCount
+        - workflowCount
+        - createdAt
+        - createdBy
+        - publishedAt
+        - publishedBy
+        - archivedAt
+      properties:
+        id: { type: integer }
+        code: { type: string }
+        name: { type: string }
+        version: { type: integer }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+        isActive: { type: boolean }
+        deadlineDayKind:
+          type: string
+          enum: [CALENDAR, BUSINESS]
+          description: Cómo se cuentan los días de los plazos (corridos o hábiles)
+        taskCount: { type: integer }
+        workflowCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        createdBy: { $ref: '#/components/schemas/TemplateAuthor' }
+        publishedAt: { type: [string, 'null'], format: date-time }
+        publishedBy: { $ref: '#/components/schemas/TemplateAuthor' }
+        archivedAt: { type: [string, 'null'], format: date-time }
+    WorkflowTemplateDetail:
+      allOf:
+        - { $ref: '#/components/schemas/WorkflowTemplateSummary' }
+        - type: object
+          required: [tasks]
+          properties:
+            tasks:
+              type: array
+              items: { $ref: '#/components/schemas/WorkflowTemplateTask' }
+    TemplateAuthor:
+      oneOf:
+        - type: 'null'
+        - type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
     NotificationRule:
       type: object
       additionalProperties: false
@@ -1164,16 +1526,22 @@ components:
             updatedAt: { type: string, format: date-time }
     EvidenceForm:
       type: object
-      description: Formulario básico de prueba; su estructura definitiva la define negocio
+      description: >
+        Formulario de evidencia configurado en la versión del flujo (hasta 30 campos). Una lista
+        (CHOICE) exige opciones; los demás tipos no las aceptan.
+      additionalProperties: false
+      required: [fields]
       properties:
         fields:
           type: array
+          maxItems: 30
           items:
             type: object
+            additionalProperties: false
             required: [name, label, type, isRequired]
             properties:
-              name: { type: string }
-              label: { type: string }
+              name: { type: string, pattern: '^[a-z][a-zA-Z0-9]*$', maxLength: 50 }
+              label: { type: string, minLength: 1, maxLength: 150 }
               type: { type: string, enum: [TEXT, LONG_TEXT, DATE, AMOUNT_CLP, CHOICE] }
               isRequired: { type: boolean }
               options:
@@ -1238,6 +1606,7 @@ components:
             assignmentRegion: { type: [string, 'null'] }
             auctionMode: { type: [string, 'null'] }
         auctionAt: { type: [string, 'null'], format: date-time }
+        deadlineDayKind: { type: string, enum: [CALENDAR, BUSINESS] }
         participants:
           type: array
           items:

@@ -1,5 +1,6 @@
 // Contratos del motor de workflow (apps/api/openapi.yaml) y sus textos visibles.
 import type { RoleCode } from '../users/user.model';
+import type { DeadlineDayKind } from './deadline-rule';
 
 export type WorkflowStatus = 'ACTIVE' | 'SUSPENDED' | 'CANCELLED' | 'COMPLETED';
 export type TaskStatus =
@@ -82,6 +83,7 @@ export interface WorkflowDetail {
     readonly auctionMode: string | null;
   } | null;
   readonly auctionAt: string | null;
+  readonly deadlineDayKind: DeadlineDayKind;
   readonly participants: readonly WorkflowParticipant[];
   readonly tasks: readonly WorkflowTask[];
 }

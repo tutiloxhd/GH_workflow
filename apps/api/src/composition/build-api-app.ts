@@ -1,10 +1,13 @@
 import type { Express } from 'express';
+import type { HolidayProvider } from '../modules/holidays/source/holiday-provider.js';
+import { createHolidaysRouter } from '../modules/holidays/http/holidays.router.js';
 import { createHealthRouter } from '../modules/health/health.router.js';
 import { createSyncRouter } from '../modules/admin-new-sync/http/sync.router.js';
 import type { IdentityDependencies } from '../modules/identity/application/identity-dependencies.js';
 import { createAuthRouter } from '../modules/identity/http/auth.router.js';
 import { createUsersRouter } from '../modules/identity/http/users.router.js';
 import { createWorkflowRouter } from '../modules/workflow/http/workflow.router.js';
+import { createTemplatesRouter } from '../modules/workflow-templates/http/templates.router.js';
 import { createNotificationsRouter } from '../modules/notifications/http/notifications.router.js';
 import { createApp } from '../platform/http/create-app.js';
 import { logger } from '../platform/logging/logger.js';
@@ -12,6 +15,8 @@ import { logger } from '../platform/logging/logger.js';
 export interface ApiAppSettings {
   readonly allowedOrigin: string;
   readonly isSecureCookie: boolean;
+  // Fuente de feriados; null si no hay clave configurada (se ingresan a mano).
+  readonly holidayProvider?: HolidayProvider | null;
 }
 
 // Raíz de composición: conecta los módulos con sus dependencias concretas.
@@ -29,6 +34,14 @@ export function buildApiApp(identity: IdentityDependencies, settings: ApiAppSett
       { path: '/users', router: createUsersRouter(identity) },
       { path: '', router: createNotificationsRouter(identity) },
       { path: '/sync', router: createSyncRouter(workflow, identity) },
+      { path: '/workflow-templates', router: createTemplatesRouter(workflow, identity) },
+      {
+        path: '/holidays',
+        router: createHolidaysRouter(
+          { ...workflow, holidayProvider: settings.holidayProvider ?? null },
+          identity,
+        ),
+      },
       { path: '', router: createWorkflowRouter(workflow, identity) },
     ],
     reportError: (error, context) => {
