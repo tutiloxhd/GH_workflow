@@ -1,7 +1,14 @@
 import type { DatabaseExecutor } from '../../../platform/database/database.js';
 import type { RoleCode } from '../../identity/domain/role-code.js';
 import { findFirstActiveUserIdWithRole } from '../../identity/persistence/users-repository.js';
-import { computeDeadline, type BusinessDates } from '../domain/due-date.js';
+import { findHolidayDayKeys } from '../../holidays/persistence/holidays-repository.js';
+import {
+  CALENDAR_DAYS,
+  computeDeadline,
+  type BusinessDates,
+  type DeadlineCalendar,
+  type DeadlineRule,
+} from '../domain/due-date.js';
 import {
   currentHolder,
   participantTypeForRole,
@@ -14,6 +21,7 @@ import {
   findPropertyDates,
   type PropertyDates,
   findTaskRequirements,
+  findTemplateDeadlineDayKind,
   findWorkflowTasks,
   insertEvents,
   lockWorkflow,
@@ -24,6 +32,15 @@ import {
   type TaskRecord,
   type WorkflowRecord,
 } from '../persistence/workflow-repository.js';
+
+async function loadDeadlineCalendar(
+  executor: DatabaseExecutor,
+  templateId: number,
+): Promise<DeadlineCalendar> {
+  const dayKind = await findTemplateDeadlineDayKind(executor, templateId);
+  if (dayKind === 'CALENDAR') return CALENDAR_DAYS;
+  return { dayKind, holidays: await findHolidayDayKeys(executor) };
+}
 
 // Estado de un workflow cargado dentro de una transacción, con la instancia bloqueada.
 // Los cambios se escriben en la base y se reflejan aquí para los pasos siguientes del comando.
@@ -38,6 +55,7 @@ export class WorkflowContext {
     tasks: TaskRecord[],
     private readonly requirements: ReadonlyMap<number, readonly number[]>,
     private participantList: CurrentParticipant[],
+    private readonly calendar: DeadlineCalendar,
     readonly now: Date,
     readonly actorUserId: number | null,
     private readonly eventSource?: 'USER' | 'SYSTEM' | 'SYNC',
@@ -64,6 +82,7 @@ export class WorkflowContext {
       await findWorkflowTasks(executor, workflowId),
       await findTaskRequirements(executor, workflow.templateId),
       await findCurrentParticipants(executor, workflowId),
+      await loadDeadlineCalendar(executor, workflow.templateId),
       now,
       actorUserId,
       eventSource,
@@ -80,6 +99,11 @@ export class WorkflowContext {
 
   get businessDates(): BusinessDates {
     return this.dates;
+  }
+
+  // Vencimiento de una regla de plazo según el calendario de la plantilla del workflow.
+  deadlineFor(rule: DeadlineRule, clockStart: Date) {
+    return computeDeadline(rule, clockStart, this.dates, this.calendar);
   }
 
   get assignmentRegion(): string | null {
@@ -150,7 +174,7 @@ export class WorkflowContext {
   async activateReadyTasks(): Promise<void> {
     for (const task of findTasksReadyToActivate(this.taskList, this.requirements)) {
       const assignment = await this.resolveAssignment(task.responsibleRole);
-      const deadline = computeDeadline(task, this.now, this.dates);
+      const deadline = this.deadlineFor(task, this.now);
       await this.changeTask(task.id, {
         status: 'READY',
         activatedAt: this.now,
@@ -178,7 +202,7 @@ export class WorkflowContext {
     for (const task of this.taskList.filter(
       (candidate) => isTaskWorkable(candidate.status) || candidate.status === 'SUSPENDED',
     )) {
-      const deadline = computeDeadline(task, clockStart, this.dates);
+      const deadline = this.deadlineFor(task, clockStart);
       await this.changeTask(task.id, deadline);
       if (deadline.dueAt?.getTime() !== task.dueAt?.getTime()) {
         this.record({

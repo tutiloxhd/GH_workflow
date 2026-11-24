@@ -150,6 +150,19 @@ export async function publishNotificationRuleSet(
   return sets.find((set) => set.id === newRuleSetId);
 }
 
+// Reglas iniciales de una plantilla sin reglas previas que copiar (mismas que el seed 0005).
+export const DEFAULT_NOTIFICATION_RULES: readonly NotificationRuleInput[] = [
+  { eventType: 'TASK_ASSIGNED', offsetMinutes: 0, isEnabled: true },
+  { eventType: 'TASK_REMINDER', offsetMinutes: 2880, isEnabled: true },
+  { eventType: 'TASK_ESCALATION', offsetMinutes: 1440, isEnabled: true },
+  { eventType: 'TASK_OVERDUE', offsetMinutes: 0, isEnabled: true },
+  { eventType: 'TASK_COMPLETED', offsetMinutes: 0, isEnabled: true },
+  { eventType: 'WORKFLOW_SUSPENDED', offsetMinutes: 0, isEnabled: true },
+  { eventType: 'WORKFLOW_RESUMED', offsetMinutes: 0, isEnabled: true },
+  { eventType: 'WORKFLOW_CANCELLED', offsetMinutes: 0, isEnabled: true },
+  { eventType: 'WORKFLOW_REPROGRAMMED', offsetMinutes: 0, isEnabled: true },
+];
+
 export function hasAllNotificationTriggers(rules: readonly NotificationRuleInput[]): boolean {
   return (
     rules.length === NOTIFICATION_TRIGGERS.length &&

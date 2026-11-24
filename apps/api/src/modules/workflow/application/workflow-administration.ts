@@ -1,7 +1,6 @@
 import { fail, succeed, type Result } from '../../../platform/result.js';
 import { findUserAccountById } from '../../identity/persistence/users-repository.js';
 import type { DeadlineRule } from '../domain/due-date.js';
-import { computeDeadline } from '../domain/due-date.js';
 import type { ParticipantType } from '../domain/participants.js';
 import { isParticipantRegionEligible } from '../domain/participant-eligibility.js';
 import { isTaskClosed, isTaskWorkable, isWorkflowClosed } from '../domain/statuses.js';
@@ -146,7 +145,7 @@ export function changeTaskDeadline(
     // Un plazo desde la activación sigue midiéndose desde donde corría (activación o reprogramación).
     const clockStart = task.dueReferenceAt ?? task.activatedAt ?? context.now;
     const deadline = isTaskWorkable(task.status)
-      ? computeDeadline(rule, clockStart, context.businessDates)
+      ? context.deadlineFor(rule, clockStart)
       : {};
     await context.changeTask(taskId, { ...rule, ...deadline });
     context.record({

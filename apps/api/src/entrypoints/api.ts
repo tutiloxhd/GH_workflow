@@ -5,6 +5,7 @@ import {
 } from '../composition/identity-dependencies-from-env.js';
 import { toDatabaseSettings } from '../config/database-settings.js';
 import { parseEnv } from '../config/env.js';
+import { createBoostrHolidayProvider } from '../modules/holidays/source/boostr-holiday-provider.js';
 import { connectDatabase } from '../platform/database/database.js';
 import { logger } from '../platform/logging/logger.js';
 
@@ -15,6 +16,7 @@ function start(): void {
   const app = buildApiApp(identityDependenciesFromEnv(env, database), {
     allowedOrigin: env.WEB_ORIGIN,
     isSecureCookie: usesSecureCookies(env),
+    holidayProvider: createBoostrHolidayProvider(),
   });
 
   const server = app.listen(env.PORT, () => {

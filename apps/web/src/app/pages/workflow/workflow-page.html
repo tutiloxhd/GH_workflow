@@ -292,6 +292,7 @@
   @if (taskEditingDeadline(); as task) {
     <app-deadline-dialog
       [task]="task"
+      [dayKind]="workflow()?.deadlineDayKind ?? 'CALENDAR'"
       (saved)="onChanged($event)"
       (closed)="taskEditingDeadline.set(null)"
     />

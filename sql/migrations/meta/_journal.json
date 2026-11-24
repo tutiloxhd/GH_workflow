@@ -99,6 +99,34 @@
       "when": 1795452000000,
       "tag": "0013_canonical_regions",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1795950000000,
+      "tag": "0014_workflow_template_lifecycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1796000000000,
+      "tag": "0015_business_day_deadlines",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1796000100000,
+      "tag": "0016_task_diagram_position",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1796000200000,
+      "tag": "0017_task_evidence_form",
+      "breakpoints": true
     }
   ]
 }
