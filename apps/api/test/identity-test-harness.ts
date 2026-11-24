@@ -126,6 +126,8 @@ export async function startIdentityTestContext(): Promise<IdentityTestContext> {
 }
 
 export async function resetIdentityTables(context: IdentityTestContext): Promise<void> {
+  // Las reglas publicadas en pruebas conservan su versión, pero no al autor que se va a borrar.
+  await context.database.pool.query('UPDATE notification_rule_sets SET created_by = NULL');
   for (const table of MUTABLE_TABLES) await context.database.pool.query(`DELETE FROM ${table}`);
   context.clock.setTo(TEST_START_INSTANT);
   context.auditEvents.length = 0;
@@ -167,7 +169,7 @@ export interface ApiResponse {
 
 export async function callApi(
   context: IdentityTestContext,
-  method: 'GET' | 'POST' | 'PUT',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
   options: { body?: unknown; sessionCookie?: string } = {},
 ): Promise<ApiResponse> {

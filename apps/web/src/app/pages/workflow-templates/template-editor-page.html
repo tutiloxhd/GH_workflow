@@ -1,0 +1,313 @@
+@if (template(); as current) {
+  <header class="page-header">
+    <div>
+      <a class="back-link" routerLink="/flujos">← Flujos</a>
+      <h1>{{ current.name }} · v{{ current.version }}</h1>
+      <p>
+        <span class="status-pill" [class]="statusTones[current.status]">
+          {{ statusLabels[current.status] }}
+        </span>
+        @if (current.isActive) {
+          <span class="status-pill good">Activa</span>
+        }
+        <span class="flow-code">{{ current.code }}</span>
+        @if (current.publishedAt) {
+          · Publicada {{ formatDateTime(current.publishedAt) }}
+          @if (current.publishedBy) {
+            por {{ current.publishedBy.name }}
+          }
+        }
+        @if (current.workflowCount > 0) {
+          · {{ current.workflowCount }} remates la usan
+        }
+      </p>
+    </div>
+    <div class="page-actions">
+      @if (isEditable()) {
+        @if (confirming() === 'delete') {
+          <button type="button" class="button danger" [disabled]="isBusy()" (click)="deleteDraft()">
+            Confirmar: eliminar
+          </button>
+          <button type="button" class="button" (click)="confirming.set(null)">Cancelar</button>
+        } @else if (confirming() === 'publish') {
+          <button type="button" class="button primary" [disabled]="isBusy()" (click)="publish()">
+            Confirmar: publicar y activar
+          </button>
+          <button type="button" class="button" (click)="confirming.set(null)">Cancelar</button>
+        } @else {
+          <button
+            type="button"
+            class="button"
+            [disabled]="isBusy()"
+            (click)="confirming.set('delete')"
+          >
+            Eliminar borrador
+          </button>
+          <button type="button" class="button" [disabled]="isBusy() || !isDirty()" (click)="save()">
+            {{ isBusy() ? 'Guardando…' : 'Guardar borrador' }}
+          </button>
+          <button
+            type="button"
+            class="button primary"
+            [disabled]="isBusy() || localProblems().length > 0"
+            (click)="confirming.set('publish')"
+          >
+            Publicar
+          </button>
+        }
+      } @else if (current.status === 'PUBLISHED') {
+        <button
+          type="button"
+          class="button primary"
+          [disabled]="isBusy()"
+          (click)="createVersion()"
+        >
+          Crear nueva versión
+        </button>
+      }
+    </div>
+  </header>
+
+  <div class="page-body">
+    @if (confirming() === 'publish') {
+      <p class="form-error" role="alert">
+        Al publicar, esta versión pasa a ser la única activa: los remates nuevos la usarán. Los
+        remates en curso conservan su versión. La versión publicada ya no se puede editar.
+      </p>
+    }
+    @if (errorMessage(); as message) {
+      <div class="form-error" role="alert">
+        <p>{{ message }}</p>
+        @if (issues().length > 0) {
+          <ul>
+            @for (issue of issues(); track $index) {
+              <li>{{ describeIssue(issue) }}</li>
+            }
+          </ul>
+        }
+      </div>
+    }
+    @if (notice(); as message) {
+      <p class="notice" role="status">{{ message }}</p>
+    }
+    @if (!isEditable()) {
+      <p class="muted">
+        Las versiones publicadas no se modifican. Para cambiar el flujo crea una nueva versión: se
+        copia como borrador y al publicarla reemplaza a la activa.
+      </p>
+    }
+
+    <fieldset class="editor" [disabled]="!isEditable() || isBusy()">
+      <legend class="visually-hidden">Definición del flujo</legend>
+      <label class="field flow-name">
+        Nombre del flujo
+        <input name="flow-name" maxlength="150" [(ngModel)]="name" (ngModelChange)="touch()" />
+      </label>
+
+      <section class="card" aria-labelledby="tasks-title">
+        <div class="card-header">
+          <h2 id="tasks-title">Tareas ({{ tasks().length }})</h2>
+          @if (isDirty()) {
+            <span class="status-pill alert">Cambios sin guardar</span>
+          }
+        </div>
+
+        @if (localProblems().length > 0) {
+          <ul class="form-error local-problems" role="alert">
+            @for (problem of localProblems(); track problem) {
+              <li>{{ problem }}</li>
+            }
+          </ul>
+        }
+
+        <ol class="task-list">
+          @for (task of tasks(); track task.key; let index = $index, first = $first, last = $last) {
+            <li class="task-item">
+              <details [open]="!task.code">
+                <summary>
+                  <span class="task-order">{{ index + 1 }}</span>
+                  <span class="task-summary">
+                    <strong>{{ task.name || 'Tarea sin nombre' }}</strong>
+                    <span class="muted">
+                      {{ roleLabels[task.responsibleRole] }}
+                      @if (task.dependsOn.length > 0) {
+                        · después de {{ dependencyNames(task) }}
+                      } @else {
+                        · inicial
+                      }
+                      @if (task.requiresEvidence) {
+                        · exige evidencia
+                      }
+                    </span>
+                  </span>
+                </summary>
+
+                <div class="task-fields">
+                  <label class="field">
+                    Nombre
+                    <input
+                      [name]="'name-' + task.key"
+                      maxlength="150"
+                      [(ngModel)]="task.name"
+                      (ngModelChange)="touch()"
+                    />
+                  </label>
+                  <label class="field">
+                    Código
+                    <input
+                      [name]="'code-' + task.key"
+                      maxlength="50"
+                      [ngModel]="task.code"
+                      (ngModelChange)="renameTask(task, $event)"
+                    />
+                    @if (isParticipantAssignment(task.code)) {
+                      <span class="field-hint">
+                        Tarea especial: exige asignar gestor y postor para completarse.
+                      </span>
+                    } @else if (hasEvidenceForm(task.code)) {
+                      <span class="field-hint">Tiene formulario de evidencia disponible.</span>
+                    }
+                  </label>
+                  <label class="field wide">
+                    Descripción
+                    <textarea
+                      [name]="'description-' + task.key"
+                      rows="2"
+                      maxlength="2000"
+                      [(ngModel)]="task.description"
+                      (ngModelChange)="touch()"
+                    ></textarea>
+                  </label>
+                  <label class="field">
+                    Responsable
+                    <select
+                      [name]="'role-' + task.key"
+                      [(ngModel)]="task.responsibleRole"
+                      (ngModelChange)="touch()"
+                    >
+                      @for (role of catalog()?.roles ?? []; track role) {
+                        <option [ngValue]="role">{{ roleLabels[role] }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label class="field">
+                    Plazo desde
+                    <select
+                      [name]="'due-reference-' + task.key"
+                      [(ngModel)]="task.dueReference"
+                      (ngModelChange)="touch()"
+                    >
+                      @for (reference of catalog()?.dueReferences ?? []; track reference) {
+                        <option [ngValue]="reference">{{ dueReferenceLabels[reference] }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label class="field">
+                    Días
+                    <input
+                      type="number"
+                      [name]="'due-days-' + task.key"
+                      min="-365"
+                      max="365"
+                      step="1"
+                      [(ngModel)]="task.dueOffsetDays"
+                      (ngModelChange)="touch()"
+                    />
+                    <span class="field-hint">Negativo: antes de la fecha de referencia.</span>
+                  </label>
+                  <label class="field">
+                    Minutos
+                    <input
+                      type="number"
+                      [name]="'due-minutes-' + task.key"
+                      min="-525600"
+                      max="525600"
+                      step="1"
+                      [(ngModel)]="task.dueOffsetMinutes"
+                      (ngModelChange)="touch()"
+                    />
+                  </label>
+                  <label class="evidence-toggle wide">
+                    <input
+                      type="checkbox"
+                      [name]="'evidence-' + task.key"
+                      [disabled]="!hasEvidenceForm(task.code)"
+                      [(ngModel)]="task.requiresEvidence"
+                      (ngModelChange)="touch()"
+                    />
+                    Exige evidencia para completarse
+                    @if (!hasEvidenceForm(task.code)) {
+                      <span class="field-hint">(esta tarea no tiene formulario de evidencia)</span>
+                    }
+                  </label>
+
+                  <fieldset class="checkbox-list wide dependencies">
+                    <legend>Se activa cuando se completen</legend>
+                    @for (other of otherTasks(task); track other.key) {
+                      <label>
+                        <input
+                          type="checkbox"
+                          [checked]="task.dependsOn.includes(other.code)"
+                          (change)="toggleDependency(task, other.code, $any($event.target).checked)"
+                        />
+                        {{ other.name || other.code }}
+                      </label>
+                    } @empty {
+                      <p class="muted">No hay otras tareas.</p>
+                    }
+                    @if (task.dependsOn.length === 0) {
+                      <p class="field-hint">Sin dependencias: se activa al iniciar el remate.</p>
+                    }
+                  </fieldset>
+
+                  @if (isEditable()) {
+                    <div class="task-actions wide">
+                      <button
+                        type="button"
+                        class="button link"
+                        [disabled]="first"
+                        (click)="moveTask(index, -1)"
+                      >
+                        ↑ Subir
+                      </button>
+                      <button
+                        type="button"
+                        class="button link"
+                        [disabled]="last"
+                        (click)="moveTask(index, 1)"
+                      >
+                        ↓ Bajar
+                      </button>
+                      <button
+                        type="button"
+                        class="button link danger-link"
+                        (click)="removeTask(task)"
+                      >
+                        Quitar tarea
+                      </button>
+                    </div>
+                  }
+                </div>
+              </details>
+            </li>
+          } @empty {
+            <li class="empty-state">Este flujo todavía no tiene tareas.</li>
+          }
+        </ol>
+
+        @if (isEditable()) {
+          <div class="card-body">
+            <button type="button" class="button" (click)="addTask()">+ Agregar tarea</button>
+          </div>
+        }
+      </section>
+    </fieldset>
+  </div>
+} @else if (loadError(); as message) {
+  <div class="page-body">
+    <p class="form-error" role="alert">{{ message }}</p>
+    <a class="button" routerLink="/flujos">Volver a flujos</a>
+  </div>
+} @else {
+  <div class="page-body"><p class="muted">Cargando flujo…</p></div>
+}

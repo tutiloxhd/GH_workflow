@@ -26,6 +26,7 @@ import {
   PARTICIPANT_TYPES,
 } from '../../../modules/workflow/domain/participants.js';
 import { TASK_STATUSES, WORKFLOW_STATUSES } from '../../../modules/workflow/domain/statuses.js';
+import { TEMPLATE_STATUSES } from '../../../modules/workflow-templates/domain/template-definition.js';
 
 export const REPROGRAMMING_ORIGINS = ['SYNC', 'USER'] as const;
 export const REPROGRAMMING_STATUSES = ['PENDING', 'APPLIED', 'FAILED', 'CANCELLED'] as const;
@@ -53,10 +54,47 @@ export const workflowTemplates = mysqlTable(
     code: varchar('code', { length: 100 }).notNull(),
     name: varchar('name', { length: 150 }).notNull(),
     version: int('version', { unsigned: true }).notNull(),
+    // Por omisión PUBLISHED: las plantillas cargadas por seed ya están publicadas. La aplicación
+    // crea los borradores indicando DRAFT explícitamente.
+    status: varchar('status', { length: 20, enum: TEMPLATE_STATUSES })
+      .notNull()
+      .default('PUBLISHED'),
     isActive: boolean('is_active').notNull().default(false),
+    createdBy: referenceId('created_by'),
+    publishedBy: referenceId('published_by'),
+    publishedAt: utcDateTime('published_at'),
+    archivedBy: referenceId('archived_by'),
+    archivedAt: utcDateTime('archived_at'),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
-  (table) => [uniqueIndex('uq_workflow_templates_code_version').on(table.code, table.version)],
+  (table) => [
+    uniqueIndex('uq_workflow_templates_code_version').on(table.code, table.version),
+    foreignKey({
+      name: 'fk_workflow_templates_creator',
+      columns: [table.createdBy],
+      foreignColumns: [users.id],
+    }),
+    foreignKey({
+      name: 'fk_workflow_templates_publisher',
+      columns: [table.publishedBy],
+      foreignColumns: [users.id],
+    }),
+    foreignKey({
+      name: 'fk_workflow_templates_archiver',
+      columns: [table.archivedBy],
+      foreignColumns: [users.id],
+    }),
+    check(
+      'chk_workflow_templates_status',
+      sql`${table.status} IN ('DRAFT', 'PUBLISHED', 'ARCHIVED')`,
+    ),
+    // Solo una versión publicada puede estar activa.
+    check(
+      'chk_workflow_templates_active_published',
+      sql`${table.isActive} = FALSE OR ${table.status} = 'PUBLISHED'`,
+    ),
+  ],
 );
 
 export const taskDefinitions = mysqlTable(

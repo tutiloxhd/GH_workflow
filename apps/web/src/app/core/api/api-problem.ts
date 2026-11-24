@@ -6,6 +6,8 @@ export interface ApiProblem {
   readonly code: string;
   readonly violations?: readonly string[];
   readonly invalidFields?: readonly string[];
+  // Detalle estructurado de algunos errores (p. ej. problemas de una plantilla de flujo).
+  readonly issues?: readonly Readonly<Record<string, unknown>>[];
 }
 
 const NETWORK_FAILURE_CODE = 'NETWORK_FAILURE';
@@ -26,11 +28,19 @@ export function toApiProblem(error: unknown): ApiProblem {
         : undefined;
     const violations = 'violations' in body ? stringsOf(body.violations) : undefined;
     const invalidFields = 'invalidFields' in body ? stringsOf(body.invalidFields) : undefined;
+    const issues =
+      'issues' in body && Array.isArray(body.issues)
+        ? body.issues.filter(
+            (issue): issue is Readonly<Record<string, unknown>> =>
+              typeof issue === 'object' && issue !== null,
+          )
+        : undefined;
     return {
       status: error.status,
       code: body.code,
       ...(violations ? { violations } : {}),
       ...(invalidFields ? { invalidFields } : {}),
+      ...(issues ? { issues } : {}),
     };
   }
   return { status: error.status, code: error.status === 0 ? NETWORK_FAILURE_CODE : 'UNKNOWN' };
@@ -65,6 +75,13 @@ const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   VALIDATION_FAILED: 'Revisa los datos ingresados.',
   SYNC_EXECUTION_NOT_FOUND: 'La ejecución de sincronización ya no existe.',
   SOURCE_CHANGE_NOT_FOUND: 'El cambio de origen ya no existe.',
+  TEMPLATE_NOT_FOUND: 'El flujo ya no existe.',
+  TEMPLATE_NOT_DRAFT: 'Solo un borrador se puede editar, publicar o eliminar. Actualiza la vista.',
+  TEMPLATE_NOT_PUBLISHED: 'Solo una versión publicada se puede archivar.',
+  TEMPLATE_ACTIVE: 'La versión activa no se puede archivar; publica otra versión primero.',
+  TEMPLATE_DRAFT_EXISTS: 'Este flujo ya tiene un borrador en edición.',
+  TEMPLATE_CODE_TAKEN: 'Ya existe un flujo con ese código.',
+  INVALID_TEMPLATE: 'El flujo tiene problemas que impiden guardarlo o publicarlo.',
   SOURCE_CHANGE_NOT_REVIEWABLE:
     'Este cambio ya fue revisado o no se revisa a mano. Actualiza la vista.',
 };

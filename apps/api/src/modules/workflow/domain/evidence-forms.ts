@@ -65,6 +65,9 @@ const EVIDENCE_FORMS: Readonly<Record<string, EvidenceForm>> = {
   },
 };
 
+// Códigos de tarea que tienen formulario: solo esas tareas pueden exigir evidencia.
+export const EVIDENCE_FORM_TASK_CODES: readonly string[] = Object.keys(EVIDENCE_FORMS);
+
 export const evidenceFormFor = (taskCode: string): EvidenceForm | null =>
   EVIDENCE_FORMS[taskCode] ?? null;
 
