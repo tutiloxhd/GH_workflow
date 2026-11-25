@@ -203,31 +203,29 @@
               </li>
             }
           </ol>
+          @if (isDialog() && canChangeLifecycle && (current.status === 'ACTIVE' || current.status === 'SUSPENDED')) {
+            <aside class="diagram-actions" aria-label="Acciones del proceso">
+              <h3>Estados excepcionales</h3>
+              @if (canChangeLifecycle && current.status === 'ACTIVE') {
+                <button type="button" class="exception-action suspend-action" (click)="lifecycleAction.set('SUSPEND')">
+                  <span class="exception-icon" aria-hidden="true">Ⅱ</span>
+                  <span><strong>Suspender remate</strong><small>Se puede reanudar.</small></span>
+                </button>
+              }
+              @if (canChangeLifecycle && current.status === 'SUSPENDED') {
+                <button type="button" class="exception-action resume-action" (click)="lifecycleAction.set('RESUME')">
+                  <span class="exception-icon" aria-hidden="true">↻</span>
+                  <span><strong>Reanudar remate</strong><small>Continuar el proceso.</small></span>
+                </button>
+              }
+              <button type="button" class="exception-action cancel-action" (click)="lifecycleAction.set('CANCEL')">
+                <span class="exception-icon" aria-hidden="true">×</span>
+                <span><strong>Cancelar remate</strong><small>Cierra el workflow.</small></span>
+              </button>
+            </aside>
+          }
         </div>
       </div>
-      @if (isDialog() && canChangeLifecycle && (current.status === 'ACTIVE' || current.status === 'SUSPENDED')) {
-        <aside class="diagram-actions" aria-label="Acciones del proceso">
-          <h3>Estados excepcionales</h3>
-          @if (canChangeLifecycle && current.status === 'ACTIVE') {
-            <button type="button" class="exception-action suspend-action" (click)="lifecycleAction.set('SUSPEND')">
-              <span class="exception-icon" aria-hidden="true">Ⅱ</span>
-              <span><strong>Suspender remate</strong><small>Se puede reanudar.</small></span>
-            </button>
-          }
-          @if (canChangeLifecycle && current.status === 'SUSPENDED') {
-            <button type="button" class="exception-action resume-action" (click)="lifecycleAction.set('RESUME')">
-              <span class="exception-icon" aria-hidden="true">↻</span>
-              <span><strong>Reanudar remate</strong><small>Continuar el proceso.</small></span>
-            </button>
-          }
-          @if (canChangeLifecycle && (current.status === 'ACTIVE' || current.status === 'SUSPENDED')) {
-            <button type="button" class="exception-action cancel-action" (click)="lifecycleAction.set('CANCEL')">
-              <span class="exception-icon" aria-hidden="true">×</span>
-              <span><strong>Cancelar remate</strong><small>Cierra el workflow.</small></span>
-            </button>
-          }
-        </aside>
-      }
     </section>
 
     @if (!isDialog()) {
@@ -270,6 +268,7 @@
       [workflowId]="current.id"
       [taskId]="taskId"
       [isReadOnly]="true"
+      [fullscreenOnMobile]="!isDialog()"
       (changed)="onChanged($event)"
       (closed)="openTaskId.set(null)"
     />

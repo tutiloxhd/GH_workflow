@@ -9,9 +9,7 @@ import {
   viewChild,
   type OnInit,
 } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
 import { problemMessage, toApiProblem } from '../../core/api/api-problem';
-import { AuthService } from '../../core/auth/auth.service';
 import { formatDateTime, santiagoLocalToIso } from '../../core/time/santiago-time';
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
 import { ListPagination } from '../../shared/pagination/list-pagination';
@@ -23,7 +21,6 @@ import {
   WORKFLOW_STATUS_LABELS,
   WORKFLOW_STATUS_TONES,
   type ParticipantType,
-  type PropertyRow,
   type WorkflowDetail,
   type WorkflowFilterOptions,
   type WorkflowStatus,
@@ -55,40 +52,32 @@ const EMPTY_FILTER_OPTIONS: WorkflowFilterOptions = { communes: [], regions: [],
 // Tablero inicial: remates con workflow y, para ADMIN, propiedades que aún no lo tienen.
 @Component({
   selector: 'app-home-page',
-  imports: [RouterLink, ListPagination, Icon, ModalDialog, WorkflowPage],
+  imports: [ListPagination, Icon, ModalDialog, WorkflowPage],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './home-page.html',
   styleUrl: './home-page.css',
 })
 export class HomePage implements OnInit {
   private readonly api = inject(WorkflowApiService);
-  private readonly router = inject(Router);
-  private readonly auth = inject(AuthService);
   private readonly detailPanel = viewChild<ElementRef<HTMLElement>>('detailPanel');
   private detailTrigger: HTMLElement | null = null;
 
-  protected readonly user = this.auth.currentUser;
-  protected readonly isAdmin = this.auth.hasRole('ADMIN');
   protected readonly workflows = signal<readonly WorkflowSummary[]>([]);
   protected readonly totalWorkflows = signal(0);
   protected readonly filterOptions = signal<WorkflowFilterOptions>(EMPTY_FILTER_OPTIONS);
-  protected readonly properties = signal<readonly PropertyRow[]>([]);
-  protected readonly totalProperties = signal(0);
   protected readonly isLoading = signal(true);
   protected readonly errorMessage = signal<string | null>(null);
-  protected readonly startingPropertyId = signal<number | null>(null);
   protected readonly selectedWeekStart = signal(keyFromDate(mondayFor(localDateKey(new Date()))));
   protected readonly selectedWorkflow = signal<WorkflowDetail | null>(null);
   protected readonly isFlowOpen = signal(false);
   protected readonly isFiltersOpen = signal(false);
   protected readonly statusFilter = signal<WorkflowStatus | ''>('');
+  protected readonly searchQuery = signal('');
   protected readonly responsibleFilter = signal<number | null>(null);
   protected readonly communeFilter = signal('');
   protected readonly regionFilter = signal('');
   protected readonly pageSize = signal(10);
   protected readonly offset = signal(0);
-  protected readonly propertyPageSize = signal(10);
-  protected readonly propertyOffset = signal(0);
   protected readonly hasFilters = computed(
     () =>
       Boolean(this.statusFilter()) ||
@@ -98,11 +87,19 @@ export class HomePage implements OnInit {
   );
   protected readonly emptyWorkflowMessage = computed(() => {
     if (this.isLoading()) return 'Cargando…';
+    if (this.searchQuery().trim()) return 'No hay coincidencias en esta página.';
     if (this.hasFilters()) return 'No hay remates que coincidan con los filtros en esta semana.';
     return 'No hay remates programados para esta semana.';
   });
 
-  protected readonly visibleWorkflows = this.workflows;
+  protected readonly visibleWorkflows = computed(() => {
+    const query = this.searchQuery().trim().toLocaleLowerCase('es-CL');
+    return query
+      ? this.workflows().filter(({ property }) =>
+          `${property.title ?? ''} ${property.commune ?? ''}`.toLocaleLowerCase('es-CL').includes(query),
+        )
+      : this.workflows();
+  });
   protected readonly weekLabel = computed(() => {
     const start = dateFromKey(this.selectedWeekStart());
     const end = shiftDate(start, 6);
@@ -121,8 +118,7 @@ export class HomePage implements OnInit {
     this.isLoading.set(true);
     this.errorMessage.set(null);
     try {
-      const [workflowPage, properties] = await Promise.all([
-        this.api.listWorkflows({
+      const workflowPage = await this.api.listWorkflows({
           status: this.statusFilter() || undefined,
           responsibleUserId: this.responsibleFilter() ?? undefined,
           commune: this.communeFilter().trim() || undefined,
@@ -133,33 +129,14 @@ export class HomePage implements OnInit {
           ),
           limit: this.pageSize(),
           offset: this.offset(),
-        }),
-        this.isAdmin
-          ? this.api.listPropertiesWithoutWorkflow(this.propertyPageSize(), this.propertyOffset())
-          : Promise.resolve({ properties: [], total: 0 }),
-      ]);
+        });
       this.workflows.set(workflowPage.workflows);
       this.totalWorkflows.set(workflowPage.total);
       this.filterOptions.set(workflowPage.filterOptions);
-      this.properties.set(properties.properties);
-      this.totalProperties.set(properties.total);
     } catch (error) {
       this.errorMessage.set(problemMessage(toApiProblem(error)));
     } finally {
       this.isLoading.set(false);
-    }
-  }
-
-  protected async startWorkflow(property: PropertyRow): Promise<void> {
-    this.startingPropertyId.set(property.id);
-    this.errorMessage.set(null);
-    try {
-      const workflow = await this.api.startWorkflow(property.id);
-      await this.router.navigate(['/workflows', workflow.id]);
-    } catch (error) {
-      this.errorMessage.set(problemMessage(toApiProblem(error)));
-    } finally {
-      this.startingPropertyId.set(null);
     }
   }
 
@@ -208,17 +185,6 @@ export class HomePage implements OnInit {
   protected setWorkflowOffset(offset: number): void {
     this.offset.set(offset);
     this.closeDetail();
-    void this.load();
-  }
-
-  protected setPropertyPageSize(pageSize: number): void {
-    this.propertyPageSize.set(pageSize);
-    this.propertyOffset.set(0);
-    void this.load();
-  }
-
-  protected setPropertyOffset(offset: number): void {
-    this.propertyOffset.set(offset);
     void this.load();
   }
 

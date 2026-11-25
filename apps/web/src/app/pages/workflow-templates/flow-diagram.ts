@@ -186,6 +186,12 @@ const linkOf = (id: string): DiagramLink | null => {
       right: -8px;
       background: var(--ff-color-accent);
     }
+    @media (max-width: 760px) {
+      f-flow {
+        height: min(55dvh, 520px);
+        min-height: 300px;
+      }
+    }
   `,
 })
 export class FlowDiagram {

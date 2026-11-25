@@ -23,7 +23,10 @@
 
   <div class="main">
     <header class="topbar">
-      <img class="topbar-logo" src="logohouse.png" alt="GrupoHouse" />
+      <button #mobileMenuButton type="button" class="mobile-menu-button" aria-label="Abrir menú de secciones" aria-haspopup="dialog" (click)="openMobileMenu()">
+        <app-icon name="menu" />
+      </button>
+      <strong class="topbar-title">{{ pageTitle() }}</strong>
       @if (user(); as currentUser) {
         <div class="notifications-menu">
           <button
@@ -42,15 +45,14 @@
             <section class="notification-panel" aria-label="Notificaciones recientes">
               <header>
                 <strong>Notificaciones</strong>
-                @if (notificationService.hasUnread()) {
-                  <button
-                    type="button"
-                    class="button link"
-                    (click)="notificationService.markAllRead()"
-                  >
-                    Marcar todas como leídas
-                  </button>
-                }
+                <div class="notification-actions">
+                  @if (notificationService.hasUnread()) {
+                    <button type="button" class="button link" (click)="notificationService.markAllRead()">
+                      Marcar todas como leídas
+                    </button>
+                  }
+                  <button type="button" class="notification-close" aria-label="Cerrar notificaciones" (click)="toggleNotifications()">×</button>
+                </div>
               </header>
               <div class="notification-list">
                 @for (notification of notificationService.notifications(); track notification.id) {
@@ -112,18 +114,28 @@
     </main>
   </div>
 
-  <nav class="mobile-nav" aria-label="Secciones">
-    @for (entry of navigation(); track entry.label) {
-      @if (entry.path) {
-        <a
-          [routerLink]="entry.path"
-          routerLinkActive="active"
-          [routerLinkActiveOptions]="{ exact: true }"
-          ariaCurrentWhenActive="page"
-        >
-          <app-icon [name]="entry.icon" />{{ entry.label }}
-        </a>
+  <dialog #mobileMenu class="mobile-menu" aria-label="Secciones" (close)="restoreMobileMenuFocus()" (click)="$event.target === mobileMenu && closeMobileMenu()">
+    <div class="mobile-menu-header">
+      <img src="logohouse.png" alt="GrupoHouse" />
+      <button type="button" class="mobile-menu-close" aria-label="Cerrar menú" (click)="closeMobileMenu()">×</button>
+    </div>
+    <nav class="mobile-menu-nav" aria-label="Secciones">
+      @for (entry of navigation(); track entry.label) {
+        @if (entry.path) {
+          <a [routerLink]="entry.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="closeMobileMenu()">
+            <app-icon [name]="entry.icon" />{{ entry.label }}
+          </a>
+        }
       }
+    </nav>
+    @if (user(); as currentUser) {
+      <div class="mobile-menu-profile">
+        <span class="account-avatar" aria-hidden="true">{{ currentUser.name.charAt(0) }}</span>
+        <div><strong>{{ currentUser.name }}</strong><small>{{ currentUser.email }}</small><small>{{ roleSummary() || 'Sin roles asignados' }}</small></div>
+      </div>
+      <div class="mobile-menu-session">
+        <button type="button" (click)="closeMobileMenu(); logOut()"><app-icon name="logout" />Cerrar sesión</button>
+      </div>
     }
-  </nav>
+  </dialog>
 </div>

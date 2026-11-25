@@ -1,0 +1,30 @@
+<header class="page-header">
+  <div><h1>Propiedades sin workflow</h1><p>Propiedades aceptadas que aún no tienen un flujo iniciado.</p></div>
+  <button type="button" class="button" [disabled]="isLoading()" (click)="load()">Actualizar</button>
+</header>
+<div class="page-body">
+  @if (errorMessage(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+  <section class="card" aria-labelledby="properties-title">
+    <div class="card-header"><h2 id="properties-title">Pendientes de iniciar</h2><span class="muted">{{ total() }} propiedades</span></div>
+    @if (properties().length === 0) {
+      <p class="empty-state">{{ isLoading() ? 'Cargando…' : 'Todas las propiedades cargadas tienen workflow.' }}</p>
+    } @else {
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th scope="col">Propiedad</th><th scope="col">Comuna</th><th scope="col">Remate</th><th scope="col"><span class="visually-hidden">Acciones</span></th></tr></thead>
+          <tbody>
+            @for (property of properties(); track property.id) {
+              <tr>
+                <td>{{ property.title ?? 'Propiedad ' + property.id }}</td>
+                <td data-label="Comuna">{{ property.commune ?? '—' }}</td>
+                <td data-label="Remate">{{ formatDateTime(property.auctionAt) }}</td>
+                <td><button type="button" class="button primary" [disabled]="startingPropertyId() !== null" (click)="startWorkflow(property)">{{ startingPropertyId() === property.id ? 'Iniciando…' : 'Iniciar workflow' }}</button></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+      <app-list-pagination [total]="total()" [pageSize]="pageSize()" [offset]="offset()" [isLoading]="isLoading()" (offsetChange)="setOffset($event)" (pageSizeChange)="setPageSize($event)" />
+    }
+  </section>
+</div>

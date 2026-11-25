@@ -234,6 +234,10 @@ dialog.modal::backdrop {
   background: rgba(17, 17, 16, 0.48);
 }
 
+.fullscreen-task-close {
+  display: none;
+}
+
 .modal-form {
   display: grid;
   gap: 16px;
@@ -254,12 +258,51 @@ dialog.modal::backdrop {
   dialog.modal {
     width: 100vw;
     max-width: 100vw;
+    max-height: 100dvh;
     margin: auto 0 0;
+    padding-bottom: calc(26px + env(safe-area-inset-bottom));
     border-radius: 18px 18px 0 0;
+  }
+
+  .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  .modal-actions .button {
+    flex: 1 1 auto;
+  }
+
+  dialog.modal.mobile-fullscreen {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    padding: 64px 18px calc(24px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .mobile-fullscreen .fullscreen-task-close {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    right: 16px;
+    z-index: 1;
+    display: grid;
+    width: 44px;
+    height: 44px;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--surface);
+    font-size: 1.5rem;
+    cursor: pointer;
   }
 }
 
 @media (pointer: coarse) {
+
   .button,
   .field input,
   .field select {
@@ -415,6 +458,7 @@ dialog.modal::backdrop {
 }
 
 @media (max-width: 760px) {
+
   .page-header,
   .page-body {
     padding-right: 16px;
@@ -435,6 +479,7 @@ dialog.modal::backdrop {
   .data-table td {
     padding: 0;
     border: 0;
+    overflow-wrap: anywhere;
   }
 
   .data-table td[data-label]::before {
@@ -479,8 +524,7 @@ app-workflow-page .workflow-layout.diagram-only {
 
 app-workflow-page .diagram-only .process-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 210px;
-  column-gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
   margin: 0;
   border: 0;
   box-shadow: none;
@@ -488,26 +532,81 @@ app-workflow-page .diagram-only .process-card {
 
 app-workflow-page .diagram-actions {
   display: grid;
-  grid-column: 2;
-  align-self: end;
-  align-content: end;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
-  margin: 0 0 28px;
-  padding-left: 12px;
-  border-left: 1px dashed var(--line);
+  width: 100%;
+  padding: 20px 0 0;
+  border-top: 1px dashed var(--line);
 }
 
-app-workflow-page .diagram-actions h3 { margin: 0 0 2px; font-size: .875rem; }
-app-workflow-page .exception-action { display: flex; min-height: 62px; align-items: center; gap: 9px; padding: 9px; border: 1px solid; border-radius: 11px; font: inherit; text-align: left; cursor: pointer; }
-app-workflow-page .exception-action span:last-child { display: grid; gap: 2px; }
-app-workflow-page .exception-action strong { font-size: .875rem; line-height: 1.25; }
-app-workflow-page .exception-action small { font-size: .75rem; line-height: 1.3; }
-app-workflow-page .exception-icon { display: grid; width: 30px; height: 30px; flex: none; place-items: center; border-radius: 50%; background: #fff; font-size: 1rem; font-weight: 750; }
-app-workflow-page .suspend-action, app-workflow-page .resume-action { border-color: #d4c8ff; background: #f2efff; color: #5837ba; }
-app-workflow-page .cancel-action { border-color: #ffd1d8; background: #fff0f2; color: #cf263d; }
-app-workflow-page .exception-action strong { color: var(--navy); }
-app-workflow-page .exception-action:hover, app-workflow-page .exception-action:focus-visible { box-shadow: 0 8px 20px rgb(25 25 24 / 12%); }
+app-workflow-page .diagram-actions h3 {
+  grid-column: 1 / -1;
+  margin: 0 0 2px;
+  font-size: .875rem;
+}
+
+app-workflow-page .exception-action {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+  border: 1px solid;
+  border-radius: 11px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+app-workflow-page .exception-action span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+app-workflow-page .exception-action strong {
+  font-size: .875rem;
+  line-height: 1.25;
+}
+
+app-workflow-page .exception-action small {
+  font-size: .75rem;
+  line-height: 1.3;
+}
+
+app-workflow-page .exception-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+app-workflow-page .suspend-action,
+app-workflow-page .resume-action {
+  border-color: #d4c8ff;
+  background: #f2efff;
+  color: #5837ba;
+}
+
+app-workflow-page .cancel-action {
+  border-color: #ffd1d8;
+  background: #fff0f2;
+  color: #cf263d;
+}
+
+app-workflow-page .exception-action strong {
+  color: var(--navy);
+}
+
+app-workflow-page .exception-action:hover,
+app-workflow-page .exception-action:focus-visible {
+  box-shadow: 0 8px 20px rgb(25 25 24 / 12%);
+}
 
 app-workflow-page .diagram-only .process-card .card-header {
   grid-column: 1 / -1;
@@ -518,45 +617,209 @@ app-workflow-page .diagram-only .process-card .card-header {
   padding: 0 56px 14px 0;
   border: 0;
 }
-app-workflow-page .diagram-only .process-card .card-header h2 { font-size: 1.35rem; }
-app-workflow-page .diagram-only .process-card .card-header p { margin-top: 4px; font-size: .8125rem; }
-app-workflow-page .diagram-only .process-card .card-header p strong { color: var(--navy); }
-app-workflow-page .diagram-only .diagram-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
-app-workflow-page .diagram-only .process-legend { justify-content: flex-end; gap: 5px; padding: 0; }
-app-workflow-page .diagram-only .process-legend span { gap: 5px; padding: 6px 9px; border-radius: 20px; background: var(--slate-soft); white-space: nowrap; }
-app-workflow-page .diagram-zoom { display: flex; flex: none; align-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; }
-app-workflow-page .diagram-zoom button { width: 44px; height: 44px; border: 0; background: var(--surface); font: inherit; font-size: 1.2rem; cursor: pointer; }
-app-workflow-page .diagram-zoom button:disabled { color: var(--muted); cursor: default; opacity: .5; }
-app-workflow-page .diagram-zoom button:not(:disabled):hover { background: var(--slate-soft); }
-app-workflow-page .diagram-zoom output { min-width: 52px; padding: 0 6px; border-inline: 1px solid var(--line); font-size: .75rem; font-weight: 700; line-height: 44px; text-align: center; }
-app-workflow-page .diagram-only .process-progress { display: block; grid-column: 1 / -1; width: 100%; height: 6px; margin: 0; border: 0; border-radius: 99px; accent-color: var(--green); }
-app-workflow-page .diagram-only .process-progress::-webkit-progress-bar { border-radius: 99px; background: var(--slate-soft); }
-app-workflow-page .diagram-only .process-progress::-webkit-progress-value { border-radius: 99px; background: var(--green); }
-app-workflow-page .diagram-only .process-progress::-moz-progress-bar { border-radius: 99px; background: var(--green); }
 
-app-workflow-page .diagram-only .process-scroll { grid-column: 1; min-width: 0; overflow-x: auto; padding: 24px 0 28px; }
+app-workflow-page .diagram-only .process-card .card-header h2 {
+  font-size: 1.35rem;
+}
+
+app-workflow-page .diagram-only .process-card .card-header p {
+  margin-top: 4px;
+  font-size: .8125rem;
+}
+
+app-workflow-page .diagram-only .process-card .card-header p strong {
+  color: var(--navy);
+}
+
+app-workflow-page .diagram-only .diagram-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+app-workflow-page .diagram-only .process-legend {
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 0;
+}
+
+app-workflow-page .diagram-only .process-legend span {
+  gap: 5px;
+  padding: 6px 9px;
+  border-radius: 20px;
+  background: var(--slate-soft);
+  white-space: nowrap;
+}
+
+app-workflow-page .diagram-zoom {
+  display: flex;
+  flex: none;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+app-workflow-page .diagram-zoom button {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: var(--surface);
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+app-workflow-page .diagram-zoom button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: .5;
+}
+
+app-workflow-page .diagram-zoom button:not(:disabled):hover {
+  background: var(--slate-soft);
+}
+
+app-workflow-page .diagram-zoom output {
+  min-width: 52px;
+  padding: 0 6px;
+  border-inline: 1px solid var(--line);
+  font-size: .75rem;
+  font-weight: 700;
+  line-height: 44px;
+  text-align: center;
+}
+
+app-workflow-page .diagram-only .process-progress {
+  display: block;
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 6px;
+  margin: 0;
+  border: 0;
+  border-radius: 99px;
+  accent-color: var(--green);
+}
+
+app-workflow-page .diagram-only .process-progress::-webkit-progress-bar {
+  border-radius: 99px;
+  background: var(--slate-soft);
+}
+
+app-workflow-page .diagram-only .process-progress::-webkit-progress-value {
+  border-radius: 99px;
+  background: var(--green);
+}
+
+app-workflow-page .diagram-only .process-progress::-moz-progress-bar {
+  border-radius: 99px;
+  background: var(--green);
+}
+
+app-workflow-page .diagram-only .process-scroll {
+  grid-column: 1;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 24px 0 28px;
+}
+
 app-workflow-page .diagram-only .process-map {
   --node-width: 162px;
   --node-gap: 24px;
   width: calc(7 * var(--node-width) + 6 * var(--node-gap));
   min-width: calc(7 * var(--node-width) + 6 * var(--node-gap));
 }
-app-workflow-page .diagram-only .process-row-reverse { flex-direction: row; }
-app-workflow-page .diagram-only .process-row-reverse li::after { right: auto; left: 100%; }
-app-workflow-page .diagram-only .process-row-reverse li::before { right: auto; left: calc(100% + var(--node-gap) - 7px); border-width: 5px 0 5px 7px; border-color: transparent transparent transparent var(--flow-line); }
-app-workflow-page .diagram-only .process-node { min-height: 84px; grid-template-columns: 34px minmax(0, 1fr); padding: 10px; }
-app-workflow-page .diagram-only .task-step { width: 34px; height: 34px; font-size: .8125rem; }
-app-workflow-page .diagram-only .task-text strong { font-size: .8125rem; line-height: 1.25; }
-app-workflow-page .diagram-only .task-text small { font-size: .6875rem; }
-app-workflow-page .diagram-only .process-node .status-pill { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+app-workflow-page .diagram-only .process-row-reverse {
+  flex-direction: row;
+}
+
+app-workflow-page .diagram-only .process-row-reverse li::after {
+  right: auto;
+  left: 100%;
+}
+
+app-workflow-page .diagram-only .process-row-reverse li::before {
+  right: auto;
+  left: calc(100% + var(--node-gap) - 7px);
+  border-width: 5px 0 5px 7px;
+  border-color: transparent transparent transparent var(--flow-line);
+}
+
+app-workflow-page .diagram-only .process-node {
+  min-height: 84px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  padding: 10px;
+}
+
+app-workflow-page .diagram-only .task-step {
+  width: 34px;
+  height: 34px;
+  font-size: .8125rem;
+}
+
+app-workflow-page .diagram-only .task-text strong {
+  font-size: .8125rem;
+  line-height: 1.25;
+}
+
+app-workflow-page .diagram-only .task-text small {
+  font-size: .6875rem;
+}
+
+app-workflow-page .diagram-only .process-node .status-pill {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
-  app-workflow-page .diagram-only .process-card { display: block; }
-  app-workflow-page .diagram-only .process-card .card-header { display: grid; padding-right: 48px; }
-  app-workflow-page .diagram-only .diagram-tools { justify-content: flex-start; }
-  app-workflow-page .diagram-only .process-legend { justify-content: flex-start; }
-  app-workflow-page .diagram-only .process-map { width: auto; min-width: 0; }
-  app-workflow-page .diagram-only .process-row-reverse { flex-direction: column; }
-  app-workflow-page .diagram-only .process-row-reverse li::after { top: 100%; left: 23px; width: 2px; height: 20px; }
-  app-workflow-page .diagram-only .process-row-reverse li::before { top: calc(100% + 14px); left: 19px; border-width: 7px 5px 0; border-color: var(--flow-line) transparent transparent; }
-  app-workflow-page .diagram-actions { margin: 8px 0 0; }
+  app-workflow-page .diagram-only .process-card {
+    display: block;
+  }
+
+  app-workflow-page .diagram-only .process-card .card-header {
+    display: grid;
+    padding-right: 48px;
+  }
+
+  app-workflow-page .diagram-only .diagram-tools {
+    justify-content: flex-start;
+  }
+
+  app-workflow-page .diagram-only .process-legend {
+    justify-content: flex-start;
+  }
+
+  app-workflow-page .diagram-only .process-map {
+    width: auto;
+    min-width: 0;
+  }
+
+  app-workflow-page .diagram-only .process-row-reverse {
+    flex-direction: column;
+  }
+
+  app-workflow-page .diagram-only .process-row-reverse li::after {
+    top: 100%;
+    left: 23px;
+    width: 2px;
+    height: 20px;
+  }
+
+  app-workflow-page .diagram-only .process-row-reverse li::before {
+    top: calc(100% + 14px);
+    left: 19px;
+    border-width: 7px 5px 0;
+    border-color: var(--flow-line) transparent transparent;
+  }
+
+  app-workflow-page .diagram-actions {
+    grid-template-columns: 1fr;
+  }
 }

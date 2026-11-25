@@ -42,7 +42,7 @@ const PAGE_SIZES = [10, 20, 50, 100] as const;
     button.active { border-color:var(--navy);background:var(--navy);color:#fff }
     button:disabled { cursor:wait;opacity:.6 }
     .page-gap { min-width:18px;text-align:center }
-    @media(max-width:640px){.list-pagination{align-items:stretch;flex-direction:column}.page-numbers{flex-wrap:wrap}}
+    @media(max-width:640px){.list-pagination{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center}.page-numbers{grid-column:1/-1;justify-content:center;flex-wrap:wrap}label{justify-self:start}}
   `,
 })
 export class ListPagination {

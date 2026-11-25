@@ -46,7 +46,7 @@ npm start            # servidor de desarrollo en http://localhost:4200
 ```text
 src/app/
   core/      servicios y modelos transversales (auth, api, users, workflow, sync, time)
-  layout/    shell con barra lateral y navegación inferior
+  layout/    shell con barra lateral y menú lateral en pantallas estrechas
   pages/     una carpeta por pantalla (home, my-tasks, workflow, users, sync, login)
   shared/    piezas reutilizables (icon, modal)
 ```

@@ -1,4 +1,7 @@
-<dialog appModalDialog aria-labelledby="task-title" (closed)="closed.emit()">
+<dialog appModalDialog aria-labelledby="task-title" [class.mobile-fullscreen]="fullscreenOnMobile()" (closed)="closed.emit()">
+  @if (fullscreenOnMobile()) {
+    <button type="button" class="fullscreen-task-close" aria-label="Cerrar tarea" (click)="modal().close()">×</button>
+  }
   <div class="modal-form">
     @if (task(); as current) {
       <div>

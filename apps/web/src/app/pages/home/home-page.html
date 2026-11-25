@@ -1,23 +1,28 @@
-<header class="page-header">
-  <div>
-    <h1>Remates</h1>
-    <p>Hola, {{ user()?.name }}. Estos son los remates en curso.</p>
-  </div>
-  <div class="page-actions">
-    <a class="button" routerLink="/mis-tareas">Ir a mis tareas</a>
-    <button type="button" class="button" (click)="load()" [disabled]="isLoading()">
-      Actualizar
-    </button>
-  </div>
-</header>
-
 <div class="page-body">
   @if (errorMessage(); as message) {
     <p class="form-error" role="alert">{{ message }}</p>
   }
 
+  <div class="week-selector" aria-label="Selector semanal">
+    <button type="button" (click)="changeWeek(-1)" aria-label="Semana anterior">‹</button>
+    <strong aria-live="polite">{{ weekLabel() }}</strong>
+    <button type="button" (click)="changeWeek(1)" aria-label="Semana siguiente">›</button>
+    <button type="button" class="filter-toggle" [class.active]="isFiltersOpen() || hasFilters()" [attr.aria-expanded]="isFiltersOpen()" aria-controls="workflow-filter-panel" [attr.aria-label]="isFiltersOpen() ? 'Cerrar filtros' : 'Abrir filtros'" (click)="toggleFilters()"><app-icon name="filter" /></button>
+  </div>
+
+  <div class="mobile-search">
+    <label><app-icon name="search" /><input type="search" placeholder="Buscar en esta página" aria-label="Buscar remates en esta página" [value]="searchQuery()" (input)="searchQuery.set($any($event.target).value)" /></label>
+    <button type="button" class="button" [attr.aria-expanded]="isFiltersOpen()" aria-controls="workflow-filter-panel" aria-label="Mostrar filtros" (click)="toggleFilters()"><app-icon name="filter" /></button>
+  </div>
+  <div class="mobile-list-meta">
+    <label>Estado <select aria-label="Filtrar por estado" [value]="statusFilter()" (change)="setStatusFilter($any($event.target).value)">
+      <option value="">Todos los estados</option><option value="ACTIVE">Activos</option><option value="SUSPENDED">Suspendidos</option><option value="COMPLETED">Terminados</option><option value="CANCELLED">Cancelados</option>
+    </select></label>
+    <span>{{ searchQuery() ? visibleWorkflows().length : totalWorkflows() }} resultados</span>
+  </div>
+
   <div class="status-filters" aria-label="Filtrar por estado">
-    <button type="button" [class.active]="statusFilter() === ''" (click)="setStatusFilter('')">
+    <button type="button" [class.active]="statusFilter() === ''" [attr.aria-pressed]="statusFilter() === ''" (click)="setStatusFilter('')">
       <strong>Todos</strong>
       <span>Todos los estados</span>
     </button>
@@ -25,6 +30,7 @@
       type="button"
       class="good"
       [class.active]="statusFilter() === 'ACTIVE'"
+      [attr.aria-pressed]="statusFilter() === 'ACTIVE'"
       (click)="setStatusFilter('ACTIVE')"
     >
       <strong>Activos</strong>
@@ -34,6 +40,7 @@
       type="button"
       class="paused"
       [class.active]="statusFilter() === 'SUSPENDED'"
+      [attr.aria-pressed]="statusFilter() === 'SUSPENDED'"
       (click)="setStatusFilter('SUSPENDED')"
     >
       <strong>Suspendidos</strong>
@@ -43,6 +50,7 @@
       type="button"
       class="neutral"
       [class.active]="statusFilter() === 'COMPLETED'"
+      [attr.aria-pressed]="statusFilter() === 'COMPLETED'"
       (click)="setStatusFilter('COMPLETED')"
     >
       <strong>Terminados</strong>
@@ -52,6 +60,7 @@
       type="button"
       class="cancelled"
       [class.active]="statusFilter() === 'CANCELLED'"
+      [attr.aria-pressed]="statusFilter() === 'CANCELLED'"
       (click)="setStatusFilter('CANCELLED')"
     >
       <strong>Cancelados</strong>
@@ -59,29 +68,7 @@
     </button>
   </div>
 
-  <section class="card" aria-labelledby="workflows-title">
-    <div class="card-header">
-      <div>
-        <h2 id="workflows-title">Remates de la semana</h2>
-        <span class="muted">{{ totalWorkflows() }} remates</span>
-      </div>
-      <div class="week-selector" aria-label="Selector semanal">
-        <button type="button" (click)="changeWeek(-1)" aria-label="Semana anterior">‹</button>
-        <strong aria-live="polite">{{ weekLabel() }}</strong>
-        <button type="button" (click)="changeWeek(1)" aria-label="Semana siguiente">›</button>
-        <button
-          type="button"
-          class="filter-toggle"
-          [class.active]="isFiltersOpen() || hasFilters()"
-          [attr.aria-expanded]="isFiltersOpen()"
-          aria-controls="workflow-filter-panel"
-          [attr.aria-label]="isFiltersOpen() ? 'Cerrar filtros' : 'Abrir filtros'"
-          (click)="toggleFilters()"
-        >
-          <app-icon name="filter" />
-        </button>
-      </div>
-    </div>
+  <section class="card workflow-list-card" aria-label="Remates">
     @if (isFiltersOpen()) {
       <form
         id="workflow-filter-panel"
@@ -164,6 +151,8 @@
                   <strong class="property-link">
                     {{ workflow.property.title ?? 'Propiedad ' + workflow.property.id }}
                   </strong>
+                  <small class="mobile-property-id">#{{ workflow.property.id }}</small>
+                  <small class="mobile-task-name">{{ workflow.currentTask?.name ?? 'Sin iniciar' }}</small>
                 </td>
                 <td data-label="Comuna">{{ workflow.property.commune ?? '—' }}</td>
                 <td data-label="Remate">{{ formatDateTime(workflow.auctionAt) }}</td>
@@ -180,7 +169,7 @@
                     <span class="status-pill" [class]="statusTones[workflow.status]">
                       {{ statusLabels[workflow.status] }}
                     </span>
-                    <span aria-hidden="true">›</span>
+                    <small class="mobile-open-tasks">{{ workflow.openTaskCount }} tareas abiertas</small>
                   </span>
                 </td>
               </tr>
@@ -199,57 +188,6 @@
     }
   </section>
 
-  @if (isAdmin) {
-    <section class="card" aria-labelledby="properties-title">
-      <div class="card-header">
-        <h2 id="properties-title">Propiedades sin workflow</h2>
-        <span class="muted">{{ totalProperties() }}</span>
-      </div>
-      @if (properties().length === 0) {
-        <p class="empty-state">Todas las propiedades cargadas tienen workflow.</p>
-      } @else {
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th scope="col">Propiedad</th>
-                <th scope="col">Comuna</th>
-                <th scope="col">Remate</th>
-                <th scope="col"><span class="visually-hidden">Acciones</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (property of properties(); track property.id) {
-                <tr>
-                  <td>{{ property.title ?? 'Propiedad ' + property.id }}</td>
-                  <td data-label="Comuna">{{ property.commune ?? '—' }}</td>
-                  <td data-label="Remate">{{ formatDateTime(property.auctionAt) }}</td>
-                  <td>
-                    <button
-                      type="button"
-                      class="button primary"
-                      [disabled]="startingPropertyId() !== null"
-                      (click)="startWorkflow(property)"
-                    >
-                      {{ startingPropertyId() === property.id ? 'Iniciando…' : 'Iniciar workflow' }}
-                    </button>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-        <app-list-pagination
-          [total]="totalProperties()"
-          [pageSize]="propertyPageSize()"
-          [offset]="propertyOffset()"
-          [isLoading]="isLoading()"
-          (offsetChange)="setPropertyOffset($event)"
-          (pageSizeChange)="setPropertyPageSize($event)"
-        />
-      }
-    </section>
-  }
 </div>
 
 @if (selectedWorkflow(); as detail) {

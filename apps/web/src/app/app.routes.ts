@@ -26,6 +26,12 @@ export const routes: Routes = [
           import('./pages/my-tasks/my-tasks-page').then((page) => page.MyTasksPage),
       },
       {
+        path: 'propiedades-sin-workflow',
+        canActivate: [adminGuard],
+        title: 'Propiedades sin workflow · GrupoHouse',
+        loadComponent: () => import('./pages/properties/properties-page').then((page) => page.PropertiesPage),
+      },
+      {
         path: 'workflows/:workflowId',
         title: 'Remate · GrupoHouse',
         loadComponent: () =>
