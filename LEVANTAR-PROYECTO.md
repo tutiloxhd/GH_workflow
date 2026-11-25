@@ -10,8 +10,8 @@ Antes de modificar código, lee [AGENTS.md](./AGENTS.md); cada app tiene además
 | --- | --- |
 | Node.js | 22.22.3 o superior (lo exige Angular 22) |
 | npm | el que viene con Node |
-| MySQL | 8.0 (con el cliente `mysql` en el PATH) |
-| `admin_new` de pruebas | una copia con las tablas `propiedad`, `dato_propiedad` y `datos_lremate` |
+| MySQL o MariaDB | compatible con el esquema MySQL 8; cliente `mysql` en el PATH |
+| `admin_new` de pruebas | copia con `propiedad`, `dato_propiedad` y `datos_lremate` |
 
 No se usa Docker.
 
@@ -32,7 +32,8 @@ Se usan tres bases:
 | Base | Para qué | Acceso de la app |
 | --- | --- | --- |
 | `workflow` | la del MVP | lectura y escritura |
-| `workflow_test` | pruebas automáticas (se borra y rellena sola) | lectura y escritura |
+| `workflow_test` | pruebas automatizadas; se recrea durante las pruebas | lectura y escritura |
+| `workflow_test_admin_new` | réplica mínima sintética creada por las pruebas | lectura y escritura |
 | tu `admin_new` de pruebas | origen de las propiedades | **solo lectura** |
 
 Las pruebas crean además `workflow_test_admin_new`, una réplica mínima de `admin_new`. Nunca leen tu `admin_new`.
@@ -42,21 +43,22 @@ Las pruebas crean además `workflow_test_admin_new`, una réplica mínima de `ad
 Como root en MySQL (cambia la contraseña y el nombre de tu `admin_new` si es otro):
 
 ```sql
-CREATE DATABASE workflow      CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE workflow CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE workflow_test CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE workflow_test_admin_new CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 CREATE USER 'workflow_app'@'localhost' IDENTIFIED BY 'una-clave-local';
-GRANT ALL PRIVILEGES ON workflow.*                TO 'workflow_app'@'localhost';
-GRANT ALL PRIVILEGES ON workflow_test.*           TO 'workflow_app'@'localhost';
+GRANT ALL PRIVILEGES ON workflow.* TO 'workflow_app'@'localhost';
+GRANT ALL PRIVILEGES ON workflow_test.* TO 'workflow_app'@'localhost';
 GRANT ALL PRIVILEGES ON workflow_test_admin_new.* TO 'workflow_app'@'localhost';
-GRANT SELECT         ON admin_new.*               TO 'workflow_app'@'localhost';
+GRANT SELECT ON admin_new.* TO 'workflow_app'@'localhost';
 ```
 
 También puedes usar root en local; el usuario dedicado evita escribir en `admin_new` por error.
 
 ### 3.2 Cargar la base del MVP
 
-[sql/workflow_mvp.sql](sql/workflow_mvp.sql) deja `workflow` lista: las 19 tablas, las migraciones 0000–0004 ya registradas, los roles, las plantillas de workflow (v2 activa) y los usuarios de desarrollo.
+[sql/workflow_mvp.sql](sql/workflow_mvp.sql) contiene una foto antigua de la base: registra solo las migraciones `0000`–`0004`, incluye la plantilla v2 como activa y no incluye las migraciones ni funciones añadidas después. **No la uses para iniciar el código actual.** Las migraciones vigentes llegan hasta `0017`; para una instalación nueva, sigue la alternativa de migraciones y seeds de abajo. El dump debe regenerarse antes de volver a recomendarlo como instalación inicial.
 
 Desde la raíz del repositorio (funciona igual en bash y PowerShell):
 
@@ -64,14 +66,14 @@ Desde la raíz del repositorio (funciona igual en bash y PowerShell):
 mysql -u workflow_app -p workflow -e "source sql/workflow_mvp.sql"
 ```
 
-> El archivo borra y recrea las tablas: cárgalo solo en una base vacía o desechable. Es **solo para desarrollo**; nunca en QA ni producción.
+> Este archivo borra y recrea tablas. Al estar desactualizado, no lo cargues para levantar el proyecto actual.
 
 `workflow_test` no se carga: las pruebas aplican las migraciones solas.
 
 <details>
 <summary>Alternativa: desde migraciones y seeds</summary>
 
-Con `apps/api/.env` ya configurado (paso 4):
+Con las tres bases creadas y `apps/api/.env` configurado (paso 4), aplica migraciones y seeds desde la raíz. La migración trabaja sobre `DB_NAME` y registra las migraciones pendientes hasta `0017`:
 
 ```bash
 cd apps/api
@@ -84,15 +86,16 @@ mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0005_notification_r
 ADMIN_INITIAL_PASSWORD='<contraseña>' npm run users:create-admin -- --email <email> --name "<nombre>"
 ```
 
-En PowerShell, la variable va antes: `$env:ADMIN_INITIAL_PASSWORD='<contraseña>'; npm run users:create-admin -- ...` y luego `Remove-Item Env:ADMIN_INITIAL_PASSWORD`.
+En PowerShell, ejecuta el comando de creación de usuario así y elimina la variable al terminar: `$env:ADMIN_INITIAL_PASSWORD='<contraseña>'; npm run users:create-admin -- --email <email> --name "<nombre>"`; después `Remove-Item Env:ADMIN_INITIAL_PASSWORD`. En Bash, antepone `ADMIN_INITIAL_PASSWORD='<contraseña>'` al comando como en el ejemplo.
+
 </details>
 
 ### 3.3 Usuarios de desarrollo
 
 Vienen en `workflow_mvp.sql`. Son cuentas de prueba locales: no las reutilices en ningún otro ambiente.
 
-| Rol | Correo | Contraseña |
-| --- | --- | --- |
+| Rol           | Correo                           | Contraseña          |
+| ------------- | -------------------------------- | -------------------- |
 | Administrador | `admin@grupohouse.local` | `Ghc20b64e8bafcA7` |
 | Gestor | `gestor.demo@grupohouse.local` | `Gestor5001791` |
 | Postor | `postor.demo@grupohouse.local` | `Postordc4a511` |
@@ -112,11 +115,11 @@ Edita `apps/api/.env` (nunca se versiona):
 
 | Variable | Valor |
 | --- | --- |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | tu MySQL local |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD` | conexión al motor local |
 | `DB_NAME` | `workflow` |
-| `DB_TEST_NAME` | `workflow_test` (distinta de las otras dos) |
-| `ADMIN_NEW_DB_NAME` | el nombre de tu `admin_new` de pruebas |
-| `ADMIN_NEW_DB_HOST/PORT/USER/PASSWORD` | solo si `admin_new` está en otro servidor o con otro usuario; si faltan se usan los `DB_*` |
+| `DB_TEST_NAME` | `workflow_test`, distinta de las otras bases configuradas |
+| `ADMIN_NEW_DB_NAME` | nombre de tu `admin_new` de pruebas |
+| `ADMIN_NEW_DB_HOST/PORT/USER/PASSWORD` | opcionales si `admin_new` usa otro servidor o usuario; si faltan, se usan los valores `DB_*` |
 | `SYNC_INTERVAL_SECONDS` | segundos entre sincronizaciones (60 por defecto) |
 | `WEB_ORIGIN` | `http://localhost:4200` |
 | `SESSION_TTL_HOURS` | `8` |
@@ -134,15 +137,18 @@ No necesita `.env`: en desarrollo reenvía `/api` a `localhost:3000` (`proxy.con
 
 ## 6. Levantar todo
 
-Cinco terminales después de aplicar la migración de notificaciones aprobada:
+Con las dependencias ya instaladas en `apps/api` y `apps/web`, y `apps/api/.env`
+configurado, ejecuta desde la raíz:
 
-| Terminal | Comando | Resultado |
-| --- | --- | --- |
-| 1 | `cd apps/api && npm run dev` | API en `http://localhost:3000`, con recarga |
-| 2 | `cd apps/web && npm start` | aplicación en `http://localhost:4200` |
-| 3 | `cd apps/api && npm run sync` | sincronizador cada `SYNC_INTERVAL_SECONDS` |
-| 4 | `cd apps/api && npm run notifications:worker` | consume el outbox del workflow |
-| 5 | `cd apps/api && npm run notifications:scheduler` | materializa recordatorios, escalamientos y vencimientos |
+```bash
+npm run dev
+```
+
+El comando inicia API, frontend, sincronizador, worker y scheduler en la misma
+terminal. Presiona Ctrl+C para detenerlos. Si uno termina inesperadamente, el
+lanzador detiene los demás. No ejecuta instalaciones ni migraciones; prepara la
+base previamente según las secciones anteriores. No inicies una segunda copia
+del comando mientras la primera siga activa.
 
 En un servidor, la API, el sincronizador, el worker y el scheduler se ejecutan como procesos
 independientes bajo el supervisor nativo del sistema operativo. Todos aceptan `SIGINT` y `SIGTERM`
@@ -166,7 +172,7 @@ Si tu `admin_new` no tiene remates futuros, puedes cargar propiedades sintética
 
 ## 7. Verificar
 
-Desde `apps/api`:
+Desde `apps/api` (la primera vez, asegúrate de tener `workflow_test` y `workflow_test_admin_new` creadas):
 
 ```bash
 npm run typecheck
@@ -192,12 +198,13 @@ npm run build
 | El sincronizador queda `FAILED` | revisa `ADMIN_NEW_DB_*` y que el usuario tenga SELECT sobre `admin_new` |
 | El sincronizador registra `sync.skipped` | otro proceso `npm run sync` está corriendo; el candado se libera solo a los 15 minutos si un proceso murió |
 | Pruebas fallan con *Access denied* | el usuario no tiene permisos sobre `workflow_test` o `workflow_test_admin_new` |
+
 ## 9. Cambios de esquema
 
 1. Editar el esquema Drizzle en `apps/api/src/platform/database/schema/`.
 2. `npm run db:generate -- --name <descripcion>` y revisar el SQL en `sql/migrations/`.
 3. `npm run db:migrate`.
-4. Regenerar `sql/workflow_mvp.sql` con `mysqldump` (estructura completa; datos solo de `__drizzle_migrations`, `roles`, `workflow_templates`, `task_definitions`, `task_dependencies`, `users` y `user_roles`) para que el siguiente dev parta con la base al día.
+4. Regenerar `sql/workflow_mvp.sql` con `mysqldump` (estructura y datos de referencia, sin propiedades, workflows, sesiones, notificaciones ni datos de `admin_new`) y actualizar esta guía y `apps/api/AGENTS.md` para reflejar el alcance y el estado real del dump. Revisa y elimina del dump cualquier dato sensible antes de versionarlo. Hasta entonces, usa el proceso de migraciones y seeds de la sección 3.2.
 
 `sql/schema.sql` es el modelo completo futuro: es referencia y no se aplica a ninguna base.
 
