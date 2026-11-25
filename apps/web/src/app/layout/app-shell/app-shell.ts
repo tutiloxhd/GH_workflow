@@ -117,8 +117,8 @@ export class AppShell {
   ): Promise<void> {
     await this.notificationService.markRead(notificationId);
     this.isNotificationPanelOpen.set(false);
-    await this.router.navigate(['/workflows', workflowId], {
-      queryParams: taskId === null ? undefined : { task: taskId },
+    await this.router.navigate(['/mis-tareas'], {
+      queryParams: taskId === null ? undefined : { workflow: workflowId, task: taskId },
     });
   }
 

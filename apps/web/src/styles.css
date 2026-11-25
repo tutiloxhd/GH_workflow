@@ -125,7 +125,7 @@ h3 {
 }
 
 .theme-control { position: relative; display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding: 8px; color: var(--navy); font-size: .8125rem; cursor: pointer; }
-.theme-control input { position: absolute; right: 8px; width: 48px; height: 28px; margin: 0; opacity: 0; cursor: pointer; }
+.theme-control input { position: absolute; right: 0; width: 48px; height: 28px; margin: 0; opacity: 0; cursor: pointer; }
 .theme-track { width: 48px; height: 28px; flex: none; padding: 3px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface-secondary); }
 .theme-track::after { display: block; width: 20px; height: 20px; border-radius: 50%; background: var(--muted); content: ''; transition: transform .2s; }
 .theme-control input:checked + .theme-track { border-color: var(--primary); background: var(--primary); }

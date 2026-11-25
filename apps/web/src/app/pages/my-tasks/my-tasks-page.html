@@ -78,7 +78,7 @@
   }
 </div>
 
-@if (openTask(); as task) {
+@if (displayedTask(); as task) {
   <app-task-dialog
     [workflowId]="task.workflowId"
     [taskId]="task.id"

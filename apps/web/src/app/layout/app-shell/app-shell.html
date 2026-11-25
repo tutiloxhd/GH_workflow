@@ -123,6 +123,10 @@
       <img src="logohouse.png" alt="GrupoHouse" />
       <button type="button" class="mobile-menu-close" aria-label="Cerrar menú" (click)="closeMobileMenu()">×</button>
     </div>
+    <label class="theme-control">Modo oscuro
+      <input type="checkbox" role="switch" [checked]="theme.isDark()" (change)="theme.setPreference($any($event.target).checked ? 'dark' : 'light')" />
+      <span class="theme-track" aria-hidden="true"></span>
+    </label>
     <nav class="mobile-menu-nav" aria-label="Secciones">
       @for (entry of navigation(); track entry.label) {
         @if (entry.path) {
@@ -132,10 +136,6 @@
         }
       }
     </nav>
-    <label class="theme-control">Modo oscuro
-      <input type="checkbox" role="switch" [checked]="theme.isDark()" (change)="theme.setPreference($any($event.target).checked ? 'dark' : 'light')" />
-      <span class="theme-track" aria-hidden="true"></span>
-    </label>
     @if (user(); as currentUser) {
       <div class="mobile-menu-profile">
         <span class="account-avatar" aria-hidden="true">{{ currentUser.name.charAt(0) }}</span>
