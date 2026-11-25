@@ -1,0 +1,7 @@
+{
+  "name": "gh-workflow",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/start-dev.mjs"
+  }
+}
