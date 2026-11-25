@@ -133,7 +133,8 @@
   box-shadow: 0 16px 40px rgb(15 23 42 / 18%);
 }
 
-.account-dropdown button {
+.account-dropdown button,
+.account-dropdown a {
   display: flex;
   width: 100%;
   min-height: 44px;
@@ -145,9 +146,12 @@
   background: transparent;
   text-align: left;
   cursor: pointer;
+  color: var(--navy);
+  text-decoration: none;
 }
 
-.account-dropdown button:hover {
+.account-dropdown button:hover,
+.account-dropdown a:hover {
   background: var(--hover);
 }
 
@@ -418,6 +422,12 @@
 
   .mobile-menu .theme-control { margin: 0 18px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 
+  .mobile-menu .theme-control input {
+    z-index: 1;
+    width: 48px;
+    height: 44px;
+  }
+
   .mobile-menu-profile {
     display: flex;
     align-items: center;
@@ -446,7 +456,8 @@
     border-top: 1px solid var(--line);
   }
 
-  .mobile-menu-session button {
+  .mobile-menu-session button,
+  .mobile-menu-session a {
     display: flex;
     width: 100%;
     min-height: 48px;
@@ -457,6 +468,8 @@
     background: transparent;
     text-align: left;
     cursor: pointer;
+    color: var(--navy);
+    text-decoration: none;
   }
 
   .account-menu {

@@ -1,0 +1,14 @@
+.profile-page { max-width: 560px; padding: 28px; }
+.profile-page header { margin-bottom: 20px; }
+.profile-page h1 { font-size: 1.5rem; }
+.profile-page header p { color: var(--muted); }
+.profile-page form { display: grid; gap: 18px; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.profile-page label { display: grid; gap: 7px; font-weight: 600; }
+.profile-page input { min-height: 44px; width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.profile-page input:focus-visible, .profile-page button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.profile-page small, .profile-error { color: var(--red); }
+.profile-success { color: var(--green); }
+.profile-details { display: grid; gap: 6px; color: var(--muted); font-size: .875rem; }
+.profile-page button { min-height: 44px; padding: 10px 18px; border: 0; border-radius: 8px; background: var(--primary); color: var(--on-primary); cursor: pointer; }
+.profile-page button:disabled { opacity: .55; cursor: default; }
+@media (max-width: 600px) { .profile-page { padding: 16px; } .profile-page form { padding: 18px; } }

@@ -17,6 +17,7 @@ import {
   lockOtherActiveAdminIds,
   lockUserStatus,
   updateUserStatus,
+  updateUserProfile,
   type UserAccount,
   type UserListQuery,
 } from '../persistence/users-repository.js';
@@ -39,6 +40,34 @@ export interface NewUser {
   readonly email: string;
   readonly password: string;
   readonly roles: readonly RoleCode[];
+}
+
+export async function updateOwnProfile(
+  dependencies: IdentityDependencies,
+  userId: number,
+  profile: { readonly name: string; readonly email: string },
+): Promise<Result<UserAccount, { readonly code: 'EMAIL_ALREADY_REGISTERED' | 'USER_NOT_FOUND' }>> {
+  const normalizedProfile = { name: profile.name.trim(), email: normalizeEmail(profile.email) };
+  try {
+    const outcome = await dependencies.database.db.transaction(async (transaction) => {
+      const status = await lockUserStatus(transaction, userId);
+      if (!status) return fail({ code: 'USER_NOT_FOUND' as const });
+      const current = await findUserAccountById(transaction, userId);
+      if (!current) return fail({ code: 'USER_NOT_FOUND' as const });
+      if (current.email !== normalizedProfile.email && await emailExists(transaction, normalizedProfile.email)) {
+        return fail({ code: 'EMAIL_ALREADY_REGISTERED' as const });
+      }
+      await updateUserProfile(transaction, userId, normalizedProfile);
+      const updated = await findUserAccountById(transaction, userId);
+      if (!updated) throw new Error('El usuario bloqueado no se encontró');
+      return succeed(updated);
+    });
+    if (outcome.isSuccess) dependencies.recordAudit('identity.profile_updated', { actorUserId: userId, targetUserId: userId });
+    return outcome;
+  } catch (error) {
+    if (isDuplicateEntryError(error)) return fail({ code: 'EMAIL_ALREADY_REGISTERED' });
+    throw error;
+  }
 }
 
 async function requireRoleIds(

@@ -4,7 +4,6 @@ import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } fro
 import { filter, map, startWith } from 'rxjs';
 import { LOGIN_PATH } from '../../core/auth/auth.guards';
 import { AuthService } from '../../core/auth/auth.service';
-import { ROLE_LABELS } from '../../core/users/user.model';
 import { NotificationService } from '../../core/notifications/notification.service';
 import type { UserNotification } from '../../core/notifications/notification.model';
 import { ThemeService } from '../../core/theme/theme.service';
@@ -65,6 +64,7 @@ export class AppShell {
     return ({
       '/': 'Remates',
       '/mis-tareas': 'Mis tareas',
+      '/mi-perfil': 'Mi perfil',
       '/propiedades-sin-workflow': 'Propiedades sin workflow',
       '/panel-de-control': 'Panel de control',
       '/flujos': 'Flujos',
@@ -75,12 +75,6 @@ export class AppShell {
   });
   protected readonly navigation = computed(() =>
     NAVIGATION.filter((entry) => !entry.isAdminOnly || this.auth.hasRole('ADMIN')),
-  );
-  protected readonly roleSummary = computed(
-    () =>
-      this.user()
-        ?.roles.map((role) => ROLE_LABELS[role])
-        .join(' · ') ?? '',
   );
 
   protected async logOut(): Promise<void> {

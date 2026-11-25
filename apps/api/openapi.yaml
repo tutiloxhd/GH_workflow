@@ -114,6 +114,36 @@ paths:
                 $ref: '#/components/schemas/UserEnvelope'
         '401':
           $ref: '#/components/responses/Problem'
+    put:
+      operationId: updateOwnProfile
+      summary: Actualiza el nombre y correo del usuario autenticado
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, email]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 150 }
+                email: { type: string, format: email, maxLength: 190 }
+      responses:
+        '200':
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserEnvelope' }
+        '400':
+          $ref: '#/components/responses/Problem'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '409':
+          description: Correo ya registrado
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /api/users:
     get:

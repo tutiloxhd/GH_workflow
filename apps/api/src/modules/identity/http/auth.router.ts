@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { sendProblem, sendValidationProblem } from '../../../platform/http/problem-details.js';
 import { logIn, logOut } from '../application/authentication.js';
+import { updateOwnProfile } from '../application/user-administration.js';
 import type { IdentityDependencies } from '../application/identity-dependencies.js';
 import { getCurrentUser, requireSession } from './authorization.js';
 import { IDENTITY_PROBLEMS } from './identity-problems.js';
@@ -17,6 +18,10 @@ import { toUserResponse } from './user-response.js';
 const logInBodySchema = z.strictObject({
   email: z.string().trim().min(1).max(190),
   password: z.string().min(1).max(200),
+});
+const profileBodySchema = z.strictObject({
+  name: z.string().trim().min(1).max(150),
+  email: z.string().trim().pipe(z.email().max(190)),
 });
 
 export function createAuthRouter(
@@ -51,6 +56,20 @@ export function createAuthRouter(
 
   router.get('/me', requireSession(dependencies), (_request, response) => {
     response.json({ user: toUserResponse(getCurrentUser(response)) });
+  });
+
+  router.put('/me', requireSession(dependencies), async (request, response) => {
+    const body = profileBodySchema.safeParse(request.body);
+    if (!body.success) {
+      sendValidationProblem(response, body.error);
+      return;
+    }
+    const outcome = await updateOwnProfile(dependencies, getCurrentUser(response).id, body.data);
+    if (!outcome.isSuccess) {
+      sendProblem(response, IDENTITY_PROBLEMS[outcome.failure.code]);
+      return;
+    }
+    response.json({ user: toUserResponse(outcome.value) });
   });
 
   return router;

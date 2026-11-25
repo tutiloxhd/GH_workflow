@@ -48,6 +48,12 @@ export class AuthService {
     }
   }
 
+  async updateProfile(profile: { readonly name: string; readonly email: string }): Promise<User> {
+    const { user } = await firstValueFrom(this.http.put<UserEnvelope>('/api/auth/me', profile));
+    this.user.set(user);
+    return user;
+  }
+
   // La API rechazó la sesión (venció o fue revocada): se olvida el usuario local.
   forgetSession(): void {
     this.user.set(null);

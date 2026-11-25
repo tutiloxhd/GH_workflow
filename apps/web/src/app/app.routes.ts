@@ -26,6 +26,11 @@ export const routes: Routes = [
           import('./pages/my-tasks/my-tasks-page').then((page) => page.MyTasksPage),
       },
       {
+        path: 'mi-perfil',
+        title: 'Mi perfil · GrupoHouse',
+        loadComponent: () => import('./pages/profile/profile-page').then((page) => page.ProfilePage),
+      },
+      {
         path: 'propiedades-sin-workflow',
         canActivate: [adminGuard],
         title: 'Propiedades sin workflow · GrupoHouse',

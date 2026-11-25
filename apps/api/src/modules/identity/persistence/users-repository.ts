@@ -223,6 +223,14 @@ export async function updateUserStatus(
   await executor.update(users).set({ status }).where(eq(users.id, userId));
 }
 
+export async function updateUserProfile(
+  executor: DatabaseExecutor,
+  userId: number,
+  profile: { readonly name: string; readonly email: string },
+): Promise<void> {
+  await executor.update(users).set(profile).where(eq(users.id, userId));
+}
+
 // Cuenta y bloquea a los demás administradores activos, para que dos cambios concurrentes
 // no dejen el sistema sin ninguno.
 export async function lockOtherActiveAdminIds(
