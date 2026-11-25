@@ -87,6 +87,75 @@ describe('sincronización con admin_new', () => {
       ])
     ).map((row) => row.code as string);
 
+  it('con --dev importa cuentas sin clave de origen con Test123 y conserva las existentes', async () => {
+    const existing = await givenUser(context, {
+      email: 'existente@example.test',
+      roles: ['MANAGER'],
+    });
+    await context.database.pool.query('UPDATE users SET admin_new_user_id = ? WHERE id = ?', [
+      71003,
+      existing.id,
+    ]);
+    const source = {
+      ...fixture.source,
+      readAgentUsers: () =>
+        Promise.resolve([
+          {
+            adminNewUserId: 71003,
+            name: existing.name,
+            rut: null,
+            email: existing.email,
+            legacyPassword: null,
+            areaId: 3,
+            regionName: null,
+          },
+          {
+            adminNewUserId: 71004,
+            name: 'Agente de prueba',
+            rut: null,
+            email: 'nuevo@example.test',
+            legacyPassword: null,
+            areaId: 3,
+            regionName: null,
+          },
+        ]),
+      close: () => Promise.resolve(),
+    };
+    const importUsers = (shouldApply: boolean) =>
+      importAdminNewAgentUsers(
+        {
+          database: context.database,
+          source,
+          clock: context.clock,
+          passwordHasher: context.dependencies.passwordHasher,
+        },
+        shouldApply,
+        { developmentPassword: 'Test123' },
+      );
+
+    expect(await importUsers(false)).toMatchObject({
+      eligibleUsers: 2,
+      imported: 0,
+      skippedIncompleteRecords: 0,
+    });
+    expect(await rows('SELECT id FROM users WHERE admin_new_user_id = ?', [71004])).toHaveLength(0);
+    expect(await importUsers(true)).toMatchObject({ imported: 1, alreadyImported: 1 });
+    const [imported] = await rows(
+      'SELECT password_hash AS passwordHash FROM users WHERE admin_new_user_id = ?',
+      [71004],
+    );
+    const [unchanged] = await rows('SELECT password_hash AS passwordHash FROM users WHERE id = ?', [
+      existing.id,
+    ]);
+    expect(
+      await context.dependencies.passwordHasher.matches('Test123', String(imported?.passwordHash)),
+    ).toBe(true);
+    expect(
+      await context.dependencies.passwordHasher.matches('Test123', String(unchanged?.passwordHash)),
+    ).toBe(false);
+    expect(await importUsers(true)).toMatchObject({ imported: 0, alreadyImported: 2 });
+  });
+
   it('actualiza la región de agentes ya importados desde gh_agente_zona', async () => {
     const user = await givenUser(context, {
       email: 'agente-region@example.test',

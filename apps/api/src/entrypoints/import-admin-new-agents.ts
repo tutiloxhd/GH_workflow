@@ -11,11 +11,15 @@ import { connectDatabase } from '../platform/database/database.js';
 
 async function run(): Promise<void> {
   const argumentsList = process.argv.slice(2);
-  if (argumentsList.some((argument) => argument !== '--apply')) {
-    throw new Error('Uso: npm run users:import-admin-new-agents [-- --apply]');
+  if (argumentsList.some((argument) => !['--apply', '--dev'].includes(argument))) {
+    throw new Error('Uso: npm run users:import-admin-new-agents [-- --apply] [--dev]');
   }
   const shouldApply = argumentsList.includes('--apply');
+  const isDevelopmentImport = argumentsList.includes('--dev');
   const env = parseEnv(process.env);
+  if (isDevelopmentImport && env.NODE_ENV !== 'development') {
+    throw new Error('--dev solo se permite con NODE_ENV=development');
+  }
   const database = connectDatabase(toDatabaseSettings(env));
   const source = connectAdminNewSource(toAdminNewDatabaseSettings(env));
 
@@ -28,6 +32,7 @@ async function run(): Promise<void> {
         passwordHasher: createBcryptPasswordHasher(PRODUCTION_BCRYPT_COST),
       },
       shouldApply,
+      isDevelopmentImport ? { developmentPassword: 'Gligar#41' } : undefined,
     );
     process.stdout.write(
       `${JSON.stringify({ mode: shouldApply ? 'APPLY' : 'DRY_RUN', ...summary }, null, 2)}\n`,

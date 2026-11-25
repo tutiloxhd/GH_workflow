@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
@@ -6,6 +6,7 @@ import { LOGIN_PATH } from '../../core/auth/auth.guards';
 import { AuthService } from '../../core/auth/auth.service';
 import { ROLE_LABELS } from '../../core/users/user.model';
 import { NotificationService } from '../../core/notifications/notification.service';
+import type { UserNotification } from '../../core/notifications/notification.model';
 import { ThemeService } from '../../core/theme/theme.service';
 import { Icon, type IconName } from '../../shared/icon/icon';
 
@@ -31,6 +32,8 @@ const NAVIGATION: readonly NavigationEntry[] = [
   { label: 'Sincronización', icon: 'sync', path: '/sincronizacion', isAdminOnly: true },
 ];
 
+const TOAST_DURATION_MILLISECONDS = 7_000;
+
 @Component({
   selector: 'app-shell',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon],
@@ -52,6 +55,7 @@ export class AppShell {
   protected readonly theme = inject(ThemeService);
   protected readonly isNotificationPanelOpen = signal(false);
   protected readonly isAccountMenuOpen = signal(false);
+  protected readonly floatingNotification = signal<UserNotification | null>(null);
 
   protected readonly user = this.auth.currentUser;
   protected readonly pageTitle = computed(() => {
@@ -122,7 +126,22 @@ export class AppShell {
     });
   }
 
+  protected async openFloatingNotification(notification: UserNotification): Promise<void> {
+    this.floatingNotification.set(null);
+    await this.openNotification(notification.id, notification.workflowId, notification.taskId);
+  }
+
   constructor() {
     void this.notificationService.start();
+    effect((onCleanup) => {
+      const incoming = this.notificationService.latestIncoming();
+      if (!incoming) {
+        this.floatingNotification.set(null);
+        return;
+      }
+      this.floatingNotification.set(incoming);
+      const timeout = setTimeout(() => this.floatingNotification.set(null), TOAST_DURATION_MILLISECONDS);
+      onCleanup(() => clearTimeout(timeout));
+    });
   }
 }

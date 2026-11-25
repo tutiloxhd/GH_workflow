@@ -118,6 +118,19 @@
     </main>
   </div>
 
+  <div class="floating-notification-region" aria-live="polite" aria-atomic="true">
+    @if (floatingNotification(); as notification) {
+      <aside class="floating-notification" aria-label="Nueva notificación">
+        <div class="floating-notification-content">
+          <strong>{{ notification.title }}</strong>
+          <p>{{ notification.body }}</p>
+          <button type="button" class="floating-notification-open" (click)="openFloatingNotification(notification)">Ver notificación</button>
+        </div>
+        <button type="button" class="floating-notification-close" aria-label="Cerrar aviso" (click)="floatingNotification.set(null)">×</button>
+      </aside>
+    }
+  </div>
+
   <dialog #mobileMenu class="mobile-menu" aria-label="Secciones" (close)="restoreMobileMenuFocus()" (click)="$event.target === mobileMenu && closeMobileMenu()">
     <div class="mobile-menu-header">
       <img src="logohouse.png" alt="GrupoHouse" />

@@ -13,7 +13,7 @@ describe('AppShell mobile menu', () => {
       providers: [
         provideRouter([]),
         { provide: AuthService, useValue: { currentUser: signal(null), hasRole: () => false } },
-        { provide: NotificationService, useValue: { start: () => undefined } },
+        { provide: NotificationService, useValue: { start: () => undefined, latestIncoming: signal(null) } },
         { provide: ThemeService, useValue: { isDark: signal(false), setPreference: () => undefined } },
       ],
     });
@@ -48,6 +48,7 @@ describe('AppShell mobile menu', () => {
           notifications: signal([{ id: 8, workflowId: 12, taskId: 34, trigger: 'TASK_ASSIGNED', title: 'Tarea asignada', body: 'Tarea sintética', readAt: null }]),
           hasUnread: signal(true),
           unreadCount: signal(1),
+          latestIncoming: signal(null),
         } },
         { provide: ThemeService, useValue: { isDark: signal(false), setPreference: () => undefined } },
       ],
@@ -75,7 +76,7 @@ describe('AppShell mobile menu', () => {
       providers: [
         provideRouter([]),
         { provide: AuthService, useValue: { currentUser: signal(null), hasRole: () => false } },
-        { provide: NotificationService, useValue: { start: () => undefined } },
+        { provide: NotificationService, useValue: { start: () => undefined, latestIncoming: signal(null) } },
         { provide: ThemeService, useValue: { isDark, setPreference } },
       ],
     });
@@ -91,5 +92,38 @@ describe('AppShell mobile menu', () => {
     await fixture.whenStable();
     expect(setPreference).toHaveBeenCalledWith('dark');
     expect(switchInput.checked).toBe(true);
+  });
+
+  it('opens a floating notification through the same task link', async () => {
+    const latestIncoming = signal<{
+      id: number; workflowId: number; taskId: number; title: string; body: string;
+    } | null>(null);
+    const markRead = vi.fn().mockResolvedValue(undefined);
+    TestBed.configureTestingModule({
+      imports: [AppShell],
+      providers: [
+        provideRouter([]),
+        { provide: AuthService, useValue: { currentUser: signal(null), hasRole: () => false } },
+        { provide: NotificationService, useValue: { start: () => undefined, latestIncoming, markRead } },
+        { provide: ThemeService, useValue: { isDark: signal(false), setPreference: () => undefined } },
+      ],
+    });
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(AppShell);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.querySelector('.floating-notification')).toBeNull();
+
+    latestIncoming.set({ id: 9, workflowId: 12, taskId: 34, title: 'Tarea nueva', body: 'Revisar tarea' });
+    await fixture.whenStable();
+    const notice = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.floating-notification');
+    expect(notice?.textContent).toContain('Tarea nueva');
+    notice?.querySelector<HTMLButtonElement>('.floating-notification-open')?.click();
+    await fixture.whenStable();
+
+    expect(markRead).toHaveBeenCalledWith(9);
+    expect(navigate).toHaveBeenCalledWith(['/mis-tareas'], {
+      queryParams: { workflow: 12, task: 34 },
+    });
+    expect(fixture.nativeElement.querySelector('.floating-notification')).toBeNull();
   });
 });
