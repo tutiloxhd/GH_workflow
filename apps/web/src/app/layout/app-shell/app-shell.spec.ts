@@ -83,15 +83,14 @@ describe('AppShell mobile menu', () => {
     const fixture = TestBed.createComponent(AppShell);
     await fixture.whenStable();
     const menu = (fixture.nativeElement as HTMLElement).querySelector<HTMLDialogElement>('.mobile-menu');
-    const switchInput = menu?.querySelector<HTMLInputElement>('input[role="switch"]');
-    if (!menu || !switchInput) throw new Error('Falta el switch móvil');
-    expect(menu.firstElementChild?.nextElementSibling?.contains(switchInput)).toBe(true);
+    const switchButton = menu?.querySelector<HTMLButtonElement>('button[role="switch"]');
+    if (!menu || !switchButton) throw new Error('Falta el switch móvil');
+    expect(switchButton.getAttribute('aria-checked')).toBe('false');
 
-    switchInput.checked = true;
-    switchInput.dispatchEvent(new Event('change', { bubbles: true }));
+    switchButton.click();
     await fixture.whenStable();
     expect(setPreference).toHaveBeenCalledWith('dark');
-    expect(switchInput.checked).toBe(true);
+    expect(switchButton.getAttribute('aria-checked')).toBe('true');
   });
 
   it('opens a floating notification through the same task link', async () => {

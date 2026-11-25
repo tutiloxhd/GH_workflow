@@ -420,13 +420,26 @@
     font-weight: 700;
   }
 
-  .mobile-menu .theme-control { margin: 0 18px; padding: 16px 0; border-bottom: 1px solid var(--line); }
-
-  .mobile-menu .theme-control input {
-    z-index: 1;
-    width: 48px;
-    height: 44px;
+  .mobile-theme-control {
+    display: flex;
+    width: calc(100% - 36px);
+    min-height: 60px;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 18px;
+    padding: 16px 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: transparent;
+    color: var(--navy);
+    font-size: .8125rem;
+    text-align: left;
+    cursor: pointer;
   }
+
+  .mobile-theme-control:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+  .mobile-theme-control .theme-track.is-on { border-color: var(--primary); background: var(--primary); }
+  .mobile-theme-control .theme-track.is-on::after { transform: translateX(20px); background: var(--on-primary); }
 
   .mobile-menu-profile {
     display: flex;

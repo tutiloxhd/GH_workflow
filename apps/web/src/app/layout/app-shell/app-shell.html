@@ -136,10 +136,10 @@
       <img src="logohouse.png" alt="GrupoHouse" />
       <button type="button" class="mobile-menu-close" aria-label="Cerrar menú" (click)="closeMobileMenu()">×</button>
     </div>
-    <label class="theme-control">Modo oscuro
-      <input type="checkbox" role="switch" [checked]="theme.isDark()" (change)="theme.setPreference($any($event.target).checked ? 'dark' : 'light')" />
-      <span class="theme-track" aria-hidden="true"></span>
-    </label>
+    <button type="button" class="mobile-theme-control" role="switch" [attr.aria-checked]="theme.isDark()" (click)="toggleMobileTheme()">
+      Modo oscuro
+      <span class="theme-track" [class.is-on]="theme.isDark()" aria-hidden="true"></span>
+    </button>
     <nav class="mobile-menu-nav" aria-label="Secciones">
       @for (entry of navigation(); track entry.label) {
         @if (entry.path) {

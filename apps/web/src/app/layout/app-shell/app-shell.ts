@@ -94,6 +94,10 @@ export class AppShell {
     this.isAccountMenuOpen.update((isOpen) => !isOpen);
   }
 
+  protected toggleMobileTheme(): void {
+    this.theme.setPreference(this.theme.isDark() ? 'light' : 'dark');
+  }
+
   protected openMobileMenu(): void {
     this.isAccountMenuOpen.set(false);
     this.isNotificationPanelOpen.set(false);
