@@ -118,7 +118,7 @@
 .evidence-toggle input {
   width: 18px;
   height: 18px;
-  accent-color: var(--navy);
+  accent-color: var(--primary);
 }
 
 .dependencies {

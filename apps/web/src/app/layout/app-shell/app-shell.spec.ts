@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
 import { NotificationService } from '../../core/notifications/notification.service';
+import { ThemeService } from '../../core/theme/theme.service';
 import { AppShell } from './app-shell';
 
 describe('AppShell mobile menu', () => {
@@ -13,6 +14,7 @@ describe('AppShell mobile menu', () => {
         provideRouter([]),
         { provide: AuthService, useValue: { currentUser: signal(null), hasRole: () => false } },
         { provide: NotificationService, useValue: { start: () => undefined } },
+        { provide: ThemeService, useValue: { isDark: signal(false), setPreference: () => undefined } },
       ],
     });
     const fixture = TestBed.createComponent(AppShell);

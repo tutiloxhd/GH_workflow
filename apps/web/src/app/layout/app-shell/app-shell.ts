@@ -6,6 +6,7 @@ import { LOGIN_PATH } from '../../core/auth/auth.guards';
 import { AuthService } from '../../core/auth/auth.service';
 import { ROLE_LABELS } from '../../core/users/user.model';
 import { NotificationService } from '../../core/notifications/notification.service';
+import { ThemeService } from '../../core/theme/theme.service';
 import { Icon, type IconName } from '../../shared/icon/icon';
 
 interface NavigationEntry {
@@ -48,6 +49,7 @@ export class AppShell {
     startWith(this.router.url),
   ));
   protected readonly notificationService = inject(NotificationService);
+  protected readonly theme = inject(ThemeService);
   protected readonly isNotificationPanelOpen = signal(false);
   protected readonly isAccountMenuOpen = signal(false);
 

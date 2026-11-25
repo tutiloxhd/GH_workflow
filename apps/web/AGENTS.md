@@ -12,8 +12,8 @@ No se agregan librerías de UI, estado, gráficos ni utilidades sin aprobación 
 
 ## Referencia visual
 
-La maqueta de [references/demoweb/](../../references/demoweb/) es la referencia visual y de interacción.
-Se adopta su apariencia (marca GrupoHouse, paleta neutra, colores solo para estados); no se rediseña sin solicitud.
+La maqueta de [references/demoweb/](../../references/demoweb/) sigue siendo referencia de interacción.
+La paleta y los temas claro, oscuro y sistema implementados se basan en [references/design system/](../../references/design%20system/), según la solicitud del usuario. Los colores deben consumirse mediante tokens semánticos.
 `references/` es de solo lectura: se lee, no se copia código tal cual ni se modifica.
 
 ## Reglas
