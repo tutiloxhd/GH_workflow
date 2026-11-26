@@ -1,10 +1,11 @@
-import { ChangeDetectionStrategy, Component, ElementRef, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, Injector, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
 import { LOGIN_PATH } from '../../core/auth/auth.guards';
 import { AuthService } from '../../core/auth/auth.service';
 import { NotificationService } from '../../core/notifications/notification.service';
+import { PushService } from '../../core/notifications/push.service';
 import type { UserNotification } from '../../core/notifications/notification.model';
 import { ThemeService } from '../../core/theme/theme.service';
 import { Icon, type IconName } from '../../shared/icon/icon';
@@ -51,6 +52,7 @@ export class AppShell {
     startWith(this.router.url),
   ));
   protected readonly notificationService = inject(NotificationService);
+  private readonly injector = inject(Injector);
   protected readonly theme = inject(ThemeService);
   protected readonly isNotificationPanelOpen = signal(false);
   protected readonly isAccountMenuOpen = signal(false);
@@ -80,6 +82,7 @@ export class AppShell {
   protected async logOut(): Promise<void> {
     this.isAccountMenuOpen.set(false);
     this.notificationService.stop();
+    try { await this.injector.get(PushService).unsubscribe(); } catch { /* El cierre de sesión debe continuar. */ }
     await this.auth.logOut();
     await this.router.navigateByUrl(LOGIN_PATH);
   }

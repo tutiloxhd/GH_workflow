@@ -8,9 +8,37 @@ La configuración se administra desde **Panel de control > Notificaciones**. Sol
 
 ## 2. Canales disponibles
 
-Actualmente existe un único canal productivo:
+El canal interno es el canal autoritativo:
 
 - **Notificación interna:** se muestra en la campana de la aplicación.
+
+Web Push está implementado como canal opcional para instalaciones compatibles de
+Chrome y Edge. La persona lo activa en **Mi perfil** para cada dispositivo. El
+mensaje del sistema es genérico; el detalle permanece en la aplicación y requiere
+sesión. Para habilitarlo, se deben revisar y aplicar `sql/migrations/0018_web_push.sql`
+y configurar `PUSH_VAPID_SUBJECT`, `PUSH_VAPID_PUBLIC_KEY` y
+`PUSH_VAPID_PRIVATE_KEY` en API, worker y scheduler. Si no se configuran, el canal
+permanece desactivado y siguen funcionando las notificaciones internas.
+
+Genera las claves una sola vez por ambiente desde `apps/api` con
+`node node_modules/web-push/src/cli.js generate-vapid-keys`. Guarda la clave
+privada solo en variables de entorno seguras y no la cambies sin planificar la
+renovación de las suscripciones. El endpoint del navegador y las claves de
+suscripción son datos sensibles; no deben copiarse a logs o fixtures.
+
+El SQL de push se aplicó en la base local de desarrollo el 2026-11-26 con
+autorización del usuario. En otros ambientes requiere revisión y aprobación.
+El generador Drizzle detectó
+un desfase anterior entre el esquema y `sql/migrations/meta/0017_snapshot.json`:
+preguntó por cambios de columnas de `users` ajenos a push. Por eso
+`0018_web_push.sql` está registrado en el journal,
+pero el siguiente uso de `db:generate` requiere reconciliar el snapshot. No se
+deben aceptar automáticamente esos cambios de `users` ni ejecutar el SQL sin revisión.
+
+Para pruebas desde el túnel HTTPS de VS Code, configura en `apps/api/.env`
+`WEB_ADDITIONAL_ORIGIN` con el origen exacto del enlace (sin barra final). La API
+mantiene `WEB_ORIGIN=http://localhost:4200` y acepta escrituras únicamente desde
+esos dos orígenes explícitos. Reinicia la API cuando cambie el enlace del túnel.
 
 No se envían correos todavía. Nodemailer o SMTP no forman parte del flujo activo actual.
 

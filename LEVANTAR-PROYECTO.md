@@ -159,6 +159,26 @@ Abre **`http://localhost:4200`** (no `127.0.0.1`: la API solo acepta escrituras 
 
 Para una sola sincronización: `npm run sync -- --once`.
 
+### Probar la PWA en el emulador de Android
+
+La PWA usa la misma interfaz adaptable del frontend. Para probar la instalación y el
+service worker se necesita la configuración de producción; `npm start` solo sirve
+para revisar la vista móvil durante el desarrollo.
+
+1. Inicia la API desde `apps/api` con `npm run dev`.
+2. Inicia el frontend desde `apps/web` con `npm start -- --configuration production`.
+   El servidor conserva el proxy de `/api` hacia `localhost:3000`.
+3. Con el emulador abierto, ejecuta `adb reverse tcp:4200 tcp:4200` en el equipo.
+4. En Chrome del emulador, abre `http://localhost:4200` e instala la aplicación desde
+   el menú del navegador.
+
+Usa `localhost` en el emulador, no `10.0.2.2`: así el navegador reconoce un contexto
+seguro para el service worker y la API recibe el origen configurado en `WEB_ORIGIN`.
+La caché contiene archivos de la interfaz, no respuestas de `/api`. El inicio de
+sesión y las operaciones del workflow requieren conexión con la API. Para comprobar
+una actualización, recompila y vuelve a abrir la aplicación; puede requerir una
+segunda apertura porque Angular activa la versión nueva después de descargarla.
+
 ### Qué esperar de la primera sincronización
 
 - Copia todas las propiedades aceptadas (`id_clasif = 7`) de tu `admin_new`.

@@ -58,6 +58,7 @@ const PROBLEM_MESSAGES: Readonly<Record<string, string>> = {
   LAST_ADMIN_REQUIRED: 'Debe quedar al menos un administrador activo.',
   USER_NOT_FOUND: 'El usuario ya no existe.',
   FORBIDDEN: 'No tienes permiso para esta acción.',
+  ORIGIN_NOT_ALLOWED: 'La dirección desde la que abriste la aplicación no está permitida para guardar cambios.',
   NETWORK_FAILURE: 'No se pudo conectar con el servidor. Revisa tu conexión.',
   WORKFLOW_NOT_ACTIVE: 'El remate no está activo: no se pueden avanzar tareas.',
   WORKFLOW_NOT_SUSPENDED: 'El remate no está suspendido.',

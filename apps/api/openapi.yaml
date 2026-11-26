@@ -8,7 +8,8 @@ info:
 
     Autenticación: cookie de sesión `gh_session` (HttpOnly, SameSite=Lax, Path=/api) emitida por
     `POST /api/auth/login`. Toda operación que no sea GET exige el encabezado `Origin` igual al
-    origen del frontend; si no, responde 403 `ORIGIN_NOT_ALLOWED`.
+    origen del frontend (`WEB_ORIGIN` o `WEB_ADDITIONAL_ORIGIN`); si no, responde 403
+    `ORIGIN_NOT_ALLOWED`.
 servers:
   - url: http://localhost:3000
     description: Desarrollo local
@@ -776,6 +777,82 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /api/push/config:
+    get:
+      operationId: getPushConfig
+      summary: Devuelve la clave pública Web Push y el estado de configuración
+      tags: [notifications]
+      responses:
+        '200':
+          description: Configuración pública para un usuario autenticado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [isEnabled, publicKey]
+                properties:
+                  isEnabled: { type: boolean }
+                  publicKey: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/push/subscriptions:
+    post:
+      operationId: subscribeToPush
+      summary: Asocia la suscripción de este dispositivo al usuario autenticado
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PushSubscription' }
+      responses:
+        '204': { description: Suscripción guardada }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: unsubscribeFromPush
+      summary: Revoca la suscripción de este dispositivo
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint: { type: string, format: uri }
+      responses:
+        '204': { description: Suscripción revocada o inexistente }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /api/push/subscriptions/status:
+    post:
+      operationId: getPushSubscriptionStatus
+      summary: Consulta si la suscripción del dispositivo pertenece al usuario
+      tags: [notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint: { type: string, format: uri }
+      responses:
+        '200':
+          description: Estado de la suscripción
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [isSubscribed]
+                properties:
+                  isSubscribed: { type: boolean }
+        '401': { $ref: '#/components/responses/Problem' }
+
   /api/notifications:
     get:
       operationId: listNotifications
@@ -1234,6 +1311,19 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
+    PushSubscription:
+      type: object
+      additionalProperties: false
+      required: [endpoint, keys]
+      properties:
+        endpoint: { type: string, format: uri, maxLength: 2048 }
+        keys:
+          type: object
+          additionalProperties: false
+          required: [p256dh, auth]
+          properties:
+            p256dh: { type: string, maxLength: 255 }
+            auth: { type: string, maxLength: 255 }
     WorkflowTemplateTask:
       type: object
       additionalProperties: false

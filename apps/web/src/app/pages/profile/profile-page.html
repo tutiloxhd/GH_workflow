@@ -24,3 +24,15 @@
     <button type="submit" [disabled]="isSaving() || form.pristine">{{ isSaving() ? 'Guardando…' : 'Guardar cambios' }}</button>
   </form>
 </section>
+<section class="push-settings" aria-labelledby="push-title">
+  <h2 id="push-title">Notificaciones del dispositivo</h2>
+  <p>Recibe un aviso general cuando llegue una nueva notificación, incluso si la aplicación está cerrada.</p>
+  @if (pushMessage(); as message) { <p role="status">{{ message }}</p> }
+  @if (push.isAvailable()) {
+    <button type="button" (click)="togglePush()" [disabled]="isChangingPush()">
+      {{ push.isSubscribed() ? 'Desactivar en este dispositivo' : 'Activar en este dispositivo' }}
+    </button>
+  } @else {
+    <p>Esta función requiere una instalación segura y la configuración Web Push del servidor.</p>
+  }
+</section>

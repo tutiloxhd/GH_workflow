@@ -14,8 +14,11 @@ function start(): void {
   const database = connectDatabase(toDatabaseSettings(env));
 
   const app = buildApiApp(identityDependenciesFromEnv(env, database), {
-    allowedOrigin: env.WEB_ORIGIN,
+    allowedOrigin: env.WEB_ADDITIONAL_ORIGIN
+      ? [env.WEB_ORIGIN, env.WEB_ADDITIONAL_ORIGIN]
+      : env.WEB_ORIGIN,
     isSecureCookie: usesSecureCookies(env),
+    ...(env.PUSH_VAPID_PUBLIC_KEY ? { pushPublicKey: env.PUSH_VAPID_PUBLIC_KEY } : {}),
     holidayProvider: createBoostrHolidayProvider(),
   });
 
