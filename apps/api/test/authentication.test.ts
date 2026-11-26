@@ -117,6 +117,26 @@ describe('autenticación', () => {
     ).toBe(401);
   });
 
+  it('permite editar solo el perfil propio y rechaza correos duplicados', async () => {
+    const cookie = await logInAs(context, MANAGER_EMAIL);
+    await givenUser(context, { email: 'ocupado@example.test', roles: ['BIDDER'] });
+
+    expect(await callApi(context, 'PUT', '/api/auth/me', {
+      sessionCookie: cookie,
+      body: { name: 'Nombre actualizado', email: ' NUEVO@example.test ' },
+    })).toMatchObject({ status: 200, body: { user: { name: 'Nombre actualizado', email: 'nuevo@example.test', roles: ['MANAGER'] } } });
+    expect(await callApi(context, 'GET', '/api/auth/me', { sessionCookie: cookie }))
+      .toMatchObject({ body: { user: { name: 'Nombre actualizado' } } });
+    expect(await callApi(context, 'PUT', '/api/auth/me', {
+      sessionCookie: cookie,
+      body: { name: 'Otro', email: 'ocupado@example.test' },
+    })).toMatchObject({ status: 409, body: { code: 'EMAIL_ALREADY_REGISTERED' } });
+    expect((await callApi(context, 'PUT', '/api/auth/me', {
+      sessionCookie: cookie,
+      body: { name: 'Otro', email: 'otro@example.test', roles: ['ADMIN'] },
+    })).status).toBe(400);
+  });
+
   it('la sesión vence a las 8 horas', async () => {
     const cookie = await logInAs(context, MANAGER_EMAIL);
 

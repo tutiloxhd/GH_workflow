@@ -12,8 +12,8 @@ No se agregan librerías de UI, estado, gráficos ni utilidades sin aprobación 
 
 ## Referencia visual
 
-La maqueta de [references/demoweb/](../../references/demoweb/) es la referencia visual y de interacción.
-Se adopta su apariencia (marca GrupoHouse, paleta neutra, colores solo para estados); no se rediseña sin solicitud.
+La maqueta de [references/demoweb/](../../references/demoweb/) sigue siendo referencia de interacción.
+La paleta y los temas claro, oscuro y sistema implementados se basan en [references/design system/](../../references/design%20system/), según la solicitud del usuario. Los colores deben consumirse mediante tokens semánticos.
 `references/` es de solo lectura: se lee, no se copia código tal cual ni se modifica.
 
 ## Reglas
@@ -46,7 +46,7 @@ npm start            # servidor de desarrollo en http://localhost:4200
 ```text
 src/app/
   core/      servicios y modelos transversales (auth, api, users, workflow, sync, time)
-  layout/    shell con barra lateral y navegación inferior
+  layout/    shell con barra lateral y menú lateral en pantallas estrechas
   pages/     una carpeta por pantalla (home, my-tasks, workflow, users, sync, login)
   shared/    piezas reutilizables (icon, modal)
 ```

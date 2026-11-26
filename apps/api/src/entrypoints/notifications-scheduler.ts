@@ -17,7 +17,9 @@ async function run(): Promise<void> {
   const iterate = async () => {
     if (isStopping) return;
     try {
-      await processDueNotificationJobs({ database, clock: systemClock }, workerId);
+      await processDueNotificationJobs(
+        { database, clock: systemClock, enablePush: Boolean(env.PUSH_VAPID_PUBLIC_KEY) }, workerId,
+      );
     } catch (error) {
       logger.error('notifications.scheduler_failed', error);
     }

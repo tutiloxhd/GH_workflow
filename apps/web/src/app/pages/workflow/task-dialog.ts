@@ -45,6 +45,7 @@ export class TaskDialog implements OnInit {
   readonly workflowId = input.required<number>();
   readonly taskId = input.required<number>();
   readonly isReadOnly = input(false);
+  readonly fullscreenOnMobile = input(false);
   readonly changed = output<WorkflowDetail>();
   readonly closed = output();
 

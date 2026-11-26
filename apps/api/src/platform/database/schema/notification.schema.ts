@@ -182,6 +182,62 @@ export const notifications = mysqlTable(
   ],
 );
 
+export const pushSubscriptions = mysqlTable(
+  'push_subscriptions',
+  {
+    id: primaryId(),
+    userId: referenceId('user_id').notNull(),
+    endpoint: varchar('endpoint', { length: 2048 }).notNull(),
+    endpointHash: varchar('endpoint_hash', { length: 64 }).notNull(),
+    p256dh: varchar('p256dh', { length: 255 }).notNull(),
+    auth: varchar('auth', { length: 255 }).notNull(),
+    revokedAt: utcDateTime('revoked_at'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_push_subscriptions_endpoint_hash').on(table.endpointHash),
+    index('idx_push_subscriptions_user').on(table.userId, table.revokedAt),
+    foreignKey({
+      name: 'fk_push_subscriptions_user',
+      columns: [table.userId],
+      foreignColumns: [users.id],
+    }),
+  ],
+);
+
+export const PUSH_DELIVERY_STATUSES = [
+  'PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED', 'FAILED',
+] as const;
+
+export const pushDeliveries = mysqlTable(
+  'push_deliveries',
+  {
+    id: primaryId(),
+    notificationId: referenceId('notification_id').notNull(),
+    subscriptionId: referenceId('subscription_id').notNull(),
+    status: varchar('status', { length: 20, enum: PUSH_DELIVERY_STATUSES })
+      .notNull().default('PENDING'),
+    availableAt: utcDateTime('available_at').notNull().default(sql`CURRENT_TIMESTAMP(6)`),
+    lockedBy: varchar('locked_by', { length: 100 }),
+    lockedUntil: utcDateTime('locked_until'),
+    attempts: int('attempts', { unsigned: true }).notNull().default(0),
+    lastError: varchar('last_error', { length: 100 }),
+    completedAt: utcDateTime('completed_at'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('uq_push_deliveries_notification_subscription').on(
+      table.notificationId, table.subscriptionId,
+    ),
+    index('idx_push_deliveries_due').on(table.status, table.availableAt),
+    index('idx_push_deliveries_lease').on(table.lockedUntil),
+    foreignKey({ name: 'fk_push_deliveries_notification', columns: [table.notificationId], foreignColumns: [notifications.id] }),
+    foreignKey({ name: 'fk_push_deliveries_subscription', columns: [table.subscriptionId], foreignColumns: [pushSubscriptions.id] }),
+    check('chk_push_deliveries_status', sql`${table.status} IN ('PENDING', 'PROCESSING', 'COMPLETED', 'CANCELLED', 'FAILED')`),
+  ],
+);
+
 export const NOTIFICATION_JOB_STATUSES = [
   'PENDING',
   'PROCESSING',

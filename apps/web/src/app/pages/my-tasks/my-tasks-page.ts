@@ -6,6 +6,8 @@ import {
   signal,
   type OnInit,
 } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute, Router } from '@angular/router';
 import { problemMessage, toApiProblem } from '../../core/api/api-problem';
 import { formatDateTime, formatRelativeDue } from '../../core/time/santiago-time';
 import { WorkflowApiService } from '../../core/workflow/workflow-api.service';
@@ -23,6 +25,9 @@ import { DUE_GROUP_LABELS, DUE_GROUP_ORDER, groupByDue, type DueGroup } from './
 })
 export class MyTasksPage implements OnInit {
   private readonly api = inject(WorkflowApiService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly queryParams = toSignal(this.route.queryParamMap, { initialValue: this.route.snapshot.queryParamMap });
 
   protected readonly tasks = signal<readonly MyTask[]>([]);
   protected readonly totalTasks = signal(0);
@@ -34,6 +39,16 @@ export class MyTasksPage implements OnInit {
   protected readonly loadError = signal<string | null>(null);
   protected readonly collapsedGroups = signal<ReadonlySet<DueGroup>>(new Set());
   protected readonly openTask = signal<MyTask | null>(null);
+  private readonly linkedTask = computed(() => {
+    const params = this.queryParams();
+    const workflowId = Number(params.get('workflow'));
+    const taskId = Number(params.get('task'));
+    return Number.isSafeInteger(workflowId) && workflowId > 0 &&
+      Number.isSafeInteger(taskId) && taskId > 0
+      ? { workflowId, id: taskId }
+      : null;
+  });
+  protected readonly displayedTask = computed(() => this.openTask() ?? this.linkedTask());
 
   protected readonly groupOrder = DUE_GROUP_ORDER;
   protected readonly groupLabels = DUE_GROUP_LABELS;
@@ -102,6 +117,13 @@ export class MyTasksPage implements OnInit {
   // Al cerrar el modal se recarga la bandeja: completar o reasignar cambia lo que corresponde ver.
   protected onTaskDialogClosed(): void {
     this.openTask.set(null);
+    if (this.linkedTask()) {
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { workflow: null, task: null },
+        queryParamsHandling: 'merge',
+      });
+    }
     void this.load();
   }
 }

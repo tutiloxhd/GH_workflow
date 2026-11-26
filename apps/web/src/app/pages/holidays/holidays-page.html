@@ -83,7 +83,7 @@
           <tbody>
             @for (holiday of holidays(); track holiday.date) {
               <tr>
-                <td>{{ formatDay(holiday.date) }}</td>
+                <td data-label="Día">{{ formatDay(holiday.date) }}</td>
                 <td data-label="Feriado">
                   {{ holiday.name }}
                   @if (holiday.isInalienable) {

@@ -25,7 +25,7 @@
   margin: 0;
   padding: 12px 14px;
   border-radius: 10px;
-  background: var(--surface-muted, rgba(234, 179, 8, 0.12));
+  background: var(--amber-soft);
 }
 
 .add-form {

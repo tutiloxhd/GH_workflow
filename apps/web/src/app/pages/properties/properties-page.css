@@ -1,0 +1,13 @@
+@media (max-width: 760px) {
+  .data-table td:first-child {
+    font-weight: 700;
+  }
+
+  .data-table td:last-child {
+    margin-top: 10px;
+  }
+
+  .data-table .button {
+    width: 100%;
+  }
+}

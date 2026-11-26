@@ -52,9 +52,34 @@ describe('parseEnv', () => {
     ).toEqual(['WEB_ORIGIN']);
   });
 
+  it('valida el origen adicional del túnel como URL HTTPS exacta', () => {
+    expect(parseEnv({
+      ...validSource,
+      WEB_ADDITIONAL_ORIGIN: 'https://example.devtunnels.ms',
+    }).WEB_ADDITIONAL_ORIGIN).toBe('https://example.devtunnels.ms');
+    expect(captureEnvError({
+      ...validSource,
+      WEB_ADDITIONAL_ORIGIN: 'https://example.devtunnels.ms/path',
+    }).variableNames).toEqual(['WEB_ADDITIONAL_ORIGIN']);
+    expect(captureEnvError({
+      ...validSource,
+      WEB_ADDITIONAL_ORIGIN: 'http://example.devtunnels.ms',
+    }).variableNames).toEqual(['WEB_ADDITIONAL_ORIGIN']);
+  });
+
   it('limita la duración de la sesión a 24 horas', () => {
     expect(captureEnvError({ ...validSource, SESSION_TTL_HOURS: '48' }).variableNames).toEqual([
       'SESSION_TTL_HOURS',
+    ]);
+  });
+
+  it('requiere las tres variables VAPID juntas', () => {
+    const error = captureEnvError({
+      ...validSource,
+      PUSH_VAPID_PUBLIC_KEY: 'A'.repeat(87),
+    });
+    expect(error.variableNames).toEqual([
+      'PUSH_VAPID_SUBJECT', 'PUSH_VAPID_PUBLIC_KEY', 'PUSH_VAPID_PRIVATE_KEY',
     ]);
   });
 });

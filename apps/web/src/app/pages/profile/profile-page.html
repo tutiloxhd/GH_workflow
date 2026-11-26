@@ -1,0 +1,38 @@
+<section class="profile-page">
+  <header>
+    <h1>Mi perfil</h1>
+    <p>Actualiza tus datos de contacto.</p>
+  </header>
+  <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+    @if (saved()) { <p class="profile-success" role="status">Perfil actualizado.</p> }
+    @if (errorMessage(); as message) { <p class="profile-error" role="alert">{{ message }}</p> }
+    <label>Nombre
+      <input formControlName="name" autocomplete="name" maxlength="150" [attr.aria-invalid]="form.controls.name.touched && form.controls.name.invalid" />
+      @if (form.controls.name.touched && form.controls.name.invalid) { <small>Ingresa tu nombre.</small> }
+    </label>
+    <label>Correo electrónico
+      <input type="email" formControlName="email" autocomplete="email" maxlength="190" [attr.aria-invalid]="form.controls.email.touched && form.controls.email.invalid" />
+      @if (form.controls.email.touched && form.controls.email.invalid) { <small>Ingresa un correo válido.</small> }
+    </label>
+    @if (user(); as currentUser) {
+      <div class="profile-details">
+        <span>RUT: {{ currentUser.rut || 'No registrado' }}</span>
+        <span>Región: {{ currentUser.regionName || 'No asignada' }}</span>
+        <span>Rol: {{ currentUser.roles.length ? roleLabels[currentUser.roles[0]] : 'Sin rol asignado' }}</span>
+      </div>
+    }
+    <button type="submit" [disabled]="isSaving() || form.pristine">{{ isSaving() ? 'Guardando…' : 'Guardar cambios' }}</button>
+  </form>
+</section>
+<section class="push-settings" aria-labelledby="push-title">
+  <h2 id="push-title">Notificaciones del dispositivo</h2>
+  <p>Recibe un aviso general cuando llegue una nueva notificación, incluso si la aplicación está cerrada.</p>
+  @if (pushMessage(); as message) { <p role="status">{{ message }}</p> }
+  @if (push.isAvailable()) {
+    <button type="button" (click)="togglePush()" [disabled]="isChangingPush()">
+      {{ push.isSubscribed() ? 'Desactivar en este dispositivo' : 'Activar en este dispositivo' }}
+    </button>
+  } @else {
+    <p>Esta función requiere una instalación segura y la configuración Web Push del servidor.</p>
+  }
+</section>

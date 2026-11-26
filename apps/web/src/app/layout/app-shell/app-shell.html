@@ -19,11 +19,18 @@
         }
       }
     </nav>
+    <label class="theme-control">Modo oscuro
+      <input type="checkbox" role="switch" [checked]="theme.isDark()" (change)="theme.setPreference($any($event.target).checked ? 'dark' : 'light')" />
+      <span class="theme-track" aria-hidden="true"></span>
+    </label>
   </aside>
 
   <div class="main">
     <header class="topbar">
-      <img class="topbar-logo" src="logohouse.png" alt="GrupoHouse" />
+      <button #mobileMenuButton type="button" class="mobile-menu-button" aria-label="Abrir menú de secciones" aria-haspopup="dialog" (click)="openMobileMenu()">
+        <app-icon name="menu" />
+      </button>
+      <strong class="topbar-title">{{ pageTitle() }}</strong>
       @if (user(); as currentUser) {
         <div class="notifications-menu">
           <button
@@ -42,15 +49,14 @@
             <section class="notification-panel" aria-label="Notificaciones recientes">
               <header>
                 <strong>Notificaciones</strong>
-                @if (notificationService.hasUnread()) {
-                  <button
-                    type="button"
-                    class="button link"
-                    (click)="notificationService.markAllRead()"
-                  >
-                    Marcar todas como leídas
-                  </button>
-                }
+                <div class="notification-actions">
+                  @if (notificationService.hasUnread()) {
+                    <button type="button" class="button link" (click)="notificationService.markAllRead()">
+                      Marcar todas como leídas
+                    </button>
+                  }
+                  <button type="button" class="notification-close" aria-label="Cerrar notificaciones" (click)="toggleNotifications()">×</button>
+                </div>
               </header>
               <div class="notification-list">
                 @for (notification of notificationService.notifications(); track notification.id) {
@@ -93,12 +99,12 @@
             <span class="account-avatar" aria-hidden="true">{{ currentUser.name.charAt(0) }}</span>
             <span class="account-text">
               <strong>{{ currentUser.name }}</strong>
-              <small>{{ roleSummary() || 'Sin roles asignados' }}</small>
             </span>
             <span class="account-chevron" aria-hidden="true">⌄</span>
           </button>
           @if (isAccountMenuOpen()) {
             <div class="account-dropdown" role="menu">
+              <a role="menuitem" routerLink="/mi-perfil" (click)="isAccountMenuOpen.set(false)"><app-icon name="profile" />Mi perfil</a>
               <button type="button" role="menuitem" (click)="logOut()">
                 <app-icon name="logout" />Cerrar sesión
               </button>
@@ -112,18 +118,46 @@
     </main>
   </div>
 
-  <nav class="mobile-nav" aria-label="Secciones">
-    @for (entry of navigation(); track entry.label) {
-      @if (entry.path) {
-        <a
-          [routerLink]="entry.path"
-          routerLinkActive="active"
-          [routerLinkActiveOptions]="{ exact: true }"
-          ariaCurrentWhenActive="page"
-        >
-          <app-icon [name]="entry.icon" />{{ entry.label }}
-        </a>
-      }
+  <div class="floating-notification-region" aria-live="polite" aria-atomic="true">
+    @if (floatingNotification(); as notification) {
+      <aside class="floating-notification" aria-label="Nueva notificación">
+        <div class="floating-notification-content">
+          <strong>{{ notification.title }}</strong>
+          <p>{{ notification.body }}</p>
+          <button type="button" class="floating-notification-open" (click)="openFloatingNotification(notification)">Ver notificación</button>
+        </div>
+        <button type="button" class="floating-notification-close" aria-label="Cerrar aviso" (click)="floatingNotification.set(null)">×</button>
+      </aside>
     }
-  </nav>
+  </div>
+
+  <dialog #mobileMenu class="mobile-menu" aria-label="Secciones" (close)="restoreMobileMenuFocus()" (click)="$event.target === mobileMenu && closeMobileMenu()">
+    <div class="mobile-menu-header">
+      <img src="logohouse.png" alt="GrupoHouse" />
+      <button type="button" class="mobile-menu-close" aria-label="Cerrar menú" (click)="closeMobileMenu()">×</button>
+    </div>
+    <button type="button" class="mobile-theme-control" role="switch" [attr.aria-checked]="theme.isDark()" (click)="toggleMobileTheme()">
+      Modo oscuro
+      <span class="theme-track" [class.is-on]="theme.isDark()" aria-hidden="true"></span>
+    </button>
+    <nav class="mobile-menu-nav" aria-label="Secciones">
+      @for (entry of navigation(); track entry.label) {
+        @if (entry.path) {
+          <a [routerLink]="entry.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" ariaCurrentWhenActive="page" (click)="closeMobileMenu()">
+            <app-icon [name]="entry.icon" />{{ entry.label }}
+          </a>
+        }
+      }
+    </nav>
+    @if (user(); as currentUser) {
+      <div class="mobile-menu-profile">
+        <span class="account-avatar" aria-hidden="true">{{ currentUser.name.charAt(0) }}</span>
+        <div><strong>{{ currentUser.name }}</strong></div>
+      </div>
+      <div class="mobile-menu-session">
+        <a routerLink="/mi-perfil" (click)="closeMobileMenu()"><app-icon name="profile" />Mi perfil</a>
+        <button type="button" (click)="closeMobileMenu(); logOut()"><app-icon name="logout" />Cerrar sesión</button>
+      </div>
+    }
+  </dialog>
 </div>

@@ -6,7 +6,8 @@ export type IdentityAuditEvent =
   | 'identity.user_created'
   | 'identity.roles_replaced'
   | 'identity.user_activated'
-  | 'identity.user_deactivated';
+  | 'identity.user_deactivated'
+  | 'identity.profile_updated';
 
 export interface IdentityDependencies {
   readonly database: Database;

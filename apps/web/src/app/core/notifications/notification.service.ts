@@ -10,6 +10,8 @@ export class NotificationService {
   private readonly http = inject(HttpClient);
   private readonly notificationList = signal<readonly UserNotification[]>([]);
   private readonly count = signal(0);
+  private readonly incomingNotification = signal<UserNotification | null>(null);
+  private highestSeenId: number | null = null;
   private eventSource: EventSource | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private workflowEventSource: EventSource | null = null;
@@ -18,6 +20,7 @@ export class NotificationService {
   private readonly workflowChanges = new Subject<number>();
 
   readonly notifications = this.notificationList.asReadonly();
+  readonly latestIncoming = this.incomingNotification.asReadonly();
   readonly unreadCount = this.count.asReadonly();
   readonly hasUnread = computed(() => this.count() > 0);
   readonly workflowChanged = this.workflowChanges.asObservable();
@@ -70,6 +73,8 @@ export class NotificationService {
     this.pollTimer = null;
     this.notificationList.set([]);
     this.count.set(0);
+    this.incomingNotification.set(null);
+    this.highestSeenId = null;
   }
 
   async refresh(): Promise<void> {
@@ -92,6 +97,15 @@ export class NotificationService {
         params: { limit: 30 },
       }),
     );
+    const highestId = Math.max(0, ...response.notifications.map((notification) => notification.id));
+    const previousHighestId = this.highestSeenId;
+    if (previousHighestId !== null && highestId > previousHighestId) {
+      const newestUnread = response.notifications.find(
+        (notification) => notification.id > previousHighestId && notification.readAt === null,
+      );
+      if (newestUnread) this.incomingNotification.set(newestUnread);
+    }
+    this.highestSeenId = Math.max(this.highestSeenId ?? 0, highestId);
     this.notificationList.set(response.notifications);
   }
 

@@ -9,12 +9,14 @@ import { createUsersRouter } from '../modules/identity/http/users.router.js';
 import { createWorkflowRouter } from '../modules/workflow/http/workflow.router.js';
 import { createTemplatesRouter } from '../modules/workflow-templates/http/templates.router.js';
 import { createNotificationsRouter } from '../modules/notifications/http/notifications.router.js';
+import { createPushRouter } from '../modules/notifications/http/push.router.js';
 import { createApp } from '../platform/http/create-app.js';
 import { logger } from '../platform/logging/logger.js';
 
 export interface ApiAppSettings {
-  readonly allowedOrigin: string;
+  readonly allowedOrigin: string | readonly string[];
   readonly isSecureCookie: boolean;
+  readonly pushPublicKey?: string;
   // Fuente de feriados; null si no hay clave configurada (se ingresan a mano).
   readonly holidayProvider?: HolidayProvider | null;
 }
@@ -33,6 +35,7 @@ export function buildApiApp(identity: IdentityDependencies, settings: ApiAppSett
       },
       { path: '/users', router: createUsersRouter(identity) },
       { path: '', router: createNotificationsRouter(identity) },
+      { path: '', router: createPushRouter(identity, settings.pushPublicKey) },
       { path: '/sync', router: createSyncRouter(workflow, identity) },
       { path: '/workflow-templates', router: createTemplatesRouter(workflow, identity) },
       {

@@ -1,11 +1,3 @@
-<header class="page-header">
-  <div>
-    <h1>Mis tareas</h1>
-    <p>Tareas abiertas donde eres responsable o suplente.</p>
-  </div>
-  <button type="button" class="button" (click)="load()" [disabled]="isLoading()">Actualizar</button>
-</header>
-
 <div class="page-body">
   <section class="metrics" aria-label="Resumen">
     @for (metric of metrics(); track metric.label) {
@@ -86,10 +78,11 @@
   }
 </div>
 
-@if (openTask(); as task) {
+@if (displayedTask(); as task) {
   <app-task-dialog
     [workflowId]="task.workflowId"
     [taskId]="task.id"
+    [fullscreenOnMobile]="true"
     (closed)="onTaskDialogClosed()"
   />
 }

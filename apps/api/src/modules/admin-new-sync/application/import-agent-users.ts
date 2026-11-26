@@ -72,7 +72,10 @@ function rolesForUser(user: EligibleAgentUser): readonly RoleCode[] {
   return needsLegalReviewerRole(user) ? [...AGENT_ROLES, LEGAL_REVIEWER_ROLE] : AGENT_ROLES;
 }
 
-function eligibleAgentUsers(sourceUsers: readonly SourceAgentUser[]): {
+function eligibleAgentUsers(
+  sourceUsers: readonly SourceAgentUser[],
+  isDevelopmentImport: boolean,
+): {
   readonly users: readonly EligibleAgentUser[];
   readonly assignedDummyEmails: number;
   readonly skippedIncompleteRecords: number;
@@ -91,7 +94,7 @@ function eligibleAgentUsers(sourceUsers: readonly SourceAgentUser[]): {
       source.name?.replace(/\s+/g, ' ').trim() || `Agente admin_new ${source.adminNewUserId}`;
     const rut = source.rut?.trim() || null;
     const password = source.legacyPassword;
-    if (!password || !Number.isSafeInteger(source.adminNewUserId)) {
+    if ((!password && !isDevelopmentImport) || !Number.isSafeInteger(source.adminNewUserId)) {
       skippedIncompleteRecords += 1;
       continue;
     }
@@ -101,7 +104,7 @@ function eligibleAgentUsers(sourceUsers: readonly SourceAgentUser[]): {
       !isValidSourceEmail(sourceEmail) || (emailCounts.get(sourceEmail) ?? 0) !== 1;
     const email = usesDummyEmail ? dummyEmailFor(source.adminNewUserId) : sourceEmail;
     if (usesDummyEmail) assignedDummyEmails += 1;
-    users.push({ source, email, name, rut, password });
+    users.push({ source, email, name, rut, password: password ?? '' });
   }
 
   return { users, assignedDummyEmails, skippedIncompleteRecords };
@@ -127,6 +130,7 @@ async function hashLegacyPassword(
 export async function importAdminNewAgentUsers(
   dependencies: AgentUserImportDependencies,
   shouldApply: boolean,
+  options?: { readonly developmentPassword: string },
 ): Promise<AgentUserImportSummary> {
   let sourceUsers: SourceAgentUser[];
   try {
@@ -135,7 +139,7 @@ export async function importAdminNewAgentUsers(
     await dependencies.source.close();
   }
 
-  const eligibility = eligibleAgentUsers(sourceUsers);
+  const eligibility = eligibleAgentUsers(sourceUsers, options !== undefined);
   const candidateUsers = eligibility.users;
   const candidateSourceIds = candidateUsers.map((user) => user.source.adminNewUserId);
   const existingUsersBySourceId = await findUserIdsByAdminNewUserIds(
@@ -180,6 +184,7 @@ export async function importAdminNewAgentUsers(
   let bcryptPasswords = 0;
   let plaintextPasswords = 0;
   for (const user of readyToImport) {
+    if (options) continue;
     if (isSupportedBcryptHash(user.password)) bcryptPasswords += 1;
     else plaintextPasswords += 1;
   }
@@ -194,7 +199,9 @@ export async function importAdminNewAgentUsers(
     const preparedUsers = await Promise.all(
       readyToImport.map(async (user) => ({
         ...user,
-        passwordHash: await hashLegacyPassword(user.password, dependencies.passwordHasher),
+        passwordHash: options
+          ? await dependencies.passwordHasher.hash(options.developmentPassword)
+          : await hashLegacyPassword(user.password, dependencies.passwordHasher),
       })),
     );
 
@@ -207,15 +214,12 @@ export async function importAdminNewAgentUsers(
         transaction,
         candidateSourceIds,
       );
-      const regionIdsByName = await findRegionIdsByName(
-        transaction,
-        [
-          'Región Metropolitana',
-          ...candidateUsers.flatMap((user) =>
-            user.source.regionName ? [user.source.regionName] : [],
-          ),
-        ],
-      );
+      const regionIdsByName = await findRegionIdsByName(transaction, [
+        'Región Metropolitana',
+        ...candidateUsers.flatMap((user) =>
+          user.source.regionName ? [user.source.regionName] : [],
+        ),
+      ]);
       const metropolitanRegionId = regionIdsByName.get('Región Metropolitana');
       if (metropolitanRegionId === undefined) throw new Error('Falta la Región Metropolitana');
       const remainingUsers = preparedUsers.filter(
@@ -240,7 +244,7 @@ export async function importAdminNewAgentUsers(
         const sourceRegionId = user.source.regionName
           ? (regionIdsByName.get(user.source.regionName) ?? metropolitanRegionId)
           : metropolitanRegionId;
-        if (current && sourceRegionId !== null && current.regionId !== sourceRegionId) {
+        if (current && current.regionId !== sourceRegionId) {
           await updateUserRegion(transaction, current.userId, sourceRegionId);
           regionsUpdated += 1;
         }

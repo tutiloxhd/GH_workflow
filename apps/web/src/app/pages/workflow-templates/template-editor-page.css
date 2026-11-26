@@ -118,7 +118,7 @@
 .evidence-toggle input {
   width: 18px;
   height: 18px;
-  accent-color: var(--navy);
+  accent-color: var(--primary);
 }
 
 .dependencies {
@@ -149,6 +149,22 @@
   .task-fields {
     grid-template-columns: 1fr;
     padding-left: 16px;
+  }
+
+  .task-fields .field,
+  .task-fields .wide {
+    min-width: 0;
+  }
+
+  .task-fields input,
+  .task-fields select,
+  .task-fields textarea {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dependencies label {
+    min-height: 44px;
   }
 }
 
@@ -184,7 +200,7 @@
   font-size: 0.9375rem;
 }
 
-.diagram-panel > .muted {
+.diagram-panel>.muted {
   margin: 0 16px;
 }
 
@@ -201,5 +217,20 @@
   .diagram-panel {
     max-height: none;
     min-height: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .diagram-layout {
+    padding: 0 12px 12px;
+  }
+
+  .view-switch {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .view-switch .button {
+    flex: 1;
   }
 }

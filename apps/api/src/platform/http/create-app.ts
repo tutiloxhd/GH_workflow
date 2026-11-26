@@ -15,7 +15,7 @@ export interface MountedRouter {
 }
 
 export interface AppDependencies {
-  readonly allowedOrigin: string;
+  readonly allowedOrigin: string | readonly string[];
   readonly routers: readonly MountedRouter[];
   readonly reportError: (error: unknown, context: { requestId: string }) => void;
 }

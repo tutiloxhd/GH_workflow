@@ -5,9 +5,10 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 // Protección CSRF: una operación que cambia estado solo se acepta si el navegador declara
 // venir del frontend propio. Complementa la cookie de sesión SameSite=Lax.
-export function requireAllowedOrigin(allowedOrigin: string): RequestHandler {
+export function requireAllowedOrigin(allowedOrigin: string | readonly string[]): RequestHandler {
+  const allowedOrigins = new Set(typeof allowedOrigin === 'string' ? [allowedOrigin] : allowedOrigin);
   return (request, response, next) => {
-    if (SAFE_METHODS.has(request.method) || request.get('origin') === allowedOrigin) {
+    if (SAFE_METHODS.has(request.method) || allowedOrigins.has(request.get('origin') ?? '')) {
       next();
       return;
     }

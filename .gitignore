@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Utilidad local para restablecer claves de usuarios importados en desarrollo
+/apps/api/src/entrypoints/local-reset-imported-passwords.ts
+
 # Volcados de admin_new: contienen datos reales y nunca se versionan
 
 

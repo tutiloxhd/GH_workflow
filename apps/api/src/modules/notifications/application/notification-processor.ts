@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { RowDataPacket } from 'mysql2/promise';
 import type { Clock } from '../../../platform/clock/clock.js';
 import type { Database } from '../../../platform/database/database.js';
+import { enqueuePushDeliveries } from './push-deliveries.js';
 
 const LEASE_MILLISECONDS = 60_000;
 const BATCH_SIZE = 25;
@@ -10,6 +11,7 @@ const MAX_ATTEMPTS = 5;
 export interface NotificationProcessorDependencies {
   readonly database: Database;
   readonly clock: Clock;
+  readonly enablePush?: boolean;
 }
 
 interface OutboxRow extends RowDataPacket {
@@ -129,6 +131,7 @@ async function createNotification(
     readonly body: string;
     readonly occurrence: string;
   },
+  enablePush = false,
 ): Promise<void> {
   const titles: Record<string, string> = {
     TASK_ASSIGNED: 'Nueva tarea asignada',
@@ -155,6 +158,12 @@ async function createNotification(
       deduplicationKey(input.trigger, input.occurrence, input.userId),
     ],
   );
+  if (!enablePush) return;
+  const [created] = await database.pool.execute<Array<{ id: number } & RowDataPacket>>(
+    'SELECT id FROM notifications WHERE deduplication_key = ?',
+    [deduplicationKey(input.trigger, input.occurrence, input.userId)],
+  );
+  if (created[0]) await enqueuePushDeliveries(database, created[0].id, input.userId);
 }
 
 async function cancelPendingJobs(database: Database, taskId: number): Promise<void> {
@@ -299,7 +308,7 @@ async function handleOutboxRow(
           taskId: null,
           body,
           occurrence: String(row.id),
-        });
+        }, dependencies.enablePush);
       }
     }
     return;
@@ -323,7 +332,7 @@ async function handleOutboxRow(
         taskId: task.id,
         body: task.name,
         occurrence,
-      });
+      }, dependencies.enablePush);
     }
     return;
   }
@@ -353,7 +362,7 @@ async function handleOutboxRow(
         taskId: task.id,
         body: task.name,
         occurrence,
-      });
+      }, dependencies.enablePush);
     }
   }
   if (
@@ -499,7 +508,7 @@ export async function processDueNotificationJobs(
           taskId: task.id,
           body: task.name,
           occurrence: job.occurrence_key,
-        });
+        }, dependencies.enablePush);
       }
       await dependencies.database.pool.execute(
         `UPDATE notification_jobs
