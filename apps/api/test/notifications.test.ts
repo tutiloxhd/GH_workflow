@@ -101,7 +101,7 @@ describe('notificaciones internas', () => {
     await startWorkflowFor(context, cast, await givenProperty(context));
     const dependencies = { database: context.database, clock: context.clock };
     await processNotificationOutbox(dependencies, 'test-worker');
-    context.clock.setTo('2026-11-16T12:00:00.000Z');
+    context.clock.setTo('2026-11-18T12:00:00.000Z');
 
     expect(await processDueNotificationJobs(dependencies, 'test-scheduler')).toBeGreaterThan(0);
     const currentAdminCookie = await logInAs(context, 'admin@example.test');

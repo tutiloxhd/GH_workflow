@@ -52,13 +52,17 @@ export async function givenCast(context: IdentityTestContext): Promise<WorkflowC
     email: 'legal@example.test',
     roles: ['LEGAL_REVIEWER'],
   });
-  for (const agent of [manager, backupManager, bidder]) {
+  for (const [agent, agentTypes] of [
+    [manager, ['region']],
+    [backupManager, ['region']],
+    [bidder, ['oficina']],
+  ] as const) {
     const adminNewUserId = 700_000_000 + agent.id;
     await context.database.pool.query('UPDATE users SET admin_new_user_id = ? WHERE id = ?', [
       adminNewUserId,
       agent.id,
     ]);
-    context.adminNewAgentTypes.set(adminNewUserId, ['region']);
+    context.adminNewAgentTypes.set(adminNewUserId, agentTypes);
   }
 
   return {
@@ -142,11 +146,19 @@ export async function assignStandardParticipants(
   });
 }
 
-// Evidencia válida y sintética para cada tarea que la exige en la plantilla v2.
+// Evidencia válida y sintética para cada tarea que la exige en la plantilla base.
 export const SYNTHETIC_EVIDENCE: Readonly<Record<string, Record<string, unknown>>> = {
   COLLECT_VALE_VISTA: { bank: 'Banco Sintético', valeVistaNumber: 'VV-0001', amountClp: 4200000 },
-  RECORD_DELIVERY_EVIDENCE: { deliveredOn: '2026-12-01', receivedBy: 'Receptor sintético' },
-  RECORD_AUCTION_RESULT: { outcome: 'NOT_AWARDED' },
+  DELIVER_TO_COURT_AND_RECORD_EVIDENCE: {
+    deliveredOn: '2026-12-01',
+    receivedBy: 'Receptor sintético',
+  },
+  CONSIGN_GUARANTEE: {
+    consignedOn: '2026-11-13',
+    court: 'Tribunal sintético',
+    receiptNumber: 'FOLIO-0001',
+  },
+  PARTICIPATE_AND_RECORD_RESULT: { outcome: 'NOT_AWARDED' },
 };
 
 export function submitEvidenceAs(

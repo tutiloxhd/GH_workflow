@@ -163,7 +163,7 @@ describe('sincronización con admin_new', () => {
         'SELECT COUNT(*) AS n FROM task_instances WHERE workflow_instance_id = ?',
         [workflows[0]?.id],
       );
-      expect(Number(taskCount?.n)).toBe(15);
+      expect(Number(taskCount?.n)).toBe(13);
 
       const changes = await changesOf(101);
       expect(changes).toHaveLength(1);
@@ -173,7 +173,7 @@ describe('sincronización con admin_new', () => {
       expect(cursor).toMatchObject({ last_status: 'SUCCEEDED', last_source_id: 101 });
     });
 
-    it('asigna al pagador y al postor por nombre exacto y completa la tarea de asignación', async () => {
+    it('mantiene bloqueada la asignación hasta completar «Aceptar propiedad» y la completa en la siguiente sincronización', async () => {
       const admin = await givenUser(context, {
         email: 'source-admin@example.test',
         name: 'Administrador de origen',
@@ -199,6 +199,48 @@ describe('sincronización con admin_new', () => {
       await completedSync();
 
       const [workflow] = await workflowsOf(112);
+      const taskStatusOf = async (code: string) => {
+        const [task] = await rows(
+          `SELECT ti.id, ti.status, ti.assigned_user_id AS assignedUserId
+             FROM task_instances ti JOIN task_definitions td ON td.id = ti.task_definition_id
+            WHERE ti.workflow_instance_id = ? AND td.code = ?`,
+          [workflow?.id, code],
+        );
+        return task as { id: number; status: string; assignedUserId: number | null } | undefined;
+      };
+
+      const acceptTask = await taskStatusOf('ACCEPT_PROPERTY');
+      expect(acceptTask).toMatchObject({ status: 'READY', assignedUserId: admin.id });
+      expect(await taskStatusOf('ASSIGN_MANAGER_AND_BIDDER')).toMatchObject({ status: 'BLOCKED' });
+      expect(
+        await rows(
+          `SELECT participant_type AS participantType, user_id AS userId
+             FROM workflow_participants WHERE workflow_instance_id = ? ORDER BY participant_type`,
+          [workflow?.id],
+        ),
+      ).toEqual([
+        { participantType: 'BIDDER', userId: bidder.id },
+        { participantType: 'MANAGER', userId: manager.id },
+      ]);
+      const [notificationRules] = await rows(
+        `SELECT COUNT(*) AS total FROM workflow_notification_rule_sets
+          WHERE workflow_instance_id = ?`,
+        [workflow?.id],
+      );
+      expect(Number(notificationRules?.total)).toBe(1);
+
+      const adminCookie = await logInAs(context, 'source-admin@example.test');
+      const completedAccept = await callApi(
+        context,
+        'POST',
+        `/api/tasks/${String(acceptTask?.id)}/complete`,
+        { sessionCookie: adminCookie },
+      );
+      expect(completedAccept.status).toBe(200);
+      expect(await taskStatusOf('ASSIGN_MANAGER_AND_BIDDER')).toMatchObject({ status: 'READY' });
+
+      await completedSync();
+
       const participants = await rows(
         `SELECT participant_type AS participantType, user_id AS userId
            FROM workflow_participants WHERE workflow_instance_id = ? ORDER BY participant_type`,
@@ -208,13 +250,11 @@ describe('sincronización con admin_new', () => {
         { participantType: 'BIDDER', userId: bidder.id },
         { participantType: 'MANAGER', userId: manager.id },
       ]);
-      const [assignmentTask] = await rows(
-        `SELECT ti.status, ti.assigned_user_id AS assignedUserId
-           FROM task_instances ti JOIN task_definitions td ON td.id = ti.task_definition_id
-          WHERE ti.workflow_instance_id = ? AND td.code = 'ASSIGN_MANAGER_AND_BIDDER'`,
-        [workflow?.id],
-      );
-      expect(assignmentTask).toMatchObject({ status: 'COMPLETED', assignedUserId: admin.id });
+      expect(await taskStatusOf('ASSIGN_MANAGER_AND_BIDDER')).toMatchObject({
+        status: 'COMPLETED',
+        assignedUserId: admin.id,
+      });
+      expect(await taskStatusOf('LEGAL_REVIEW')).toMatchObject({ status: 'READY' });
     });
 
     it('deja abierta la asignación y advierte si los nombres no identifican usuarios únicos', async () => {
@@ -243,7 +283,7 @@ describe('sincronización con admin_new', () => {
           WHERE ti.workflow_instance_id = ? AND td.code = 'ASSIGN_MANAGER_AND_BIDDER'`,
         [workflow?.id],
       );
-      expect(assignmentTask?.status).toBe('READY');
+      expect(assignmentTask?.status).toBe('BLOCKED');
       expect(
         await rows('SELECT id FROM workflow_participants WHERE workflow_instance_id = ?', [
           workflow?.id,
@@ -264,13 +304,25 @@ describe('sincronización con admin_new', () => {
       });
       await fixture.givenAccepted({ id: 13913, r1: FUTURE_AUCTION });
       await completedSync();
+      const [workflow] = await workflowsOf(13913);
+      const adminCookie = await logInAs(context, 'property-13913-admin@example.test');
+      const [acceptTask] = await rows(
+        `SELECT ti.id FROM task_instances ti JOIN task_definitions td ON td.id = ti.task_definition_id
+          WHERE ti.workflow_instance_id = ? AND td.code = 'ACCEPT_PROPERTY'`,
+        [workflow?.id],
+      );
+      expect(
+        (
+          await callApi(context, 'POST', `/api/tasks/${String(acceptTask?.id)}/complete`, {
+            sessionCookie: adminCookie,
+          })
+        ).status,
+      ).toBe(200);
       await fixture.setAuctionParticipants(13913, bidder.name, null);
 
       const outcome = await completedSync();
 
       expect(outcome.totals.warningCount).toBe(1);
-      const [workflow] = await workflowsOf(13913);
-      const adminCookie = await logInAs(context, 'property-13913-admin@example.test');
       const detail = await callApi(context, 'GET', `/api/workflows/${String(workflow?.id)}`, {
         sessionCookie: adminCookie,
       });
@@ -460,7 +512,7 @@ describe('sincronización con admin_new', () => {
       expect(outcome.status).toBe('SUCCEEDED');
     });
 
-    it('reasigna solo tareas abiertas cuando admin_new cambia al postor', async () => {
+    it('reasigna la tarea del postor cuando admin_new cambia su asignación', async () => {
       const manager = await givenUser(context, {
         email: 'bidder-reassignment-manager@example.test',
         name: 'Gestor para cambio de postor',
@@ -485,31 +537,25 @@ describe('sincronización con admin_new', () => {
       await completedSync();
 
       const [workflow] = await workflowsOf(13916);
-      const bidderTasks = await rows(
+      const [bidderTask] = await rows(
         `SELECT ti.id, ti.status FROM task_instances ti
            JOIN task_definitions td ON td.id = ti.task_definition_id
-          WHERE ti.workflow_instance_id = ? AND td.responsible_role = 'BIDDER'
-          ORDER BY ti.id LIMIT 2`,
+          WHERE ti.workflow_instance_id = ? AND td.code = 'PARTICIPATE_AND_RECORD_RESULT'`,
         [workflow?.id],
       );
-      const openTaskId = Number(bidderTasks[0]?.id);
-      const completedTaskId = Number(bidderTasks[1]?.id);
-      expect(bidderTasks).toHaveLength(2);
+      const bidderTaskId = Number(bidderTask?.id);
+      expect(bidderTask).toMatchObject({ status: 'BLOCKED' });
       await context.database.pool.query(
         `UPDATE task_instances SET status = 'READY', assigned_user_id = ? WHERE id = ?`,
-        [previousBidder.id, openTaskId],
-      );
-      await context.database.pool.query(
-        `UPDATE task_instances SET status = 'COMPLETED', assigned_user_id = ? WHERE id = ?`,
-        [previousBidder.id, completedTaskId],
+        [previousBidder.id, bidderTaskId],
       );
       await fixture.setAuctionParticipants(13916, newBidder.name, manager.name);
 
       const outcome = await completedSync();
       const taskRows = await rows(
         `SELECT id, status, assigned_user_id AS assignedUserId FROM task_instances
-          WHERE id IN (?, ?) ORDER BY id`,
-        [openTaskId, completedTaskId],
+          WHERE id = ?`,
+        [bidderTaskId],
       );
       const currentBidders = await rows(
         `SELECT user_id AS userId FROM workflow_participants
@@ -518,8 +564,7 @@ describe('sincronización con admin_new', () => {
       );
 
       expect(taskRows).toEqual([
-        { id: openTaskId, status: 'READY', assignedUserId: newBidder.id },
-        { id: completedTaskId, status: 'COMPLETED', assignedUserId: previousBidder.id },
+        { id: bidderTaskId, status: 'READY', assignedUserId: newBidder.id },
       ]);
       expect(currentBidders).toEqual([{ userId: newBidder.id }]);
 

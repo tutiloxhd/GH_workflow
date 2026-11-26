@@ -70,6 +70,7 @@ export const taskDefinitions = mysqlTable(
     responsibleRole: varchar('responsible_role', { length: 50, enum: ROLE_CODES }).notNull(),
     displayOrder: int('display_order').notNull().default(0),
     requiresEvidence: boolean('requires_evidence').notNull().default(false),
+    evidenceForm: json('evidence_form').$type<unknown>(),
     // Plazo base de la plantilla; cada workflow recibe una copia editable en task_instances.
     ...deadlineColumns(),
     createdAt: createdAt(),

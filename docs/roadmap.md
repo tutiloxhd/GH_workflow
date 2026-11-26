@@ -14,7 +14,7 @@ El flujo corre de punta a punta: una propiedad aceptada en `admin_new` crea su w
 | --- | --- |
 | 0. Fundaciones | Repositorio `apps/api` + `apps/web`, migraciones, OpenAPI, ADRs 0001–0004. |
 | 1. Identidad | Login, sesiones de 8 h, roles, bloqueo por fuerza bruta; solo el admin crea cuentas. |
-| 2. Motor | Plantilla de 15 tareas, dependencias, responsables y suplentes, plazos, suspender/reanudar/cancelar, historial (ADR 0006). |
+| 2. Motor | Plantilla base actual de 13 tareas, dependencias, responsables y suplentes, plazos, suspender/reanudar/cancelar, historial (ADR 0006 y ADR 0015). |
 | 3. Pantallas | Inicio, Mis tareas, modal de tarea con evidencia básica, detalle del workflow. |
 | 4. Sincronización | Lectura de solo lectura de `admin_new`, proceso aparte, pantalla «Sincronización» (ADR 0007). |
 | 5. Reprogramación | Cambios de fecha en `admin_new` recalculan los plazos abiertos y quedan trazados (RP-01 a RP-18). |
@@ -43,6 +43,7 @@ Decisiones de alcance que siguen vigentes:
 | A9 | Ambiente de QA con usuario de solo SELECT sobre `admin_new`, API y sincronizador permanentes | Pendiente |
 | A10 | `sql/workflow_mvp.sql` al día con la migración 0005 | Pendiente |
 | A11 | Pantalla «Ver flujo» para ADMIN: propiedades en flujo, resumen y vista aérea (miniatura placeholder) | Siguiente |
+| HU-13 | Plantilla base del remate judicial de 13 pasos, reinicio local/desarrollo y pruebas asociadas | En curso |
 
 ### Hito B — Flujo completo
 

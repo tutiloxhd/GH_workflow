@@ -6,7 +6,7 @@ import {
   businessLocalToInstant,
   isOverdue,
 } from '../domain/due-date.js';
-import { evidenceFormFor } from '../domain/evidence-forms.js';
+import { resolveEvidenceForm } from '../domain/evidence-forms.js';
 import { isAdmin, type Actor } from '../domain/task-rules.js';
 import type { WorkflowStatus } from '../domain/statuses.js';
 import {
@@ -108,7 +108,7 @@ export async function getWorkflowDetail(
       activatedAt: toIso(task.activatedAt),
       completedAt: toIso(task.completedAt),
       requiresEvidence: task.requiresEvidence,
-      evidenceForm: evidenceFormFor(task.code),
+      evidenceForm: resolveEvidenceForm(task.code, task.evidenceForm),
       evidence: evidenceOf(evidenceByTask.get(task.id)),
     })),
   });
@@ -230,22 +230,27 @@ export async function listMyTasks(
     tomorrowStart,
     weekEnd,
   });
-  return { tasks: rows.map((task) => ({
-    id: task.id,
-    workflowId: task.workflowId,
-    code: task.code,
-    name: task.name,
-    description: task.description,
-    status: task.status,
-    dueAt: toIso(task.dueAt),
-    isOverdue: isOverdue(task.dueAt, now),
-    role: task.assignedUserId === actor.id ? ('ASSIGNEE' as const) : ('BACKUP' as const),
-    property: {
-      id: task.propertyId,
-      title: task.propertyTitle,
-      address: task.propertyAddress,
-      commune: task.propertyCommune,
-      auctionAt: toIso(task.auctionAt),
-    },
-  })), total, metrics, ...page };
+  return {
+    tasks: rows.map((task) => ({
+      id: task.id,
+      workflowId: task.workflowId,
+      code: task.code,
+      name: task.name,
+      description: task.description,
+      status: task.status,
+      dueAt: toIso(task.dueAt),
+      isOverdue: isOverdue(task.dueAt, now),
+      role: task.assignedUserId === actor.id ? ('ASSIGNEE' as const) : ('BACKUP' as const),
+      property: {
+        id: task.propertyId,
+        title: task.propertyTitle,
+        address: task.propertyAddress,
+        commune: task.propertyCommune,
+        auctionAt: toIso(task.auctionAt),
+      },
+    })),
+    total,
+    metrics,
+    ...page,
+  };
 }

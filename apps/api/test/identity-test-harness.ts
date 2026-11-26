@@ -13,11 +13,10 @@ import { connectTestDatabase } from './test-database.js';
 
 // Costo mínimo de bcrypt: las pruebas validan el flujo, no la resistencia del hash.
 const TEST_BCRYPT_COST = 4;
-// Seeds versionados que toda base necesita: catálogo de roles y plantilla publicada.
+// Seeds versionados que toda base necesita: catálogo de roles y plantilla base activa.
 const BASE_SEED_PATHS = [
   '0001_roles.sql',
-  '0002_workflow_template_v1.sql',
-  '0004_workflow_template_v2.sql',
+  '0007_workflow_template_base.sql',
   '0005_notification_rules.sql',
 ].map((fileName) => new URL(`../../../sql/seeds/${fileName}`, import.meta.url));
 // Tablas que escriben las pruebas, en orden compatible con las claves foráneas.
@@ -70,8 +69,8 @@ export class FixedClock implements Clock {
 
 // Ejecuta los seeds versionados, para no duplicar su contenido en las pruebas.
 // Supone que ningún literal del seed contiene «;».
-async function runBaseSeeds(database: Database): Promise<void> {
-  for (const seedPath of BASE_SEED_PATHS) {
+export async function runSqlSeeds(database: Database, seedPaths: readonly URL[]): Promise<void> {
+  for (const seedPath of seedPaths) {
     const statements = readFileSync(seedPath, 'utf8')
       .split('\n')
       .filter((line) => !line.trim().startsWith('--'))
@@ -81,6 +80,10 @@ async function runBaseSeeds(database: Database): Promise<void> {
       .filter((statement) => statement.length > 0);
     for (const statement of statements) await database.pool.query(statement);
   }
+}
+
+async function runBaseSeeds(database: Database): Promise<void> {
+  await runSqlSeeds(database, BASE_SEED_PATHS);
 }
 
 export interface IdentityTestContext {
@@ -115,11 +118,13 @@ export async function startIdentityTestContext(): Promise<IdentityTestContext> {
       dependencies,
       { allowedOrigin: TEST_WEB_ORIGIN, isSecureCookie: false },
       {
-        readActiveAgentTypes: async () =>
-          [...adminNewAgentTypes].map(([adminNewUserId, agentTypes]) => ({
-            adminNewUserId,
-            agentTypes,
-          })),
+        readActiveAgentTypes: () =>
+          Promise.resolve(
+            [...adminNewAgentTypes].map(([adminNewUserId, agentTypes]) => ({
+              adminNewUserId,
+              agentTypes,
+            })),
+          ),
       },
     ),
   );

@@ -87,6 +87,21 @@ export async function startWorkflow(
         });
       }
       await context.activateReadyTasks();
+      const acceptanceTask = context.tasks.find((task) => task.code === 'ACCEPT_PROPERTY');
+      if (acceptanceTask?.status === 'READY') {
+        await context.changeTask(acceptanceTask.id, {
+          status: 'COMPLETED',
+          startedAt: now,
+          completedAt: now,
+          completedBy: null,
+        });
+        context.record({
+          taskId: acceptanceTask.id,
+          eventType: 'TASK_COMPLETED',
+          details: { code: acceptanceTask.code, source: 'ADMIN_NEW' },
+        });
+        await context.activateReadyTasks();
+      }
       if (hasRequiredParticipants(context.participants)) {
         const assignmentTask = context.tasks.find(
           (task) => task.code === ASSIGN_PARTICIPANTS_TASK_CODE,

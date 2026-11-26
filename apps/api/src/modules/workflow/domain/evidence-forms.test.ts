@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { evidenceFormFor, evidenceSchemaFor } from './evidence-forms.js';
+import {
+  evidenceFormFor,
+  evidenceFormSchema,
+  evidenceSchemaFor,
+  resolveEvidenceForm,
+} from './evidence-forms.js';
 
 describe('formularios de evidencia', () => {
   it('solo las tareas con formulario tienen esquema', () => {
@@ -48,5 +53,41 @@ describe('formularios de evidencia', () => {
     expect(schema?.safeParse({ deliveredOn: '01-12-2026', receivedBy: 'Receptor' }).success).toBe(
       false,
     );
+  });
+  it('un formulario guardado reemplaza al inicial y uno vacío equivale a no tener', () => {
+    const custom = {
+      fields: [
+        { name: 'notary', label: 'Notaría', type: 'TEXT', isRequired: true },
+        {
+          name: 'channel',
+          label: 'Canal',
+          type: 'CHOICE',
+          isRequired: false,
+          options: [{ value: 'MAIL', label: 'Correo' }],
+        },
+      ],
+    };
+    const form = resolveEvidenceForm('COLLECT_VALE_VISTA', custom);
+    expect(form?.fields.map((field) => field.name)).toEqual(['notary', 'channel']);
+    expect(evidenceSchemaFor('COLLECT_VALE_VISTA', form)?.safeParse({ notary: 'N1' }).success).toBe(
+      true,
+    );
+    expect(resolveEvidenceForm('COLLECT_VALE_VISTA', { fields: [] })).toBeNull();
+  });
+
+  it('resuelve formularios JSON devueltos como texto por MariaDB', () => {
+    const form = {
+      fields: [{ name: 'receivedBy', label: 'Recibido por', type: 'TEXT', isRequired: true }],
+    };
+
+    expect(resolveEvidenceForm('CUSTOM_TASK', JSON.stringify(form))).toEqual(form);
+  });
+
+  it('rechaza definiciones con nombres repetidos o listas sin opciones', () => {
+    const field = { name: 'notes', label: 'Notas', type: 'TEXT', isRequired: false };
+    expect(evidenceFormSchema.safeParse({ fields: [field, field] }).success).toBe(false);
+    expect(
+      evidenceFormSchema.safeParse({ fields: [{ ...field, type: 'CHOICE', options: [] }] }).success,
+    ).toBe(false);
   });
 });

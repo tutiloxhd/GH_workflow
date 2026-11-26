@@ -242,8 +242,12 @@ export async function listWorkflowFilterOptions(
       .where(and(visibility, inArray(taskInstances.status, ['READY', 'IN_PROGRESS']))),
   ]);
   return {
-    communes: [...new Set(locations.map(({ commune }) => commune).filter((value) => value !== null))].sort(),
-    regions: [...new Set(locations.map(({ region }) => region).filter((value) => value !== null))].sort(),
+    communes: [
+      ...new Set(locations.map(({ commune }) => commune).filter((value) => value !== null)),
+    ].sort(),
+    regions: [
+      ...new Set(locations.map(({ region }) => region).filter((value) => value !== null)),
+    ].sort(),
     responsibles: responsibles.sort((left, right) => left.name.localeCompare(right.name, 'es')),
   };
 }
@@ -399,6 +403,7 @@ export interface TaskRecord {
   readonly responsibleRole: RoleCode;
   readonly displayOrder: number;
   readonly requiresEvidence: boolean;
+  readonly evidenceForm: unknown;
   readonly status: TaskStatus;
   readonly statusBeforeSuspension: ResumableTaskStatus | null;
   readonly assignedUserId: number | null;
@@ -465,6 +470,7 @@ export async function findWorkflowTasks(
       responsibleRole: taskDefinitions.responsibleRole,
       displayOrder: taskDefinitions.displayOrder,
       requiresEvidence: taskDefinitions.requiresEvidence,
+      evidenceForm: taskDefinitions.evidenceForm,
       status: taskInstances.status,
       statusBeforeSuspension: taskInstances.statusBeforeSuspension,
       assignedUserId: taskInstances.assignedUserId,
@@ -512,16 +518,19 @@ export async function updateTask(
     .where(eq(taskInstances.id, taskId));
 }
 
-export async function findTaskCode(
+export async function findTaskEvidenceDefinition(
   executor: DatabaseExecutor,
   taskId: number,
-): Promise<string | null> {
+): Promise<{ readonly code: string; readonly evidenceForm: unknown } | null> {
   const [task] = await executor
-    .select({ code: taskDefinitions.code })
+    .select({
+      code: taskDefinitions.code,
+      evidenceForm: taskDefinitions.evidenceForm,
+    })
     .from(taskInstances)
     .innerJoin(taskDefinitions, eq(taskDefinitions.id, taskInstances.taskDefinitionId))
     .where(eq(taskInstances.id, taskId));
-  return task?.code ?? null;
+  return task ?? null;
 }
 
 // Un formulario vigente por tarea: enviarlo de nuevo reemplaza el anterior.
@@ -807,9 +816,18 @@ export async function findTasksOfUser(
   const [summary] = await executor
     .select({
       total: count(),
-      overdue: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} < ${page.now} THEN 1 ELSE 0 END)`.mapWith(Number),
-      today: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.todayStart} AND ${taskInstances.dueAt} < ${page.tomorrowStart} THEN 1 ELSE 0 END)`.mapWith(Number),
-      thisWeek: sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.tomorrowStart} AND ${taskInstances.dueAt} < ${page.weekEnd} THEN 1 ELSE 0 END)`.mapWith(Number),
+      overdue:
+        sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} < ${page.now} THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
+      today:
+        sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.todayStart} AND ${taskInstances.dueAt} < ${page.tomorrowStart} THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
+      thisWeek:
+        sql<number>`SUM(CASE WHEN ${taskInstances.dueAt} >= ${page.tomorrowStart} AND ${taskInstances.dueAt} < ${page.weekEnd} THEN 1 ELSE 0 END)`.mapWith(
+          Number,
+        ),
     })
     .from(taskInstances)
     .innerJoin(workflowInstances, eq(workflowInstances.id, taskInstances.workflowInstanceId))

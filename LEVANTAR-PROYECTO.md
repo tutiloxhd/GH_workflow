@@ -56,7 +56,7 @@ También puedes usar root en local; el usuario dedicado evita escribir en `admin
 
 ### 3.2 Cargar la base del MVP
 
-[sql/workflow_mvp.sql](sql/workflow_mvp.sql) deja `workflow` lista: las 19 tablas, las migraciones 0000–0004 ya registradas, los roles, las plantillas de workflow (v2 activa) y los usuarios de desarrollo.
+[sql/workflow_mvp.sql](sql/workflow_mvp.sql) es una instantánea histórica del esquema y datos de desarrollo de una versión anterior. No contiene la plantilla HU-13; para instalar el estado actual sigue la alternativa de migraciones y seeds.
 
 Desde la raíz del repositorio (funciona igual en bash y PowerShell):
 
@@ -68,6 +68,11 @@ mysql -u workflow_app -p workflow -e "source sql/workflow_mvp.sql"
 
 `workflow_test` no se carga: las pruebas aplican las migraciones solas.
 
+> **HU-13:** `sql/workflow_mvp.sql` conserva una instantánea anterior y no se regeneró. Para
+> instalar la plantilla base actual usa las migraciones y seeds de la alternativa siguiente.
+> En una base local existente, respalda primero y revisa `sql/diagnostics/reset-workflow-templates.sql`;
+> es destructivo y solo se permite en local/desarrollo.
+
 <details>
 <summary>Alternativa: desde migraciones y seeds</summary>
 
@@ -77,8 +82,7 @@ Con `apps/api/.env` ya configurado (paso 4):
 cd apps/api
 npm run db:migrate
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0001_roles.sql"
-mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0002_workflow_template_v1.sql"
-mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0004_workflow_template_v2.sql"
+mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0007_workflow_template_base.sql"
 mysql -u workflow_app -p workflow -e "source ../../sql/seeds/0005_notification_rules.sql"
 ADMIN_INITIAL_PASSWORD='<contraseña>' npm run users:create-admin -- --email <email> --name "<nombre>"
 ```

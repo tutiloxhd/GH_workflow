@@ -4,7 +4,8 @@ import { z } from 'zod';
 // la estructura definitiva la define negocio. Una sola definición sirve para validar en la API
 // y para que el frontend dibuje el formulario.
 
-export type EvidenceFieldType = 'TEXT' | 'LONG_TEXT' | 'DATE' | 'AMOUNT_CLP' | 'CHOICE';
+export const EVIDENCE_FIELD_TYPES = ['TEXT', 'LONG_TEXT', 'DATE', 'AMOUNT_CLP', 'CHOICE'] as const;
+export type EvidenceFieldType = (typeof EVIDENCE_FIELD_TYPES)[number];
 
 export interface EvidenceField {
   readonly name: string;
@@ -30,7 +31,7 @@ const AUCTION_OUTCOMES = [
   { value: 'DESERTED', label: 'Desierto' },
 ] as const;
 
-const EVIDENCE_FORMS: Readonly<Record<string, EvidenceForm>> = {
+const DEFAULT_EVIDENCE_FORMS: Readonly<Record<string, EvidenceForm>> = {
   COLLECT_VALE_VISTA: {
     fields: [
       { name: 'bank', label: 'Banco', type: 'TEXT', isRequired: true },
@@ -65,9 +66,90 @@ const EVIDENCE_FORMS: Readonly<Record<string, EvidenceForm>> = {
   },
 };
 
-export const evidenceFormFor = (taskCode: string): EvidenceForm | null =>
-  EVIDENCE_FORMS[taskCode] ?? null;
+export const MAX_EVIDENCE_FIELDS = 30;
+export const MAX_FIELD_NAME_LENGTH = 50;
+export const MAX_FIELD_LABEL_LENGTH = 150;
+export const MAX_CHOICE_OPTIONS = 30;
+export const FIELD_NAME_PATTERN = /^[a-z][a-zA-Z0-9]*$/;
 
+const optionSchema = z.strictObject({
+  value: z.string().trim().min(1).max(MAX_FIELD_NAME_LENGTH),
+  label: z.string().trim().min(1).max(MAX_FIELD_LABEL_LENGTH),
+});
+
+// Definición de un formulario tal como llega del editor o se lee de la base.
+export const evidenceFormSchema = z
+  .strictObject({
+    fields: z
+      .array(
+        z.strictObject({
+          name: z.string().max(MAX_FIELD_NAME_LENGTH).regex(FIELD_NAME_PATTERN),
+          label: z.string().trim().min(1).max(MAX_FIELD_LABEL_LENGTH),
+          type: z.enum(EVIDENCE_FIELD_TYPES),
+          isRequired: z.boolean(),
+          options: z.array(optionSchema).max(MAX_CHOICE_OPTIONS).optional(),
+        }),
+      )
+      .max(MAX_EVIDENCE_FIELDS),
+  })
+  .superRefine((form, context) => {
+    const names = form.fields.map((field) => field.name);
+    names.forEach((name, index) => {
+      if (names.indexOf(name) !== index) {
+        context.addIssue({ code: 'custom', path: ['fields', index, 'name'], message: 'repetido' });
+      }
+    });
+    form.fields.forEach((field, index) => {
+      const values = (field.options ?? []).map((option) => option.value);
+      const isChoice = field.type === 'CHOICE';
+      if (isChoice ? values.length === 0 : field.options !== undefined) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'options'],
+          message: isChoice ? 'una lista necesita opciones' : 'solo las listas tienen opciones',
+        });
+      }
+      if (new Set(values).size !== values.length) {
+        context.addIssue({
+          code: 'custom',
+          path: ['fields', index, 'options'],
+          message: 'opción repetida',
+        });
+      }
+    });
+  });
+
+export const defaultEvidenceFormFor = (taskCode: string): EvidenceForm | null =>
+  DEFAULT_EVIDENCE_FORMS[taskCode] ?? null;
+
+export const evidenceFormFor = defaultEvidenceFormFor;
+
+// Formulario vigente de una tarea: el guardado o, si no tiene, el inicial de su código. Un
+// formulario sin campos equivale a no tener formulario.
+export function resolveEvidenceForm(taskCode: string, stored: unknown): EvidenceForm | null {
+  if (stored === null || stored === undefined) return defaultEvidenceFormFor(taskCode);
+  // MariaDB expone las columnas JSON como texto mediante mysql2, mientras MySQL suele devolver
+  // objetos. Normaliza ambos formatos antes de validar el dato persistido.
+  let storedValue: unknown = stored;
+  if (typeof storedValue === 'string') {
+    try {
+      storedValue = JSON.parse(storedValue) as unknown;
+    } catch {
+      throw new Error(`Formulario de evidencia inválido en la tarea ${taskCode}`);
+    }
+  }
+  const parsed = evidenceFormSchema.safeParse(storedValue);
+  if (!parsed.success) throw new Error(`Formulario de evidencia inválido en la tarea ${taskCode}`);
+  return toEvidenceForm(parsed.data);
+}
+
+// Quita las opciones ausentes (exactOptionalPropertyTypes) y trata un formulario vacío como nulo.
+export function toEvidenceForm(form: z.output<typeof evidenceFormSchema>): EvidenceForm | null {
+  if (form.fields.length === 0) return null;
+  return {
+    fields: form.fields.map(({ options, ...field }) => (options ? { ...field, options } : field)),
+  };
+}
 function fieldSchema(field: EvidenceField): z.ZodType {
   const schemaByType: Record<EvidenceFieldType, z.ZodType> = {
     TEXT: z.string().trim().min(1).max(MAX_TEXT_LENGTH),
@@ -91,8 +173,10 @@ function refineAuctionResult(data: Record<string, unknown>, context: z.Refinemen
   }
 }
 
-export function evidenceSchemaFor(taskCode: string): z.ZodType<Record<string, unknown>> | null {
-  const form = evidenceFormFor(taskCode);
+export function evidenceSchemaFor(
+  taskCode: string,
+  form: EvidenceForm | null = evidenceFormFor(taskCode),
+): z.ZodType<Record<string, unknown>> | null {
   if (!form) return null;
   const shape = Object.fromEntries(form.fields.map((field) => [field.name, fieldSchema(field)]));
   const schema = z.strictObject(shape);
