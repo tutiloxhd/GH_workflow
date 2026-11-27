@@ -55,6 +55,26 @@ import type { EvidenceData, EvidenceField, EvidenceForm } from '../../core/workf
           }
         </label>
       }
+      @if (definition().requiresPhoto) {
+        <label class="field">
+          Fotos de evidencia (1 a 5, hasta 5 MB cada una)
+          <input type="file" accept="image/jpeg,image/png,image/webp" multiple
+            [disabled]="isDisabled() || photos().length >= 5"
+            (change)="selectPhotos($event)" />
+        </label>
+        <ul>
+          @for (photo of photos(); track photo.id) {
+            <li>
+              <a [href]="photoUrl(photo.id)" target="_blank" rel="noopener">Foto {{ $index + 1 }}</a>
+              <button type="button" class="button link" [disabled]="isDisabled()"
+                (click)="photoRemoved.emit(photo.id)">Quitar</button>
+            </li>
+          }
+        </ul>
+        @if (photos().length === 0) {
+          <p class="field-hint">Adjunta al menos una foto antes de guardar la evidencia.</p>
+        }
+      }
       @if (serverInvalidFields().length > 0) {
         <p class="form-error" role="alert">Revisa los campos marcados.</p>
       }
@@ -75,6 +95,10 @@ export class EvidenceFormComponent implements OnInit {
   // Campos que la API rechazó en el último envío.
   readonly serverInvalidFields = input<readonly string[]>([]);
   readonly submitted = output<EvidenceData>();
+  readonly photos = input<readonly { readonly id: number }[]>([]);
+  readonly taskId = input.required<number>();
+  readonly photoSelected = output<readonly File[]>();
+  readonly photoRemoved = output<number>();
 
   protected form: FormGroup<Record<string, FormControl<string>>> = this.formBuilder.group({});
   protected readonly hasSavedEvidence = computed(() => this.savedData() !== null);
@@ -96,7 +120,7 @@ export class EvidenceFormComponent implements OnInit {
 
   private validatorsFor(field: EvidenceField) {
     const validators = field.isRequired ? [Validators.required] : [];
-    if (field.type === 'AMOUNT_CLP') validators.push(Validators.pattern(/^\d+$/));
+    if (field.type === 'AMOUNT_CLP' || field.type === 'INTEGER') validators.push(Validators.pattern(/^\d+$/));
     return validators;
   }
 
@@ -114,6 +138,7 @@ export class EvidenceFormComponent implements OnInit {
 
   protected errorText(field: EvidenceField): string {
     if (field.type === 'AMOUNT_CLP') return 'Ingresa un monto en pesos, sin puntos ni decimales.';
+    if (field.type === 'INTEGER') return 'Ingresa un número entero no negativo.';
     return field.isRequired ? 'Este campo es obligatorio.' : 'Revisa este campo.';
   }
 
@@ -128,9 +153,19 @@ export class EvidenceFormComponent implements OnInit {
         .fields.filter((field) => (values[field.name] ?? '').trim() !== '')
         .map((field) => {
           const value = (values[field.name] ?? '').trim();
-          return [field.name, field.type === 'AMOUNT_CLP' ? Number(value) : value];
+          return [field.name, field.type === 'AMOUNT_CLP' || field.type === 'INTEGER' ? Number(value) : value];
         }),
     );
     this.submitted.emit(data);
+  }
+
+  protected photoUrl(photoId: number): string {
+    return `/api/tasks/${this.taskId()}/evidence/photos/${photoId}`;
+  }
+
+  protected selectPhotos(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    this.photoSelected.emit(Array.from(input.files ?? []));
+    input.value = '';
   }
 }

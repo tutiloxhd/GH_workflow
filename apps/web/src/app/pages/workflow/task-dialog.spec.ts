@@ -33,6 +33,7 @@ const collectValeVista: WorkflowTask = {
     ],
   },
   evidence: null,
+  evidencePhotos: [],
 };
 
 const workflowWith = (task: WorkflowTask): WorkflowDetail => ({

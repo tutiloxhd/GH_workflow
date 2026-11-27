@@ -6,6 +6,7 @@ import {
   taskDefinitions,
   taskDependencies,
   taskEvidenceSubmissions,
+  taskEvidencePhotos,
   taskInstances,
   workflowEvents,
   workflowInstances,
@@ -605,6 +606,50 @@ export async function hasEvidence(executor: DatabaseExecutor, taskId: number): P
     .where(eq(taskEvidenceSubmissions.taskInstanceId, taskId))
     .limit(1);
   return submission !== undefined;
+}
+
+export async function countEvidencePhotos(executor: DatabaseExecutor, taskId: number): Promise<number> {
+  const [row] = await executor.select({ total: count() }).from(taskEvidencePhotos)
+    .where(eq(taskEvidencePhotos.taskInstanceId, taskId));
+  return row?.total ?? 0;
+}
+
+export async function addEvidencePhoto(
+  executor: DatabaseExecutor,
+  photo: { taskId: number; uploadedBy: number; mimeType: string; bytes: Buffer },
+): Promise<void> {
+  await executor.insert(taskEvidencePhotos).values({
+    taskInstanceId: photo.taskId,
+    uploadedBy: photo.uploadedBy,
+    mimeType: photo.mimeType,
+    sizeBytes: photo.bytes.length,
+    bytes: photo.bytes,
+  });
+}
+
+export async function findEvidencePhotosOfWorkflow(executor: DatabaseExecutor, workflowId: number) {
+  return executor.select({
+    id: taskEvidencePhotos.id,
+    taskId: taskEvidencePhotos.taskInstanceId,
+    mimeType: taskEvidencePhotos.mimeType,
+    sizeBytes: taskEvidencePhotos.sizeBytes,
+    createdAt: taskEvidencePhotos.createdAt,
+  }).from(taskEvidencePhotos).innerJoin(taskInstances, eq(taskInstances.id, taskEvidencePhotos.taskInstanceId))
+    .where(eq(taskInstances.workflowInstanceId, workflowId));
+}
+
+export async function findEvidencePhoto(executor: DatabaseExecutor, photoId: number) {
+  const [photo] = await executor.select({
+    id: taskEvidencePhotos.id,
+    taskId: taskEvidencePhotos.taskInstanceId,
+    mimeType: taskEvidencePhotos.mimeType,
+    bytes: taskEvidencePhotos.bytes,
+  }).from(taskEvidencePhotos).where(eq(taskEvidencePhotos.id, photoId));
+  return photo ?? null;
+}
+
+export async function deleteEvidencePhoto(executor: DatabaseExecutor, photoId: number): Promise<void> {
+  await executor.delete(taskEvidencePhotos).where(eq(taskEvidencePhotos.id, photoId));
 }
 
 // ───────────── Participantes ─────────────

@@ -14,6 +14,8 @@ import type { ParticipantType } from '../domain/participants.js';
 import { ASSIGN_PARTICIPANTS_TASK_CODE, hasRequiredParticipants } from '../domain/task-rules.js';
 import { insertParticipant } from '../persistence/workflow-repository.js';
 
+const ACCEPT_PROPERTY_TASK_CODE = 'ACCEPT_PROPERTY';
+
 export interface StartedWorkflow {
   readonly workflowId: number;
   readonly wasCreated: boolean;
@@ -87,6 +89,21 @@ export async function startWorkflow(
         });
       }
       await context.activateReadyTasks();
+      const acceptanceTask = context.tasks.find((task) => task.code === ACCEPT_PROPERTY_TASK_CODE);
+      if (acceptanceTask?.status === 'READY') {
+        await context.changeTask(acceptanceTask.id, {
+          status: 'COMPLETED',
+          startedAt: now,
+          completedAt: now,
+          completedBy: null,
+        });
+        context.record({
+          taskId: acceptanceTask.id,
+          eventType: 'TASK_COMPLETED',
+          details: { code: acceptanceTask.code, source: 'ADMIN_NEW' },
+        });
+        await context.activateReadyTasks();
+      }
       if (hasRequiredParticipants(context.participants)) {
         const assignmentTask = context.tasks.find(
           (task) => task.code === ASSIGN_PARTICIPANTS_TASK_CODE,

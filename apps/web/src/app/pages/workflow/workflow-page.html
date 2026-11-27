@@ -81,7 +81,7 @@
       }
       <div class="process-scroll">
         <div class="process-map" [style.zoom]="isDialog() ? diagramZoom() + '%' : null">
-          <ol class="process-row process-row-top">
+          <ol class="process-row process-row-top" [class.is-final-row]="current.tasks.length <= (isDialog() ? 7 : 5)">
             @for (task of current.tasks.slice(0, isDialog() ? 7 : 5); track task.id) {
               <li [class.last-node]="$last">
                 <button
@@ -121,8 +121,10 @@
               </li>
             }
           </ol>
-          <div class="process-turn" aria-hidden="true"></div>
-          <ol class="process-row process-row-reverse" [attr.start]="isDialog() ? 8 : 6">
+          @if (current.tasks.length > (isDialog() ? 7 : 5)) {
+            <div class="process-turn" aria-hidden="true"></div>
+          }
+          <ol class="process-row process-row-reverse" [class.is-final-row]="current.tasks.length <= (isDialog() ? 14 : 10)" [attr.start]="isDialog() ? 8 : 6">
             @for (task of current.tasks.slice(isDialog() ? 7 : 5, isDialog() ? 14 : 10); track task.id) {
               <li [class.last-node]="$last">
                 <button
@@ -162,7 +164,9 @@
               </li>
             }
           </ol>
-          <div class="process-turn process-turn-left" aria-hidden="true"></div>
+          @if (current.tasks.length > (isDialog() ? 14 : 10)) {
+            <div class="process-turn process-turn-left" aria-hidden="true"></div>
+          }
           <ol class="process-row" [attr.start]="isDialog() ? 15 : 11">
             @for (task of current.tasks.slice(isDialog() ? 14 : 10, isDialog() ? 21 : 15); track task.id) {
               <li [class.last-node]="$last" [style.--node-index]="task.displayOrder">

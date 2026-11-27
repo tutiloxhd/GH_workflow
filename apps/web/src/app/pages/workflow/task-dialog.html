@@ -83,10 +83,14 @@
           @if (canWork()) {
             <app-evidence-form
               [definition]="form"
+              [taskId]="current.id"
+              [photos]="current.evidencePhotos"
               [savedData]="current.evidence?.formData ?? null"
               [isDisabled]="isBusy()"
               [serverInvalidFields]="invalidEvidenceFields()"
               (submitted)="saveEvidence($event)"
+              (photoSelected)="uploadPhotos($event)"
+              (photoRemoved)="removePhoto($event)"
             />
           } @else if (current.evidence; as evidence) {
             <dl class="facts">
@@ -95,6 +99,9 @@
                 <dd>{{ evidence.formData[field.name] ?? '—' }}</dd>
               }
             </dl>
+            @for (photo of current.evidencePhotos; track photo.id) {
+              <a [href]="'/api/tasks/' + current.id + '/evidence/photos/' + photo.id" target="_blank" rel="noopener">Foto {{ $index + 1 }}</a>
+            }
           } @else {
             <p class="muted">Sin evidencia registrada.</p>
           }

@@ -28,12 +28,10 @@ suscripción son datos sensibles; no deben copiarse a logs o fixtures.
 
 El SQL de push se aplicó en la base local de desarrollo el 2026-11-26 con
 autorización del usuario. En otros ambientes requiere revisión y aprobación.
-El generador Drizzle detectó
-un desfase anterior entre el esquema y `sql/migrations/meta/0017_snapshot.json`:
-preguntó por cambios de columnas de `users` ajenos a push. Por eso
-`0018_web_push.sql` está registrado en el journal,
-pero el siguiente uso de `db:generate` requiere reconciliar el snapshot. No se
-deben aceptar automáticamente esos cambios de `users` ni ejecutar el SQL sin revisión.
+El snapshot consolidado de `0018_web_push.sql` se encuentra en
+`sql/migrations/meta/0018_snapshot.json`. Reconcilia el esquema Drizzle con las
+migraciones manuales 0010–0018. `db:generate` confirma que no quedan cambios de
+esquema pendientes; la comprobación se realizó sin aplicar SQL a la base.
 
 Para pruebas desde el túnel HTTPS de VS Code, configura en `apps/api/.env`
 `WEB_ADDITIONAL_ORIGIN` con el origen exacto del enlace (sin barra final). La API

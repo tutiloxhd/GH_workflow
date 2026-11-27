@@ -56,6 +56,11 @@ export class PushService {
   }
 
   async unsubscribe(): Promise<void> {
+    // Sin service worker, SwPush.subscription es NEVER y firstValueFrom no termina.
+    if (!this.swPush.isEnabled) {
+      this.subscribed.set(false);
+      return;
+    }
     const subscription = await firstValueFrom(this.swPush.subscription);
     if (!subscription) {
       this.subscribed.set(false);

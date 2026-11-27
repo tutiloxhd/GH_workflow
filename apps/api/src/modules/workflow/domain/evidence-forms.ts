@@ -5,7 +5,7 @@ import { z } from 'zod';
 // formulario guardado usan el inicial de su código (DEFAULT_EVIDENCE_FORMS). Una sola definición
 // sirve para validar en la API y para que el frontend dibuje el formulario.
 
-export const EVIDENCE_FIELD_TYPES = ['TEXT', 'LONG_TEXT', 'DATE', 'AMOUNT_CLP', 'CHOICE'] as const;
+export const EVIDENCE_FIELD_TYPES = ['TEXT', 'LONG_TEXT', 'DATE', 'AMOUNT_CLP', 'INTEGER', 'CHOICE'] as const;
 export type EvidenceFieldType = (typeof EVIDENCE_FIELD_TYPES)[number];
 
 export interface EvidenceField {
@@ -18,6 +18,8 @@ export interface EvidenceField {
 
 export interface EvidenceForm {
   readonly fields: readonly EvidenceField[];
+  readonly requiresPhoto?: boolean;
+  readonly notifyLegalOnSubmit?: boolean;
 }
 
 const MAX_TEXT_LENGTH = 200;
@@ -81,6 +83,8 @@ const optionSchema = z.strictObject({
 // Definición de un formulario tal como llega del editor o se lee de la base.
 export const evidenceFormSchema = z
   .strictObject({
+    requiresPhoto: z.boolean().optional(),
+    notifyLegalOnSubmit: z.boolean().optional(),
     fields: z
       .array(
         z.strictObject({
@@ -134,9 +138,11 @@ export function resolveEvidenceForm(taskCode: string, stored: unknown): Evidence
 
 // Quita las opciones ausentes (exactOptionalPropertyTypes) y trata un formulario vacío como nulo.
 export function toEvidenceForm(form: z.output<typeof evidenceFormSchema>): EvidenceForm | null {
-  if (form.fields.length === 0) return null;
+  if (form.fields.length === 0 && !form.requiresPhoto) return null;
   return {
     fields: form.fields.map(({ options, ...field }) => (options ? { ...field, options } : field)),
+    ...(form.requiresPhoto === undefined ? {} : { requiresPhoto: form.requiresPhoto }),
+    ...(form.notifyLegalOnSubmit === undefined ? {} : { notifyLegalOnSubmit: form.notifyLegalOnSubmit }),
   };
 }
 
@@ -146,6 +152,7 @@ function fieldSchema(field: EvidenceField): z.ZodType {
     LONG_TEXT: z.string().trim().min(1).max(MAX_LONG_TEXT_LENGTH),
     DATE: z.iso.date(),
     AMOUNT_CLP: z.number().int().min(0).max(MAX_AMOUNT_CLP),
+    INTEGER: z.number().int().min(0).max(1_000_000),
     CHOICE: z.enum((field.options ?? []).map((option) => option.value) as [string, ...string[]]),
   };
   const schema = schemaByType[field.type];
@@ -175,7 +182,8 @@ export function evidenceSchemaFor(
   if (!form) return null;
   const shape = Object.fromEntries(form.fields.map((field) => [field.name, fieldSchema(field)]));
   const schema = z.strictObject(shape);
-  return taskCode === 'RECORD_AUCTION_RESULT' && hasAuctionResultFields(form)
+  return (taskCode === 'RECORD_AUCTION_RESULT' || taskCode === 'PARTICIPATE_AND_RECORD_RESULT') &&
+    hasAuctionResultFields(form)
     ? schema.superRefine(refineAuctionResult)
     : schema;
 }

@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.local-backups/
 
 # Utilidad local para restablecer claves de usuarios importados en desarrollo
 /apps/api/src/entrypoints/local-reset-imported-passwords.ts

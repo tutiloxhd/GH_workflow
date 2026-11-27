@@ -12,6 +12,7 @@ import type { WorkflowStatus } from '../domain/statuses.js';
 import {
   findCurrentParticipants,
   findEvidenceOfWorkflow,
+  findEvidencePhotosOfWorkflow,
   findPropertyDates,
   findPropertySummary,
   listPropertiesWithWorkflow,
@@ -56,13 +57,14 @@ export async function getWorkflowDetail(
   const { db } = dependencies.database;
   const workflow = await findWorkflow(db, workflowId);
   if (!workflow) return fail('WORKFLOW_NOT_FOUND' as const);
-  const [dates, property, tasks, participants, requirements, evidenceByTask] = await Promise.all([
+  const [dates, property, tasks, participants, requirements, evidenceByTask, photos] = await Promise.all([
     findPropertyDates(db, workflow.propertyId),
     findPropertySummary(db, workflow.propertyId),
     findWorkflowTasks(db, workflowId),
     findCurrentParticipants(db, workflowId),
     findTaskRequirements(db, workflow.templateId),
     findEvidenceOfWorkflow(db, workflowId),
+    findEvidencePhotosOfWorkflow(db, workflowId),
   ]);
   const deadlineDayKind = await findTemplateDeadlineDayKind(db, workflow.templateId);
   const storedForms = await findStoredEvidenceForms(db, workflow.templateId);
@@ -115,6 +117,12 @@ export async function getWorkflowDetail(
       requiresEvidence: task.requiresEvidence,
       evidenceForm: resolveEvidenceForm(task.code, storedForms.get(task.definitionId)),
       evidence: evidenceOf(evidenceByTask.get(task.id)),
+      evidencePhotos: photos.filter((photo) => photo.taskId === task.id).map((photo) => ({
+        id: photo.id,
+        mimeType: photo.mimeType,
+        sizeBytes: photo.sizeBytes,
+        createdAt: photo.createdAt.toISOString(),
+      })),
     })),
   });
 }

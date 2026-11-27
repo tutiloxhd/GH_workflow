@@ -348,9 +348,7 @@ class SyncRun {
     return deferDates ? existing.auctionAt : snapshot.auctionAt;
   }
 
-  // Regla provisoria (ADR 0007): se inicia el workflow si el remate es hoy o después, o si la
-  // fecha se desconoce. Un remate ya ocurrido no abre un flujo con todas sus tareas vencidas;
-  // el administrador puede iniciarlo a mano desde «Propiedades sin workflow».
+  // Solo los remates con fecha de hoy o futura reciben un workflow automáticamente.
   private async startWorkflowIfEligible(
     propertyId: number,
     auctionAt: Date | null,
@@ -360,8 +358,11 @@ class SyncRun {
     auctionMode: string | null,
   ): Promise<{ workflowId: number | null; reason: string | null }> {
     const today = businessDayKey(this.dependencies.clock.now());
-    if (auctionAt && businessDayKey(auctionAt) < today) {
-      return { workflowId: null, reason: 'El remate ya ocurrió; no se inicia el workflow' };
+    if (!auctionAt || businessDayKey(auctionAt) < today) {
+      return {
+        workflowId: null,
+        reason: 'El remate no tiene fecha futura o de hoy; no se inicia el workflow',
+      };
     }
     const assignedParticipants = await this.resolveSourceParticipants(
       propertyId,

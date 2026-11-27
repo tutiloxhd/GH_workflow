@@ -1,4 +1,5 @@
 import type { RowDataPacket } from 'mysql2';
+import { processNotificationOutbox } from '../src/modules/notifications/application/notification-processor.js';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { startWorkflow } from '../src/modules/workflow/application/start-workflow.js';
 import { completeTask } from '../src/modules/workflow/application/task-commands.js';
@@ -17,6 +18,7 @@ import {
   startWorkflowFor,
   statusesOf,
   submitEvidenceAs,
+  uploadPhotoAs,
   SYNTHETIC_EVIDENCE,
   taskOf,
   workflowOf,
@@ -25,21 +27,19 @@ import {
 } from './workflow-test-helpers.js';
 
 const TASK_ORDER = [
+  'ACCEPT_PROPERTY',
   'ASSIGN_MANAGER_AND_BIDDER',
+  'LEGAL_REVIEW',
   'GENERATE_VALE_VISTA_LETTER',
   'SEND_LETTER_TO_GENERAL_MANAGER',
   'SEND_LETTER_TO_BANK',
   'PREPARE_SUBMISSION_FORM',
-  'PRE_DELIVERY_LEGAL_REVIEW',
   'COLLECT_VALE_VISTA',
-  'DELIVER_VALE_VISTA_AND_FORM',
-  'RECORD_DELIVERY_EVIDENCE',
+  'CONSIGN_GUARANTEE',
+  'DELIVER_TO_COURT_AND_RECORD_EVIDENCE',
   'FINAL_LEGAL_REVIEW',
-  'PREPARE_PARTICIPATION',
-  'PRE_AUCTION_ALERTS',
-  'ENTER_VIRTUAL_ROOM',
-  'PARTICIPATE_IN_AUCTION',
-  'RECORD_AUCTION_RESULT',
+  'PREPARE_PARTICIPATION_AND_ALERTS',
+  'PARTICIPATE_AND_RECORD_RESULT',
 ];
 
 describe('motor del workflow', () => {
@@ -72,6 +72,9 @@ describe('motor del workflow', () => {
     const task = taskOf(await getWorkflow(context, cast, workflowId), code);
     const evidence = SYNTHETIC_EVIDENCE[code];
     if (task.requiresEvidence && evidence) {
+      if (['COLLECT_VALE_VISTA', 'DELIVER_TO_COURT_AND_RECORD_EVIDENCE'].includes(code)) {
+        expect((await uploadPhotoAs(context, cookie, task.id)).status).toBe(201);
+      }
       expect((await submitEvidenceAs(context, cookie, task.id, evidence)).status).toBe(200);
     }
     return completeAs(context, cookie, task.id);
@@ -105,9 +108,10 @@ describe('motor del workflow', () => {
     expect(workflow.tasks.map((task) => task.code)).toEqual(TASK_ORDER);
     const firstTask = taskOf(workflow, 'ASSIGN_MANAGER_AND_BIDDER');
     expect(firstTask).toMatchObject({ status: 'READY', assignee: { id: cast.admin.id } });
-    // Plazo provisorio: 3 días desde la activación (12 nov 12:00 UTC).
-    expect(firstTask.dueAt).toBe('2026-11-15T12:00:00.000Z');
-    expect(workflow.tasks.filter((task) => task.status !== 'BLOCKED')).toHaveLength(1);
+    expect(taskOf(workflow, 'ACCEPT_PROPERTY').status).toBe('COMPLETED');
+    // Tres días hábiles desde el jueves 12 de noviembre.
+    expect(firstTask.dueAt).toBe('2026-11-17T12:00:00.000Z');
+    expect(workflow.tasks.filter((task) => task.status !== 'BLOCKED')).toHaveLength(2);
   });
 
   it('dos inicios concurrentes de la misma propiedad crean un solo workflow', async () => {
@@ -142,9 +146,9 @@ describe('motor del workflow', () => {
 
     expect(statusesOf(after)).toMatchObject({
       ASSIGN_MANAGER_AND_BIDDER: 'COMPLETED',
-      GENERATE_VALE_VISTA_LETTER: 'READY',
+      LEGAL_REVIEW: 'READY',
+      GENERATE_VALE_VISTA_LETTER: 'BLOCKED',
       PREPARE_SUBMISSION_FORM: 'BLOCKED',
-      PRE_DELIVERY_LEGAL_REVIEW: 'BLOCKED',
       SEND_LETTER_TO_GENERAL_MANAGER: 'BLOCKED',
     });
     expect(after.tasks.filter((task) => task.status === 'READY')).toHaveLength(1);
@@ -154,6 +158,7 @@ describe('motor del workflow', () => {
     const workflow = await startAndAssign();
     for (const code of [
       'ASSIGN_MANAGER_AND_BIDDER',
+      'LEGAL_REVIEW',
       'GENERATE_VALE_VISTA_LETTER',
       'SEND_LETTER_TO_GENERAL_MANAGER',
       'SEND_LETTER_TO_BANK',
@@ -162,19 +167,34 @@ describe('motor del workflow', () => {
     }
     const before = await getWorkflow(context, cast, workflow.id);
     expect(taskOf(before, 'PREPARE_SUBMISSION_FORM').status).toBe('READY');
-    expect(taskOf(before, 'PRE_DELIVERY_LEGAL_REVIEW').status).toBe('BLOCKED');
+    expect(taskOf(before, 'COLLECT_VALE_VISTA').status).toBe('BLOCKED');
 
     const after = workflowOf(
       await completeByCode(workflow.id, 'PREPARE_SUBMISSION_FORM', cast.cookies.manager),
     );
-    expect(taskOf(after, 'PRE_DELIVERY_LEGAL_REVIEW').status).toBe('READY');
+    expect(taskOf(after, 'COLLECT_VALE_VISTA').status).toBe('READY');
     expect(after.tasks.filter((task) => task.status === 'READY')).toHaveLength(1);
+  });
+
+  it('la consignación corresponde a Legal y la entrega muestra el nombre simplificado', async () => {
+    const workflow = await startAndAssign();
+    const beforeGuarantee = await advanceUntilReady(workflow.id, 'CONSIGN_GUARANTEE');
+    expect(taskOf(beforeGuarantee, 'CONSIGN_GUARANTEE')).toMatchObject({
+      status: 'READY',
+      assignee: { id: cast.legal.id },
+    });
+    expect(taskOf(beforeGuarantee, 'DELIVER_TO_COURT_AND_RECORD_EVIDENCE').name).toBe(
+      'Entregar Vale Vista y Formulario al tribunal',
+    );
+    expect(
+      (await completeByCode(workflow.id, 'CONSIGN_GUARANTEE', cast.cookies.legal)).status,
+    ).toBe(200);
   });
 
   it('recorre el flujo completo hasta COMPLETED y deja historial de cada paso', async () => {
     const workflow = await startAndAssign();
 
-    for (const code of TASK_ORDER) {
+    for (const code of TASK_ORDER.slice(1)) {
       expect((await completeByCode(workflow.id, code)).status).toBe(200);
     }
 
@@ -189,8 +209,8 @@ describe('motor del workflow', () => {
       (event) => event.eventType,
     );
     expect(types[0]).toBe('WORKFLOW_CREATED');
-    expect(types.filter((type) => type === 'TASK_COMPLETED')).toHaveLength(15);
-    expect(types.filter((type) => type === 'TASK_ACTIVATED')).toHaveLength(15);
+    expect(types.filter((type) => type === 'TASK_COMPLETED')).toHaveLength(13);
+    expect(types.filter((type) => type === 'TASK_ACTIVATED')).toHaveLength(13);
     expect(types.at(-1)).toBe('WORKFLOW_COMPLETED');
   });
 
@@ -246,7 +266,6 @@ describe('motor del workflow', () => {
       (await completeByCode(workflow.id, 'PREPARE_SUBMISSION_FORM', cast.cookies.backupManager))
         .status,
     ).toBe(200);
-    expect((await completeByCode(workflow.id, 'PRE_DELIVERY_LEGAL_REVIEW')).status).toBe(200);
     expect(
       taskOf(await getWorkflow(context, cast, workflow.id), 'COLLECT_VALE_VISTA').assignee?.id,
     ).toBe(cast.backupManager.id);
@@ -272,8 +291,8 @@ describe('motor del workflow', () => {
         WHERE workflow_instance_id = ? AND event_type = 'TASK_ACTIVATED'`,
       [workflow.id],
     );
-    // Una activación inicial y una única sucesora al completar la primera tarea.
-    expect(rows[0]?.total).toBe(2);
+    // Aceptación y asignación se activan al inicio; la revisión legal es la única sucesora.
+    expect(rows[0]?.total).toBe(3);
   });
 
   it('ya no existe registro de avance: el endpoint no está', async () => {
@@ -294,11 +313,11 @@ describe('motor del workflow', () => {
       const workflow = await startAndAssign();
       for (const code of [
         'ASSIGN_MANAGER_AND_BIDDER',
+        'LEGAL_REVIEW',
         'GENERATE_VALE_VISTA_LETTER',
         'SEND_LETTER_TO_GENERAL_MANAGER',
         'SEND_LETTER_TO_BANK',
         'PREPARE_SUBMISSION_FORM',
-        'PRE_DELIVERY_LEGAL_REVIEW',
       ]) {
         await completeByCode(workflow.id, code);
       }
@@ -315,6 +334,7 @@ describe('motor del workflow', () => {
         body: { code: 'EVIDENCE_REQUIRED' },
       });
 
+      expect((await uploadPhotoAs(context, cast.cookies.manager, taskId)).status).toBe(201);
       const saved = workflowOf(
         await submitEvidenceAs(
           context,
@@ -326,6 +346,24 @@ describe('motor del workflow', () => {
       expect(taskOf(saved, 'COLLECT_VALE_VISTA').evidence?.formData).toEqual(
         SYNTHETIC_EVIDENCE.COLLECT_VALE_VISTA,
       );
+      const photoId = taskOf(saved, 'COLLECT_VALE_VISTA').evidencePhotos[0]?.id;
+      const photoPath = `${context.server.baseUrl}/api/tasks/${taskId}/evidence/photos/${photoId}`;
+      const forbiddenPhoto = await fetch(photoPath);
+      expect(forbiddenPhoto.status).toBe(401);
+      const allowedPhoto = await fetch(photoPath, {
+        headers: { cookie: cast.cookies.legal },
+      });
+      expect(allowedPhoto.status).toBe(200);
+      expect(allowedPhoto.headers.get('content-type')).toContain('image/png');
+      for (let batch = 0; batch < 10; batch++) {
+        const processed = await processNotificationOutbox({ database: context.database, clock: context.clock }, 'evidence-test');
+        if (processed === 0) break;
+      }
+      const [legalNotices] = await context.database.pool.query<RowDataPacket[]>(
+        "SELECT COUNT(*) AS total FROM notifications WHERE user_id = ? AND event_type = 'EVIDENCE_SUBMITTED' AND task_instance_id = ?",
+        [cast.legal.id, taskId],
+      );
+      expect(legalNotices[0]?.total).toBe(1);
       expect((await completeAs(context, cast.cookies.manager, taskId)).status).toBe(200);
     });
 
@@ -354,6 +392,17 @@ describe('motor del workflow', () => {
       const { workflowId, taskId } = await workflowAtCollectValeVista();
       const first = SYNTHETIC_EVIDENCE.COLLECT_VALE_VISTA ?? {};
 
+      expect((await submitEvidenceAs(context, cast.cookies.manager, taskId, first)).body)
+        .toMatchObject({ code: 'EVIDENCE_PHOTO_REQUIRED' });
+      expect((await uploadPhotoAs(context, cast.cookies.manager, taskId, Buffer.from('invalid'))).status)
+        .toBe(400);
+      for (let index = 0; index < 5; index++) {
+        expect((await uploadPhotoAs(context, cast.cookies.manager, taskId)).status).toBe(201);
+      }
+      expect((await uploadPhotoAs(context, cast.cookies.manager, taskId)).body)
+        .toMatchObject({ code: 'EVIDENCE_PHOTO_LIMIT' });
+      expect(taskOf(await getWorkflow(context, cast, workflowId), 'COLLECT_VALE_VISTA').evidencePhotos)
+        .toHaveLength(5);
       await submitEvidenceAs(context, cast.cookies.manager, taskId, first);
       await submitEvidenceAs(context, cast.cookies.manager, taskId, {
         ...first,
@@ -374,6 +423,7 @@ describe('motor del workflow', () => {
     it('enviar evidencia como suplente lo convierte en titular', async () => {
       const { workflowId, taskId } = await workflowAtCollectValeVista();
 
+      await uploadPhotoAs(context, cast.cookies.backupManager, taskId);
       await submitEvidenceAs(
         context,
         cast.cookies.backupManager,
@@ -410,19 +460,28 @@ describe('motor del workflow', () => {
 
     it('«Registrar resultado» adjudicado exige el monto', async () => {
       const workflow = await startAndAssign();
-      for (const code of TASK_ORDER.slice(0, -1)) await completeByCode(workflow.id, code);
+      for (const code of TASK_ORDER.slice(1, -1)) await completeByCode(workflow.id, code);
       const taskId = taskOf(
         await getWorkflow(context, cast, workflow.id),
-        'RECORD_AUCTION_RESULT',
+        'PARTICIPATE_AND_RECORD_RESULT',
       ).id;
 
+      const resultForm = taskOf(await getWorkflow(context, cast, workflow.id), 'PARTICIPATE_AND_RECORD_RESULT').evidenceForm;
+      expect(resultForm?.fields.find((field) => field.name === 'outcome')?.options?.map((option) => option.value))
+        .toEqual(['AWARDED', 'NOT_AWARDED']);
+      expect(resultForm?.fields.find((field) => field.name === 'bidderCount')?.type).toBe('INTEGER');
+
       const withoutAmount = await submitEvidenceAs(context, cast.cookies.bidder, taskId, {
+        bidderCount: 1,
         outcome: 'AWARDED',
       });
       expect(withoutAmount.body).toMatchObject({
         code: 'INVALID_EVIDENCE',
         invalidFields: ['awardedAmountClp'],
       });
+      expect((await submitEvidenceAs(context, cast.cookies.bidder, taskId, {
+        bidderCount: 0, outcome: 'DESERTED',
+      })).body).toMatchObject({ code: 'INVALID_EVIDENCE', invalidFields: ['outcome'] });
     });
   });
 
@@ -504,7 +563,7 @@ describe('motor del workflow', () => {
         ASSIGN_MANAGER_AND_BIDDER: 'COMPLETED',
         GENERATE_VALE_VISTA_LETTER: 'COMPLETED',
         PREPARE_SUBMISSION_FORM: 'SUSPENDED',
-        SEND_LETTER_TO_BANK: 'BLOCKED',
+        SEND_LETTER_TO_BANK: 'COMPLETED',
       });
       expect((await completeAs(context, cast.cookies.admin, formTaskId)).body).toMatchObject({
         code: 'WORKFLOW_NOT_ACTIVE',
@@ -537,7 +596,7 @@ describe('motor del workflow', () => {
         PREPARE_SUBMISSION_FORM: 'IN_PROGRESS',
       });
       // El plazo desde la activación vuelve a correr desde la reanudación (12 nov 14:00 UTC).
-      expect(taskOf(resumed, 'PREPARE_SUBMISSION_FORM').dueAt).toBe('2026-11-15T14:00:00.000Z');
+      expect(taskOf(resumed, 'PREPARE_SUBMISSION_FORM').dueAt).toBe('2026-11-17T14:00:00.000Z');
     });
 
     it('con nueva fecha el workflow sigue activo, se reprograma y las completadas no cambian', async () => {
@@ -560,7 +619,7 @@ describe('motor del workflow', () => {
       expect(taskOf(after, 'ASSIGN_MANAGER_AND_BIDDER').dueAt).toBe(
         taskOf(before, 'ASSIGN_MANAGER_AND_BIDDER').dueAt,
       );
-      expect(taskOf(after, 'GENERATE_VALE_VISTA_LETTER').dueAt).toBe('2026-11-15T13:00:00.000Z');
+      expect(taskOf(after, 'LEGAL_REVIEW').dueAt).toBe('2026-11-17T13:00:00.000Z');
 
       const [rows] = await context.database.pool.query<RowDataPacket[]>(
         `SELECT origin, status, previous_auction_at AS previousAuctionAt, new_auction_at AS newAuctionAt
@@ -617,7 +676,7 @@ describe('motor del workflow', () => {
 
     // 5 días antes del remate del 7 dic a las 10:00 de Santiago.
     expect(taskOf(changed, 'ASSIGN_MANAGER_AND_BIDDER')).toMatchObject({
-      dueAt: '2026-12-02T13:00:00.000Z',
+      dueAt: '2026-11-30T13:00:00.000Z',
       deadline: { dueReference: 'AUCTION_AT', dueOffsetDays: -5 },
     });
     expect(

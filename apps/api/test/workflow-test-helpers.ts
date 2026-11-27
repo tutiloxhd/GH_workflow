@@ -21,12 +21,15 @@ export interface WorkflowView {
   readonly tasks: {
     id: number;
     code: string;
+    name: string;
     status: string;
     assignee: { id: number } | null;
     backup: { id: number } | null;
     dueAt: string | null;
     requiresEvidence: boolean;
     evidence: { formData: Record<string, unknown> } | null;
+    evidencePhotos: { id: number }[];
+    evidenceForm: { fields: { name: string; type: string; options?: { value: string }[] }[] } | null;
     deadline: { dueReference: string; dueOffsetDays: number; dueOffsetMinutes: number };
   }[];
 }
@@ -134,12 +137,25 @@ export async function assignStandardParticipants(
   });
 }
 
-// Evidencia válida y sintética para cada tarea que la exige en la plantilla v2.
+// Evidencia válida y sintética para las tareas de la plantilla actual.
 export const SYNTHETIC_EVIDENCE: Readonly<Record<string, Record<string, unknown>>> = {
   COLLECT_VALE_VISTA: { bank: 'Banco Sintético', valeVistaNumber: 'VV-0001', amountClp: 4200000 },
-  RECORD_DELIVERY_EVIDENCE: { deliveredOn: '2026-12-01', receivedBy: 'Receptor sintético' },
-  RECORD_AUCTION_RESULT: { outcome: 'NOT_AWARDED' },
+  DELIVER_TO_COURT_AND_RECORD_EVIDENCE: {
+    deliveredOn: '2026-12-01',
+    receivedBy: 'Receptor sintético',
+  },
+  PARTICIPATE_AND_RECORD_RESULT: { bidderCount: 0, outcome: 'NOT_AWARDED' },
 };
+
+const SYNTHETIC_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/F3sAAAAASUVORK5CYII=', 'base64');
+
+export function uploadPhotoAs(
+  context: IdentityTestContext, sessionCookie: string, taskId: number, bytes = SYNTHETIC_PNG,
+): Promise<ApiResponse> {
+  return callApi(context, 'POST', `/api/tasks/${taskId}/evidence/photos`, {
+    sessionCookie, binaryBody: bytes, mimeType: 'image/png',
+  });
+}
 
 export function submitEvidenceAs(
   context: IdentityTestContext,

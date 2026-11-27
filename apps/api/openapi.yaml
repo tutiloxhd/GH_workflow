@@ -596,6 +596,7 @@ paths:
       summary: Guarda o reemplaza la evidencia de la tarea
       description: >
         `formData` se valida contra `evidenceForm` de la tarea (ver el detalle del workflow).
+        Si el formulario exige foto, se debe adjuntar al menos una antes de guardar.
         Misma autorización que trabajar la tarea; si la envía el suplente, pasa a ser titular.
       tags: [tasks]
       parameters: [{ $ref: '#/components/parameters/TaskId' }]
@@ -627,6 +628,48 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
+  /api/tasks/{taskId}/evidence/photos:
+    post:
+      operationId: uploadTaskEvidencePhoto
+      summary: Adjunta una foto a la evidencia de la tarea
+      description: Hasta cinco fotos de 5 MB por tarea; JPEG, PNG o WebP. Se guardan en la base de workflow.
+      tags: [tasks]
+      parameters: [{ $ref: '#/components/parameters/TaskId' }]
+      requestBody:
+        required: true
+        content:
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/png: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+      responses:
+        '201': { $ref: '#/components/responses/WorkflowChanged' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/TaskConflict' }
+  /api/tasks/{taskId}/evidence/photos/{photoId}:
+    parameters:
+      - { $ref: '#/components/parameters/TaskId' }
+      - name: photoId
+        in: path
+        required: true
+        schema: { type: integer, minimum: 1 }
+    get:
+      operationId: getTaskEvidencePhoto
+      summary: Lee una foto de evidencia con autorización del workflow
+      tags: [tasks]
+      responses:
+        '200': { description: Foto JPEG, PNG o WebP }
+        '403': { $ref: '#/components/responses/Problem' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      operationId: deleteTaskEvidencePhoto
+      summary: Elimina una foto de una tarea abierta
+      tags: [tasks]
+      responses:
+        '200': { $ref: '#/components/responses/WorkflowChanged' }
+        '403': { $ref: '#/components/responses/Problem' }
+        '409': { $ref: '#/components/responses/TaskConflict' }
+
   /api/tasks/{taskId}/complete:
     post:
       operationId: completeTask
@@ -639,7 +682,7 @@ paths:
         '409':
           description: >
             `WORKFLOW_NOT_ACTIVE`, `TASK_NOT_OPEN`, `PARTICIPANTS_REQUIRED` (asignar gestor y
-            postor) o `EVIDENCE_REQUIRED`.
+            postor), `EVIDENCE_REQUIRED` o `EVIDENCE_PHOTO_REQUIRED`.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -1439,6 +1482,7 @@ components:
             - TASK_ESCALATION
             - TASK_OVERDUE
             - TASK_COMPLETED
+            - EVIDENCE_SUBMITTED
             - WORKFLOW_SUSPENDED
             - WORKFLOW_RESUMED
             - WORKFLOW_CANCELLED
@@ -1471,7 +1515,7 @@ components:
         id: { type: integer }
         trigger:
           type: string
-          enum: [TASK_ASSIGNED, TASK_REMINDER, TASK_ESCALATION, TASK_OVERDUE, TASK_COMPLETED]
+          enum: [TASK_ASSIGNED, TASK_REMINDER, TASK_ESCALATION, TASK_OVERDUE, TASK_COMPLETED, EVIDENCE_SUBMITTED, WORKFLOW_SUSPENDED, WORKFLOW_RESUMED, WORKFLOW_CANCELLED, WORKFLOW_REPROGRAMMED]
         title: { type: string }
         body: { type: string }
         workflowId: { type: integer }
@@ -1644,6 +1688,15 @@ components:
             formData: { type: object, additionalProperties: true }
             submittedBy: { type: integer }
             updatedAt: { type: string, format: date-time }
+        evidencePhotos:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              mimeType: { type: string }
+              sizeBytes: { type: integer }
+              createdAt: { type: string, format: date-time }
     EvidenceForm:
       type: object
       description: >
@@ -1652,6 +1705,8 @@ components:
       additionalProperties: false
       required: [fields]
       properties:
+        requiresPhoto: { type: boolean }
+        notifyLegalOnSubmit: { type: boolean }
         fields:
           type: array
           maxItems: 30
@@ -1662,7 +1717,7 @@ components:
             properties:
               name: { type: string, pattern: '^[a-z][a-zA-Z0-9]*$', maxLength: 50 }
               label: { type: string, minLength: 1, maxLength: 150 }
-              type: { type: string, enum: [TEXT, LONG_TEXT, DATE, AMOUNT_CLP, CHOICE] }
+              type: { type: string, enum: [TEXT, LONG_TEXT, DATE, AMOUNT_CLP, INTEGER, CHOICE] }
               isRequired: { type: boolean }
               options:
                 type: array

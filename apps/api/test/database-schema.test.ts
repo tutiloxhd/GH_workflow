@@ -14,6 +14,8 @@ const MVP_TABLES = [
   'notification_rule_sets',
   'properties',
   'property_source_changes',
+  'push_deliveries',
+  'push_subscriptions',
   'regions',
   'roles',
   'sync_cursors',
@@ -21,6 +23,7 @@ const MVP_TABLES = [
   'sync_issues',
   'task_definitions',
   'task_dependencies',
+  'task_evidence_photos',
   'task_evidence_submissions',
   'task_instances',
   'users',
@@ -46,7 +49,7 @@ describe('esquema inicial de la base', () => {
     await database.close();
   });
 
-  it('crea las 27 tablas del modelo MVP', async () => {
+  it('crea las 30 tablas del modelo MVP', async () => {
     const [rows] = await database.pool.query<RowDataPacket[]>(
       `SELECT table_name AS tableName
          FROM information_schema.tables

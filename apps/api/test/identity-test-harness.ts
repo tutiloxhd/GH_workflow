@@ -18,19 +18,22 @@ const TEST_BCRYPT_COST = 4;
 // Seeds versionados que toda base necesita: catálogo de roles y plantilla publicada.
 const BASE_SEED_PATHS = [
   '0001_roles.sql',
-  '0002_workflow_template_v1.sql',
-  '0004_workflow_template_v2.sql',
-  '0006_workflow_template_v3_linear.sql',
+  '0007_workflow_template_real_process.sql',
+  '0008_workflow_template_legal_guarantee.sql',
   '0005_notification_rules.sql',
+  '0009_workflow_template_evidence_photos.sql',
 ].map((fileName) => new URL(`../../../sql/seeds/${fileName}`, import.meta.url));
 // Tablas que escriben las pruebas, en orden compatible con las claves foráneas.
 // La plantilla (workflow_templates, task_definitions, task_dependencies) y los roles se conservan.
 const MUTABLE_TABLES = [
+  'push_deliveries',
+  'push_subscriptions',
   'notification_jobs',
   'notifications',
   'notification_outbox',
   'workflow_notification_rule_sets',
   'workflow_events',
+  'task_evidence_photos',
   'task_evidence_submissions',
   'task_instances',
   'workflow_participants',
@@ -190,16 +193,19 @@ export async function callApi(
   context: IdentityTestContext,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
-  options: { body?: unknown; sessionCookie?: string } = {},
+  options: { body?: unknown; binaryBody?: Buffer; mimeType?: string; sessionCookie?: string } = {},
 ): Promise<ApiResponse> {
   const headers: Record<string, string> = { origin: TEST_WEB_ORIGIN };
   if (options.body !== undefined) headers['content-type'] = 'application/json';
+  if (options.binaryBody) headers['content-type'] = options.mimeType ?? 'application/octet-stream';
   if (options.sessionCookie) headers.cookie = options.sessionCookie;
 
   const response = await fetch(`${context.server.baseUrl}${path}`, {
     method,
     headers,
-    ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+    ...(options.body === undefined && !options.binaryBody ? {} : {
+      body: options.binaryBody ? new Uint8Array(options.binaryBody) : JSON.stringify(options.body),
+    }),
   });
   const rawBody = await response.text();
   return {

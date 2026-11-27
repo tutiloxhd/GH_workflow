@@ -1,5 +1,6 @@
 import { fail, succeed, type Result } from '../../../platform/result.js';
 import { evidenceSchemaFor, resolveEvidenceForm } from '../domain/evidence-forms.js';
+import { isValidEvidencePhoto, MAX_EVIDENCE_PHOTOS } from '../domain/evidence-photos.js';
 import { participantTypeForRole } from '../domain/participants.js';
 import { isTaskClosed, isTaskWorkable } from '../domain/statuses.js';
 import {
@@ -12,6 +13,10 @@ import {
   endCurrentParticipants,
   findTaskEvidenceDefinition,
   hasEvidence,
+  countEvidencePhotos,
+  addEvidencePhoto,
+  deleteEvidencePhoto,
+  findEvidencePhoto,
   insertParticipant,
   upsertEvidence,
   type TaskRecord,
@@ -104,6 +109,41 @@ export type EvidenceFailure =
   | { readonly code: WorkflowFailure | 'EVIDENCE_NOT_APPLICABLE' }
   | { readonly code: 'INVALID_EVIDENCE'; readonly invalidFields: readonly string[] };
 
+export async function uploadTaskEvidencePhoto(
+  dependencies: WorkflowDependencies, actor: Actor, taskId: number, bytes: Buffer, mimeType: string,
+): Promise<Result<TaskCommandResult, WorkflowFailure | 'INVALID_EVIDENCE_PHOTO'>> {
+  if (!isValidEvidencePhoto(bytes, mimeType)) return fail('INVALID_EVIDENCE_PHOTO');
+  const definition = await findTaskEvidenceDefinition(dependencies.database.db, taskId);
+  if (!definition) return fail('TASK_NOT_FOUND');
+  if (!resolveEvidenceForm(definition.code, definition.evidenceForm)?.requiresPhoto) {
+    return fail('INVALID_EVIDENCE_PHOTO');
+  }
+  return runTaskCommand(dependencies, taskId, actor.id, async (context) => {
+    const authorized = await authorizeWork(context, actor, taskId);
+    if (!authorized.isSuccess) return authorized;
+    if (await countEvidencePhotos(context.executor, taskId) >= MAX_EVIDENCE_PHOTOS) {
+      return fail('EVIDENCE_PHOTO_LIMIT');
+    }
+    await addEvidencePhoto(context.executor, { taskId, uploadedBy: actor.id, bytes, mimeType });
+    context.record({ taskId, eventType: 'EVIDENCE_PHOTO_ADDED', details: { mimeType, sizeBytes: bytes.length } });
+    return succeed({ workflowId: context.workflow.id });
+  });
+}
+
+export async function removeTaskEvidencePhoto(
+  dependencies: WorkflowDependencies, actor: Actor, taskId: number, photoId: number,
+): Promise<Result<TaskCommandResult, WorkflowFailure>> {
+  return runTaskCommand(dependencies, taskId, actor.id, async (context) => {
+    const authorized = await authorizeWork(context, actor, taskId);
+    if (!authorized.isSuccess) return authorized;
+    const photo = await findEvidencePhoto(context.executor, photoId);
+    if (!photo || photo.taskId !== taskId) return fail('TASK_NOT_FOUND');
+    await deleteEvidencePhoto(context.executor, photoId);
+    context.record({ taskId, eventType: 'EVIDENCE_PHOTO_DELETED', details: { photoId } });
+    return succeed({ workflowId: context.workflow.id });
+  });
+}
+
 // Guarda o reemplaza el formulario de evidencia vigente de la tarea. El formulario se valida
 // antes de abrir la transacción: depende solo de la definición de la tarea, que nunca cambia.
 export async function submitTaskEvidence(
@@ -114,10 +154,8 @@ export async function submitTaskEvidence(
 ): Promise<Result<TaskCommandResult, EvidenceFailure>> {
   const definition = await findTaskEvidenceDefinition(dependencies.database.db, taskId);
   if (definition === null) return fail({ code: 'TASK_NOT_FOUND' });
-  const schema = evidenceSchemaFor(
-    definition.code,
-    resolveEvidenceForm(definition.code, definition.evidenceForm),
-  );
+  const form = resolveEvidenceForm(definition.code, definition.evidenceForm);
+  const schema = evidenceSchemaFor(definition.code, form);
   if (!schema) return fail({ code: 'EVIDENCE_NOT_APPLICABLE' });
   const parsed = schema.safeParse(formData);
   if (!parsed.success) {
@@ -135,6 +173,10 @@ export async function submitTaskEvidence(
   const outcome = await runTaskCommand(dependencies, taskId, actor.id, async (context) => {
     const authorized = await authorizeWork(context, actor, taskId);
     if (!authorized.isSuccess) return authorized;
+
+    if (form?.requiresPhoto && await countEvidencePhotos(context.executor, taskId) === 0) {
+      return fail('EVIDENCE_PHOTO_REQUIRED');
+    }
 
     await upsertEvidence(context.executor, {
       taskId,
@@ -166,6 +208,11 @@ export function completeTask(
     }
     if (task.requiresEvidence && !(await hasEvidence(context.executor, taskId))) {
       return fail('EVIDENCE_REQUIRED');
+    }
+    const definition = await findTaskEvidenceDefinition(context.executor, taskId);
+    if (definition && resolveEvidenceForm(definition.code, definition.evidenceForm)?.requiresPhoto &&
+        await countEvidencePhotos(context.executor, taskId) === 0) {
+      return fail('EVIDENCE_PHOTO_REQUIRED');
     }
 
     await context.changeTask(taskId, {

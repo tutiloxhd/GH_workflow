@@ -1,11 +1,13 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, raw, type Request, type Response } from 'express';
 import { z, type ZodType } from 'zod';
 import { sendProblem, sendValidationProblem } from '../../../platform/http/problem-details.js';
 import type { Result } from '../../../platform/result.js';
 import type { IdentityDependencies } from '../../identity/application/identity-dependencies.js';
 import { getCurrentUser, requireRole, requireSession } from '../../identity/http/authorization.js';
 import { startWorkflow } from '../application/start-workflow.js';
-import { completeTask, startTask, submitTaskEvidence } from '../application/task-commands.js';
+import { completeTask, startTask, submitTaskEvidence, uploadTaskEvidencePhoto, removeTaskEvidencePhoto } from '../application/task-commands.js';
+import { findEvidencePhoto, findWorkflowIdOfTask } from '../persistence/workflow-repository.js';
+import { MAX_EVIDENCE_PHOTO_BYTES } from '../domain/evidence-photos.js';
 import {
   assignParticipants,
   cancelWorkflow,
@@ -34,6 +36,7 @@ const positiveId = z.coerce.number().int().positive();
 const propertyParams = z.strictObject({ propertyId: positiveId });
 const workflowParams = z.strictObject({ workflowId: positiveId });
 const taskParams = z.strictObject({ taskId: positiveId });
+const photoParams = z.strictObject({ taskId: positiveId, photoId: positiveId });
 // Instante con zona explícita (p. ej. 2026-12-07T10:00:00-03:00); se guarda en UTC.
 const instant = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
 const reason = z.string().trim().min(1).max(1000);
@@ -266,6 +269,46 @@ export function createWorkflowRouter(
       return;
     }
     await respond(response, outcome);
+  });
+
+  router.post('/tasks/:taskId/evidence/photos', raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: MAX_EVIDENCE_PHOTO_BYTES }), async (request, response) => {
+    const params = parse(taskParams, request.params, response);
+    if (!params) return;
+    if (!Buffer.isBuffer(request.body)) {
+      sendProblem(response, { status: 400, code: 'INVALID_EVIDENCE_PHOTO', title: 'Adjunta una imagen JPEG, PNG o WebP válida' });
+      return;
+    }
+    const outcome = await uploadTaskEvidencePhoto(workflow, actorOf(response), params.taskId, request.body, request.headers['content-type'] ?? '');
+    if (!outcome.isSuccess) {
+      sendProblem(response, outcome.failure === 'INVALID_EVIDENCE_PHOTO'
+        ? { status: 400, code: 'INVALID_EVIDENCE_PHOTO', title: 'Imagen inválida o demasiado grande' }
+        : WORKFLOW_PROBLEMS[outcome.failure]);
+      return;
+    }
+    await respond(response, outcome, 201);
+  });
+
+  router.get('/tasks/:taskId/evidence/photos/:photoId', async (request, response) => {
+    const params = parse(photoParams, request.params, response);
+    if (!params) return;
+    const workflowId = await findWorkflowIdOfTask(workflow.database.db, params.taskId);
+    const detail = await getWorkflowDetail(workflow, actorOf(response), workflowId ?? 0);
+    if (!detail.isSuccess) {
+      sendProblem(response, WORKFLOW_PROBLEMS[detail.failure]);
+      return;
+    }
+    const photo = await findEvidencePhoto(workflow.database.db, params.photoId);
+    if (!photo || photo.taskId !== params.taskId) {
+      sendProblem(response, WORKFLOW_PROBLEMS.TASK_NOT_FOUND);
+      return;
+    }
+    response.set({ 'Content-Type': photo.mimeType, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store' }).send(photo.bytes);
+  });
+
+  router.delete('/tasks/:taskId/evidence/photos/:photoId', async (request, response) => {
+    const params = parse(photoParams, request.params, response);
+    if (!params) return;
+    await respond(response, await removeTaskEvidencePhoto(workflow, actorOf(response), params.taskId, params.photoId));
   });
 
   router.post('/tasks/:taskId/complete', async (request, response) => {

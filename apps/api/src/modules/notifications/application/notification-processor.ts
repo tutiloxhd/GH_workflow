@@ -3,6 +3,7 @@ import type { RowDataPacket } from 'mysql2/promise';
 import type { Clock } from '../../../platform/clock/clock.js';
 import type { Database } from '../../../platform/database/database.js';
 import { enqueuePushDeliveries } from './push-deliveries.js';
+import { resolveEvidenceForm } from '../../workflow/domain/evidence-forms.js';
 
 const LEASE_MILLISECONDS = 60_000;
 const BATCH_SIZE = 25;
@@ -25,6 +26,8 @@ interface TaskRow extends RowDataPacket {
   readonly id: number;
   readonly workflow_instance_id: number;
   readonly name: string;
+  readonly code: string;
+  readonly evidence_form: unknown;
   readonly status: string;
   readonly assigned_user_id: number | null;
   readonly due_at: Date | null;
@@ -58,7 +61,7 @@ const deduplicationKey = (...parts: readonly (string | number)[]): string =>
 
 async function findTask(database: Database, taskId: number): Promise<TaskRow | undefined> {
   const [rows] = await database.pool.execute<TaskRow[]>(
-    `SELECT ti.id, ti.workflow_instance_id, td.name, ti.status, ti.assigned_user_id, ti.due_at
+    `SELECT ti.id, ti.workflow_instance_id, td.code, td.name, td.evidence_form, ti.status, ti.assigned_user_id, ti.due_at
        FROM task_instances ti
        JOIN task_definitions td ON td.id = ti.task_definition_id
       WHERE ti.id = ?`,
@@ -139,6 +142,7 @@ async function createNotification(
     TASK_ESCALATION: 'Escalamiento preventivo',
     TASK_OVERDUE: 'Tarea vencida',
     TASK_COMPLETED: 'Tarea completada',
+    EVIDENCE_SUBMITTED: 'Evidencia registrada para revisión legal',
     WORKFLOW_SUSPENDED: 'Workflow suspendido',
     WORKFLOW_RESUMED: 'Workflow reanudado',
     WORKFLOW_CANCELLED: 'Workflow cancelado',
@@ -318,6 +322,29 @@ async function handleOutboxRow(
   if (!task) return;
   const now = dependencies.clock.now();
   const occurrence = String(row.id);
+
+  if (row.event_type === 'EVIDENCE_SUBMITTED' &&
+      resolveEvidenceForm(task.code, task.evidence_form)?.notifyLegalOnSubmit &&
+      await isRuleEnabled(dependencies.database, task.workflow_instance_id, 'EVIDENCE_SUBMITTED')) {
+    const [reviewers] = await dependencies.database.pool.execute<UserRow[]>(
+      `SELECT DISTINCT wp.user_id AS id FROM workflow_participants wp
+        JOIN users u ON u.id = wp.user_id
+       WHERE wp.workflow_instance_id = ? AND wp.participant_type = 'LEGAL_REVIEWER'
+         AND wp.assignment_type = 'PRIMARY' AND wp.valid_to IS NULL AND u.status = 'ACTIVE'`,
+      [task.workflow_instance_id],
+    );
+    for (const reviewer of reviewers) {
+      await createNotification(dependencies.database, {
+        userId: reviewer.id,
+        trigger: 'EVIDENCE_SUBMITTED',
+        workflowId: task.workflow_instance_id,
+        taskId: task.id,
+        body: `Se registró evidencia en ${task.name}`,
+        occurrence,
+      }, dependencies.enablePush);
+    }
+    return;
+  }
 
   if (row.event_type === 'TASK_COMPLETED') {
     await cancelPendingJobs(dependencies.database, task.id);

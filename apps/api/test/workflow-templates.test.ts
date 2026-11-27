@@ -71,6 +71,7 @@ const INSTANCE_TABLES = [
   'notification_outbox',
   'workflow_notification_rule_sets',
   'workflow_events',
+  'task_evidence_photos',
   'task_evidence_submissions',
   'task_instances',
   'workflow_participants',
@@ -115,7 +116,7 @@ describe('administración de plantillas de flujo', () => {
   });
 
   // Las plantillas creadas por las pruebas tienen autor; las del seed no. Se borran para que las
-  // demás suites sigan usando la v3 del seed como activa.
+  // demás suites sigan usando la plantilla base del seed como activa.
   afterEach(async () => {
     const { pool } = context.database;
     for (const table of INSTANCE_TABLES) await pool.query(`DELETE FROM ${table}`);
@@ -163,7 +164,7 @@ describe('administración de plantillas de flujo', () => {
     const created = await api('POST', '', { sourceTemplateId: seeded.id });
     expect(created.status).toBe(201);
     const draft = templateOf(created);
-    expect(draft).toMatchObject({ version: 4, status: 'DRAFT', isActive: false, taskCount: 15 });
+    expect(draft).toMatchObject({ version: 4, status: 'DRAFT', isActive: false, taskCount: 13 });
 
     const lastTask = draft.tasks.at(-1);
     if (!lastTask) throw new Error('El borrador no copió las tareas');
@@ -207,7 +208,7 @@ describe('administración de plantillas de flujo', () => {
     expect(saved.status).toBe(200);
     expect(templateOf(saved)).toMatchObject({
       name: 'Remate judicial (con cierre)',
-      taskCount: 16,
+      taskCount: 14,
     });
     expect(templateOf(saved).tasks.at(-1)).toMatchObject({
       code: 'CLOSE_FILE',
@@ -227,7 +228,7 @@ describe('administración de plantillas de flujo', () => {
     expect(problemOf(edited).code).toBe('TEMPLATE_NOT_DRAFT');
     expect((await api('DELETE', `/${draft.id}`)).status).toBe(409);
 
-    // Los workflows nuevos usan la v4 y heredan las reglas de notificación de la v3.
+    // Los workflows nuevos usan la v3 y heredan las reglas de notificación de la v2.
     const workflow = await startWorkflowFor(context, cast, await givenProperty(context));
     expect(workflow.tasks.map((task) => task.code)).toContain('CLOSE_FILE');
     const detail = await callApi(context, 'GET', `/api/workflows/${String(workflow.id)}`, {
@@ -245,7 +246,7 @@ describe('administración de plantillas de flujo', () => {
         WHERE assignment.workflow_instance_id = ? AND rule_set.workflow_template_id = ?`,
       [workflow.id, draft.id],
     );
-    expect(ruleRows[0]?.rules).toBe(9);
+    expect(ruleRows[0]?.rules).toBe(10);
 
     // La activa no se archiva; la anterior sí.
     expect(problemOf(await api('POST', `/${draft.id}/archive`)).code).toBe('TEMPLATE_ACTIVE');
@@ -305,7 +306,7 @@ describe('administración de plantillas de flujo', () => {
 
   it('las versiones nuevas cuentan los plazos en días hábiles, saltando feriados', async () => {
     const seeded = await activeTemplate();
-    expect(seeded.deadlineDayKind).toBe('CALENDAR');
+    expect(seeded.deadlineDayKind).toBe('BUSINESS');
 
     const holidaysApi = (method: 'GET' | 'POST' | 'DELETE', path: string, body?: unknown) =>
       callApi(context, method, `/api/holidays${path}`, {

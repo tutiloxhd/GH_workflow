@@ -41,6 +41,10 @@ function isMalformedJsonError(error: unknown): boolean {
   );
 }
 
+function isBodyTooLargeError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'type' in error && error.type === 'entity.too.large';
+}
+
 export function createApp(dependencies: AppDependencies): Express {
   const app = express();
   app.disable('x-powered-by');
@@ -58,6 +62,10 @@ export function createApp(dependencies: AppDependencies): Express {
 
   // El cliente nunca recibe mensajes internos, SQL ni stack traces.
   const handleError: ErrorRequestHandler = (error, _request, response, _next) => {
+    if (isBodyTooLargeError(error)) {
+      sendProblem(response, { status: 413, code: 'BODY_TOO_LARGE', title: 'El archivo o cuerpo excede el tamaño permitido' });
+      return;
+    }
     if (isMalformedJsonError(error)) {
       sendProblem(response, PROBLEMS.malformedJson);
       return;

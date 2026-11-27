@@ -155,6 +155,16 @@ export class WorkflowApiService {
     return this.command(this.http.put(`/api/tasks/${taskId}/evidence`, { formData }));
   }
 
+  uploadEvidencePhoto(taskId: number, file: File): Promise<WorkflowDetail> {
+    return this.command(this.http.post(`/api/tasks/${taskId}/evidence/photos`, file, {
+      headers: { 'Content-Type': file.type },
+    }));
+  }
+
+  deleteEvidencePhoto(taskId: number, photoId: number): Promise<WorkflowDetail> {
+    return this.command(this.http.delete(`/api/tasks/${taskId}/evidence/photos/${photoId}`));
+  }
+
   changeDeadline(taskId: number, rule: DeadlineRule): Promise<WorkflowDetail> {
     return this.command(this.http.put(`/api/tasks/${taskId}/deadline`, rule));
   }

@@ -45,6 +45,16 @@ describe('formularios de evidencia', () => {
     expect(schema?.safeParse({ outcome: 'GANADO' }).success).toBe(false);
   });
 
+  it('el paso combinado de remate conserva la validación del monto adjudicado', () => {
+    const form = resolveEvidenceForm('RECORD_AUCTION_RESULT', null);
+    const schema = evidenceSchemaFor('PARTICIPATE_AND_RECORD_RESULT', form);
+
+    expect(schema?.safeParse({ outcome: 'AWARDED' }).success).toBe(false);
+    expect(schema?.safeParse({ outcome: 'AWARDED', awardedAmountClp: 365000000 }).success).toBe(
+      true,
+    );
+  });
+
   it('las fechas usan formato AAAA-MM-DD', () => {
     const schema = schemaOf('RECORD_DELIVERY_EVIDENCE');
 

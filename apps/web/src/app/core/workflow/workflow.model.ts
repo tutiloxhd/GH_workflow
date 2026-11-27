@@ -18,7 +18,7 @@ export interface PersonRef {
   readonly name: string | null;
 }
 
-export type EvidenceFieldType = 'TEXT' | 'LONG_TEXT' | 'DATE' | 'AMOUNT_CLP' | 'CHOICE';
+export type EvidenceFieldType = 'TEXT' | 'LONG_TEXT' | 'DATE' | 'AMOUNT_CLP' | 'INTEGER' | 'CHOICE';
 
 export interface EvidenceField {
   readonly name: string;
@@ -30,6 +30,8 @@ export interface EvidenceField {
 
 export interface EvidenceForm {
   readonly fields: readonly EvidenceField[];
+  readonly requiresPhoto?: boolean;
+  readonly notifyLegalOnSubmit?: boolean;
 }
 
 export type EvidenceData = Readonly<Record<string, string | number>>;
@@ -59,6 +61,7 @@ export interface WorkflowTask {
   readonly requiresEvidence: boolean;
   readonly evidenceForm: EvidenceForm | null;
   readonly evidence: { readonly formData: EvidenceData; readonly updatedAt: string } | null;
+  readonly evidencePhotos: readonly { readonly id: number; readonly mimeType: string; readonly sizeBytes: number; readonly createdAt: string }[];
 }
 
 export interface WorkflowParticipant {

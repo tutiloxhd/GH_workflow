@@ -129,8 +129,11 @@ export async function publishNotificationRuleSet(
       })
       .$returningId();
     if (!created) throw new Error('No se pudo crear la versión de reglas de notificación');
+    const completeRules = rules.some((rule) => rule.eventType === 'EVIDENCE_SUBMITTED')
+      ? rules
+      : [...rules, { eventType: 'EVIDENCE_SUBMITTED' as const, offsetMinutes: 0, isEnabled: false }];
     await transaction.insert(notificationRules).values(
-      rules.map((rule) => ({
+      completeRules.map((rule) => ({
         ruleSetId: created.id,
         trigger: rule.eventType,
         offsetMinutes: rule.offsetMinutes,
@@ -157,6 +160,7 @@ export const DEFAULT_NOTIFICATION_RULES: readonly NotificationRuleInput[] = [
   { eventType: 'TASK_ESCALATION', offsetMinutes: 1440, isEnabled: true },
   { eventType: 'TASK_OVERDUE', offsetMinutes: 0, isEnabled: true },
   { eventType: 'TASK_COMPLETED', offsetMinutes: 0, isEnabled: true },
+  { eventType: 'EVIDENCE_SUBMITTED', offsetMinutes: 0, isEnabled: false },
   { eventType: 'WORKFLOW_SUSPENDED', offsetMinutes: 0, isEnabled: true },
   { eventType: 'WORKFLOW_RESUMED', offsetMinutes: 0, isEnabled: true },
   { eventType: 'WORKFLOW_CANCELLED', offsetMinutes: 0, isEnabled: true },
@@ -165,7 +169,9 @@ export const DEFAULT_NOTIFICATION_RULES: readonly NotificationRuleInput[] = [
 
 export function hasAllNotificationTriggers(rules: readonly NotificationRuleInput[]): boolean {
   return (
-    rules.length === NOTIFICATION_TRIGGERS.length &&
-    new Set(rules.map((rule) => rule.eventType)).size === NOTIFICATION_TRIGGERS.length
+    new Set(rules.map((rule) => rule.eventType)).size === rules.length &&
+    (rules.length === NOTIFICATION_TRIGGERS.length ||
+      (rules.length === NOTIFICATION_TRIGGERS.length - 1 &&
+        !rules.some((rule) => rule.eventType === 'EVIDENCE_SUBMITTED')))
   );
 }

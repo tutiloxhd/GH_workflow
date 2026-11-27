@@ -88,7 +88,8 @@ export class TaskDialog implements OnInit {
 
   protected readonly isMissingEvidence = computed(() => {
     const task = this.task();
-    return task !== null && task.requiresEvidence && task.evidence === null;
+    return task !== null && task.requiresEvidence &&
+      (task.evidence === null || (task.evidenceForm?.requiresPhoto === true && task.evidencePhotos.length === 0));
   });
 
   protected readonly isAssignParticipantsTask = computed(
@@ -167,6 +168,31 @@ export class TaskDialog implements OnInit {
     } finally {
       this.isBusy.set(false);
     }
+  }
+
+  protected async uploadPhotos(files: readonly File[]): Promise<void> {
+    if (files.length + (this.task()?.evidencePhotos.length ?? 0) > 5 || files.some((file) => file.size > 5 * 1024 * 1024 || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type))) {
+      this.errorMessage.set('La foto debe ser JPEG, PNG o WebP y medir hasta 5 MB.');
+      return;
+    }
+    this.isBusy.set(true);
+    this.errorMessage.set(null);
+    try {
+      for (const file of files) {
+        const updated = await this.api.uploadEvidencePhoto(this.taskId(), file);
+        this.workflow.set(updated);
+        this.changed.emit(updated);
+      }
+      this.notice.set('Fotos guardadas.');
+    } catch (error) {
+      this.errorMessage.set(problemMessage(toApiProblem(error)));
+    } finally {
+      this.isBusy.set(false);
+    }
+  }
+
+  protected async removePhoto(photoId: number): Promise<void> {
+    await this.run(() => this.api.deleteEvidencePhoto(this.taskId(), photoId), 'Foto eliminada.');
   }
 
   protected onParticipantsSaved(updated: WorkflowDetail): void {

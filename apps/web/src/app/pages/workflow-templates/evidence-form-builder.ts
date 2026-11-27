@@ -16,6 +16,7 @@ export const FIELD_TYPE_LABELS: Readonly<Record<EvidenceFieldType, string>> = {
   LONG_TEXT: 'Texto largo',
   DATE: 'Fecha',
   AMOUNT_CLP: 'Monto en pesos',
+  INTEGER: 'Número entero',
   CHOICE: 'Lista de opciones',
 };
 
@@ -59,6 +60,16 @@ export function parseOptions(text: string, previous: readonly FieldOption[]): Fi
   template: `
     <fieldset class="form-builder" [disabled]="disabled()">
       <legend>Formulario de evidencia</legend>
+      <label class="builder-required">
+        <input type="checkbox" [checked]="form()?.requiresPhoto === true"
+          (change)="setPhotoRequirement($any($event.target).checked)" />
+        Exigir al menos una foto (máximo cinco)
+      </label>
+      <label class="builder-required">
+        <input type="checkbox" [checked]="form()?.notifyLegalOnSubmit === true"
+          (change)="setLegalNotification($any($event.target).checked)" />
+        Avisar a revisión legal al guardar evidencia
+      </label>
       @if (fields().length === 0) {
         <p class="field-hint">
           Sin campos: la tarea no pide datos al completarse. Agrega campos para registrar, por
@@ -270,6 +281,17 @@ export class EvidenceFormBuilder {
   }
 
   private setFields(fields: readonly EvidenceField[]): void {
-    this.form.set(fields.length > 0 ? { fields } : null);
+    const previous = this.form();
+    this.form.set(fields.length > 0 || previous?.requiresPhoto ? { ...previous, fields } : null);
+  }
+
+  protected setPhotoRequirement(requiresPhoto: boolean): void {
+    const previous = this.form();
+    this.form.set(previous || requiresPhoto ? { ...previous, fields: previous?.fields ?? [], requiresPhoto } : null);
+  }
+
+  protected setLegalNotification(notifyLegalOnSubmit: boolean): void {
+    const previous = this.form();
+    this.form.set(previous || notifyLegalOnSubmit ? { ...previous, fields: previous?.fields ?? [], notifyLegalOnSubmit } : null);
   }
 }

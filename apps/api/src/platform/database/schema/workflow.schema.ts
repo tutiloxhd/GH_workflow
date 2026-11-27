@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import {
   boolean,
   check,
+  customType,
   foreignKey,
   index,
   int,
@@ -408,6 +409,30 @@ export const taskEvidenceSubmissions = mysqlTable(
       columns: [table.submittedBy],
       foreignColumns: [users.id],
     }),
+  ],
+);
+
+const photoBytes = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => 'mediumblob',
+});
+
+export const taskEvidencePhotos = mysqlTable(
+  'task_evidence_photos',
+  {
+    id: primaryId(),
+    taskInstanceId: referenceId('task_instance_id').notNull(),
+    uploadedBy: referenceId('uploaded_by').notNull(),
+    mimeType: varchar('mime_type', { length: 20 }).notNull(),
+    sizeBytes: int('size_bytes', { unsigned: true }).notNull(),
+    bytes: photoBytes('bytes').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('idx_task_evidence_photos_task').on(table.taskInstanceId),
+    foreignKey({ name: 'fk_task_evidence_photos_task', columns: [table.taskInstanceId], foreignColumns: [taskInstances.id] }),
+    foreignKey({ name: 'fk_task_evidence_photos_uploader', columns: [table.uploadedBy], foreignColumns: [users.id] }),
+    check('chk_task_evidence_photos_size', sql`${table.sizeBytes} BETWEEN 1 AND 5242880`),
+    check('chk_task_evidence_photos_mime', sql`${table.mimeType} IN ('image/jpeg', 'image/png', 'image/webp')`),
   ],
 );
 

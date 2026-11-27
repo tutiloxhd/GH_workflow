@@ -280,7 +280,7 @@ describe('sincronización con admin_new', () => {
         'SELECT COUNT(*) AS n FROM task_instances WHERE workflow_instance_id = ?',
         [workflows[0]?.id],
       );
-      expect(Number(taskCount?.n)).toBe(15);
+      expect(Number(taskCount?.n)).toBe(13);
 
       const changes = await changesOf(101);
       expect(changes).toHaveLength(1);

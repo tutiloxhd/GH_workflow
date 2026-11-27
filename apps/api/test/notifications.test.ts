@@ -15,6 +15,7 @@ import {
   givenCast,
   givenProperty,
   startWorkflowFor,
+  taskOf,
   type WorkflowCast,
 } from './workflow-test-helpers.js';
 
@@ -54,7 +55,7 @@ describe('notificaciones internas', () => {
         }>;
       }
     ).ruleSets;
-    expect(current?.rules).toHaveLength(9);
+    expect(current?.rules).toHaveLength(10);
 
     const published = await callApi(context, 'PUT', `/api/notification-rules/${current?.id}`, {
       sessionCookie: cast.cookies.admin,
@@ -79,7 +80,7 @@ describe('notificaciones internas', () => {
   });
 
   it('materializa una sola asignación para el titular y permite marcarla como leída', async () => {
-    await startWorkflowFor(context, cast, await givenProperty(context));
+    const workflow = await startWorkflowFor(context, cast, await givenProperty(context));
     const dependencies = { database: context.database, clock: context.clock };
 
     expect(await processNotificationOutbox(dependencies, 'test-worker')).toBeGreaterThan(0);
@@ -89,14 +90,26 @@ describe('notificaciones internas', () => {
       sessionCookie: cast.cookies.admin,
     });
     expect(listed.status).toBe(200);
-    const rows = (listed.body as { notifications: Array<{ id: number; readAt: string | null }> })
-      .notifications;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.readAt).toBeNull();
+    const rows = (
+      listed.body as {
+        notifications: Array<{
+          id: number;
+          readAt: string | null;
+          trigger: string;
+          taskId: number | null;
+        }>;
+      }
+    ).notifications;
+    const assignmentTaskId = taskOf(workflow, 'ASSIGN_MANAGER_AND_BIDDER').id;
+    const assigned = rows.filter(
+      (row) => row.trigger === 'TASK_ASSIGNED' && row.taskId === assignmentTaskId,
+    );
+    expect(assigned).toHaveLength(1);
+    expect(assigned[0]?.readAt).toBeNull();
 
     expect(
       (
-        await callApi(context, 'POST', `/api/notifications/${rows[0]?.id}/read`, {
+        await callApi(context, 'POST', `/api/notifications/${assigned[0]?.id}/read`, {
           sessionCookie: cast.cookies.admin,
         })
       ).status,
@@ -107,14 +120,14 @@ describe('notificaciones internas', () => {
           sessionCookie: cast.cookies.admin,
         })
       ).body,
-    ).toEqual({ unreadCount: 0 });
+    ).toEqual({ unreadCount: rows.length - 1 });
   });
 
   it('crea el vencimiento al llegar due_at sin detener el workflow', async () => {
     await startWorkflowFor(context, cast, await givenProperty(context));
     const dependencies = { database: context.database, clock: context.clock };
     await processNotificationOutbox(dependencies, 'test-worker');
-    context.clock.setTo('2026-11-16T12:00:00.000Z');
+    context.clock.setTo('2026-11-18T12:00:00.000Z');
 
     expect(await processDueNotificationJobs(dependencies, 'test-scheduler')).toBeGreaterThan(0);
     const currentAdminCookie = await logInAs(context, 'admin@example.test');

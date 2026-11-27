@@ -54,6 +54,12 @@ export const WORKFLOW_PROBLEMS: Readonly<Record<WorkflowFailure, Problem>> = {
     code: 'EVIDENCE_REQUIRED',
     title: 'La tarea exige evidencia antes de completarse',
   },
+  EVIDENCE_PHOTO_REQUIRED: {
+    status: 409, code: 'EVIDENCE_PHOTO_REQUIRED', title: 'Adjunta una foto antes de guardar la evidencia',
+  },
+  EVIDENCE_PHOTO_LIMIT: {
+    status: 409, code: 'EVIDENCE_PHOTO_LIMIT', title: 'La tarea admite hasta cinco fotos',
+  },
   INVALID_PARTICIPANT: {
     status: 400,
     code: 'INVALID_PARTICIPANT',
